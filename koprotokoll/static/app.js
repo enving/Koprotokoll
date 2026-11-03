@@ -145,7 +145,7 @@ async function openMeeting(id, { keepTab = false, seekTo = null } = {}) {
   const done = m.status === "done";
   $("#m-progress").hidden = done;
   if (!done) {
-    $("#m-progress-bar").style.width = `${Math.round(m.progress * 100)}%`;
+    $("#m-progress-bar").style.transform = `scaleX(${Math.max(0, Math.min(1, m.progress))})`;
     $("#m-progress-label").textContent = m.status === "error"
       ? `Fehler: ${m.error}` : `${STATUS[m.status] || m.status} … ${Math.round(m.progress * 100)} %`;
   }

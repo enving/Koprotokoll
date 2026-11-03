@@ -35,7 +35,7 @@
         Transkription mit NVIDIA Parakeet, Sprechererkennung, Zusammenfassung, Action Items und Suche –
         alles auf diesem Rechner.</p>
       <div class="card">
-        <h3>Deine nächsten Termine (7 Tage)</h3>
+        <h2>Deine nächsten Termine (7 Tage)</h2>
         <ul id="upcoming-list" class="list"></ul>
       </div>
     </section>
@@ -45,7 +45,7 @@
       <div class="grid2">
         <div>
           <div class="card">
-            <h3>Bot als Teilnehmer schicken</h3>
+            <h2>Bot als Teilnehmer schicken</h2>
             <p class="muted small">Der Bot tritt dem Meeting als „Koprotokoll“ bei, nimmt den Ton aller Teilnehmer auf
               und erstellt danach Transkript und Zusammenfassung. Unterstützt: Google Meet, Jitsi (meet.jit.si und eigene Instanzen) sowie beliebige Webseiten
               mit Plattform „web“).</p>
@@ -58,15 +58,15 @@
             <ul id="bot-list" class="list"></ul>
           </div>
           <div class="card">
-            <h3>Google Kalender &amp; Gmail</h3>
+            <h2>Google Kalender &amp; Gmail</h2>
             <div id="google-box"></div>
           </div>
           <div class="card">
-            <h3>Microsoft Kalender &amp; Outlook</h3>
+            <h2>Microsoft Kalender &amp; Outlook</h2>
             <div id="microsoft-box"></div>
           </div>
           <div class="card">
-            <h3>Kalender-Quellen</h3>
+            <h2>Kalender-Quellen</h2>
             <p class="muted small">Weitere Kalender als Quelle für die Bot-Einplanung: CalDAV-Konten
               (Posteo, mailbox.org, iCloud, Fastmail, Nextcloud …) – mehrere Quellen sind möglich.</p>
             <ul id="source-list" class="list"></ul>
@@ -102,7 +102,7 @@
         </div>
         <div>
           <div class="card">
-            <h3>API-Schlüssel</h3>
+            <h2>API-Schlüssel</h2>
             <p class="muted small">Für Zugriffe von anderen Rechnern, Skripten, Zapier/n8n oder dem MCP-Server:
               <code>Authorization: Bearer kp_…</code>. Doku: <a href="/docs" target="_blank">/docs</a></p>
             <form id="key-form" class="row"><input id="key-name" placeholder="Name, z. B. n8n" required>
@@ -111,7 +111,7 @@
             <ul id="key-list" class="list"></ul>
           </div>
           <div class="card">
-            <h3>Webhooks</h3>
+            <h2>Webhooks</h2>
             <p class="muted small">POST bei <code>meeting.completed</code>, <code>meeting.failed</code>,
               <code>bot.status</code>; signiert mit <code>X-Koprotokoll-Signature</code> (HMAC-SHA256).</p>
             <form id="hook-form" class="row"><input id="hook-url" placeholder="https://…/webhook" required>
@@ -123,7 +123,7 @@
             <ul id="hook-list" class="list"></ul>
           </div>
           <div class="card">
-            <h3>MCP (Claude &amp; Co.)</h3>
+            <h2>MCP (Claude &amp; Co.)</h2>
             <p class="muted small">Meetings direkt im KI-Assistenten durchsuchen und zusammenfassen:</p>
             <pre>claude mcp add koprotokoll -- python -m koprotokoll mcp</pre>
           </div>
