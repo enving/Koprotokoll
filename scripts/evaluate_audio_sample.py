@@ -20,21 +20,33 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--collar", type=float, default=0.25, help="Grenztoleranz in Sekunden")
     args = parser.parse_args(argv)
 
-    reference = json.loads(args.reference.read_text())
-    result = json.loads(args.result.read_text())
-    ref_turns = reference.get("turns", reference)
-    segments = result.get("segments", result if isinstance(result, list) else [])
-    diarization = result.get("meta", {}).get("diarization", {})
-    hyp_turns = diarization.get("turns", [])
-    if not hyp_turns:
-        parser.error("Das Ergebnis enthält keine Rohzeiten der Sprechererkennung (meta.diarization.turns).")
+    try:
+        reference = json.loads(args.reference.read_text(encoding="utf-8"))
+        result = json.loads(args.result.read_text(encoding="utf-8"))
+        ref_turns = reference if isinstance(reference, list) else reference["turns"]
+        segments = result["segments"]
+        diarization = result["meta"]["diarization"]
+        hyp_turns = diarization["turns"]
+        if diarization.get("status") != "completed" or not hyp_turns:
+            raise ValueError("Keine erfolgreich abgeschlossene Sprechererkennung mit Rohzeiten vorhanden.")
+        if not isinstance(ref_turns, list) or not isinstance(segments, list) or not isinstance(hyp_turns, list):
+            raise ValueError("Referenz, Segmente und Sprecherzeiten müssen Listen sein.")
+        der = diarization_error_rate(ref_turns, hyp_turns, args.resolution, args.collar)
+        if any(not isinstance(turn["text"], str) for turn in ref_turns + segments):
+            raise ValueError("Referenz und Segmente brauchen Textfelder.")
+        wer = word_error_rate(ref_turns, segments)
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        parser.error(f"Auswertung nicht möglich: {exc}")
     report = {
-        "wer": word_error_rate(ref_turns, segments),
-        "der": diarization_error_rate(ref_turns, hyp_turns, args.resolution, args.collar),
+        "wer": wer,
+        "der": der,
         "rules": {
-            "normalization": "Kleinschreibung; Satzzeichen und Mehrfachleerzeichen ignoriert.",
-            "der": "100-ms-Raster, globale Sprecher-ID-Zuordnung, Referenzgrenzen ±250 ms ausgeschlossen.",
-            "overlap": "Jede gleichzeitig aktive Referenzstimme zählt separat.",
+            "normalization": "Unicode-casefold; Wortfolgen nach Segmentbeginn; Satzzeichen getrennt, innere Apostrophe/Bindestriche erhalten.",
+            "der": f"{args.resolution:g}-s-Raster, globale Sprecher-ID-Zuordnung, Referenzgrenzen ±{args.collar:g} s ausgeschlossen.",
+            "window": "Ab 0 bis zum letzten Referenz- oder Hypothesenende, einschließlich Pausen; letzter Rasterabschnitt gekürzt.",
+            "overlap": "Jede aktive Referenzstimme zählt separat; overlap nutzt dieselbe globale Zuordnung und Grenztoleranz.",
+            "undefined": "WER ohne Referenzwörter und DER ohne bewertbare Referenzsprecherzeit sind null, nicht 0.",
+            "error_frames": "Fehlerzeitstellen sind Rasterabschnitte mit Anzahlen verpasster, zusätzlicher und verwechselter Stimmen.",
         },
     }
     print(json.dumps(report, ensure_ascii=False, indent=2))

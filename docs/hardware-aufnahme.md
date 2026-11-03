@@ -82,9 +82,13 @@ Signalquelle sichtbar sein: etwa über einen vom Betriebssystem oder
 Die WAV-Datei über **Hochladen** importieren oder lokal per API senden:
 
 ```bash
-curl -F file=@./testaufnahme.wav -F title='Hardwaretest' -F num_speakers=2 \
+curl -F file=@./testaufnahme.wav -F title='Hardwaretest' \
   http://127.0.0.1:8000/api/meetings
 ```
+
+Ohne `num_speakers` wird die Sprecherzahl automatisch geschätzt. Eine Vorgabe
+wie `-F num_speakers=2` ist ein gesonderter Vergleichslauf und kein Nachweis
+einer automatisch erkannten Sprecherzahl.
 
 Danach liefert `GET /api/meetings/<id>` neben Segmenten die Rohzeiten der
 Sprechererkennung unter `meta.diarization.turns`. Die Oberfläche zeigt einen
@@ -99,13 +103,40 @@ curl http://127.0.0.1:8000/api/meetings/1 > ergebnis.json
 python scripts/evaluate_audio_sample.py referenz.json ergebnis.json
 ```
 
-`referenz.json` enthält `turns` mit `speaker`, `start`, `end` und `text`.
-Das Skript normalisiert Groß-/Kleinschreibung und Satzzeichen für WER. DER wird
-mit 100-ms-Raster, globaler Zuordnung beliebiger Sprecher-IDs und einem
-offengelegten 250-ms-Korridor an Referenzgrenzen berechnet; gleichzeitiges
-Sprechen zählt für jede aktive Referenzstimme. Das ist eine transparente,
-dependency-freie Vergleichsmessung, kein Ersatz für die Metrik eines anderen
-Werkzeugs.
+`referenz.json` enthält `turns` mit `speaker`, `start`, `end` und `text`
+(alternativ direkt eine Liste dieser Abschnitte). Die Referenz muss unabhängig
+vom Modellergebnis am Originalton erstellt und von einem Menschen geprüft sein.
+Zeitangaben sind Sekunden ab Dateianfang; überlappende Stimmen bekommen eigene
+Abschnitte.
+
+Die Ausgabe enthält die tatsächlich verwendeten Bewertungsregeln unter `rules`:
+
+- WER vergleicht die Wortfolgen in Reihenfolge der Abschnittsanfänge.
+  Unicode-casefold vereinheitlicht Groß-/Kleinschreibung; Satzzeichen trennen
+  Wörter, innere Apostrophe und Bindestriche bleiben erhalten. Zahlen werden
+  nicht in Zahlwörter umgewandelt. Gleichzeitiges Sprechen hat keine eindeutige
+  Wortreihenfolge; diese WER ist daher keine überlappungsinvariante Bewertung.
+- DER verwendet standardmäßig ein 100-ms-Raster und schließt Rastermittelpunkte
+  innerhalb von ±250 ms um Referenzgrenzen aus. `--resolution` und `--collar`
+  ändern diese Werte. Das Fenster reicht von 0 bis zum letzten Referenz- oder
+  Hypothesenende; ein angebrochener letzter Rasterabschnitt wird gekürzt.
+  Erkannte Sprache in Referenzpausen zählt als Fehlalarm. Beliebige Sprecher-IDs
+  werden global eineindeutig nach größter korrekter Sprecherzeit zugeordnet.
+- `der.overlap` bewertet die verbleibenden Rasterabschnitte mit mehreren aktiven
+  Referenzstimmen separat, mit derselben Zuordnung und Grenztoleranz. Jede aktive
+  Stimme zählt zur Referenzsprecherzeit. Kurze Einwürfe können ganz innerhalb
+  des ausgeschlossenen Grenzbereichs liegen; ein ergänzender Lauf mit
+  `--collar 0` macht diesen Unterschied sichtbar.
+- `error_frames` nennt die fehlerhaften Rasterzeitstellen und die Anzahl der
+  jeweils verpassten, zusätzlichen oder verwechselten Stimmen. Die Zeitstellen
+  sind Rasterwerte, keine exakten Fehlergrenzen im Originalton.
+- Ohne Referenzwörter ist WER `null`; ohne bewertbare Referenzsprecherzeit ist
+  DER `null`. Das bedeutet „nicht bestimmbar“, nicht fehlerfrei. Eine
+  fehlgeschlagene oder leere Sprechererkennung wird vom Skript abgewiesen.
+
+Das ist eine transparente Vergleichsmessung ohne zusätzliche Abhängigkeiten,
+kein Ersatz für die Metrik eines anderen Werkzeugs. Aufnahmefehler wie fehlende
+oder doppelte Stimmen müssen zusätzlich am Originalton geprüft werden.
 
 ## Geräte- und Zugriffsgrenzen
 
