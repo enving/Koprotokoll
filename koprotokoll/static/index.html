@@ -205,7 +205,18 @@
     <form method="dialog" id="record-form">
       <h2>Aufnahme</h2>
       <label>Titel <input id="rec-title" placeholder="z. B. Team-Weekly"></label>
-      <label>Quelle
+      <label>Anzahl Sprecher <input id="rec-speakers" type="number" min="1" max="20" placeholder="automatisch"></label>
+      <label>Aufnahmeweg
+        <select id="rec-method">
+          <option value="hardware">Audioeingang dieses Rechners</option>
+          <option value="browser">Browsermikrofon oder freigegebener Tabton</option>
+        </select>
+      </label>
+      <label id="rec-device-wrap">Audioeingang
+        <select id="rec-device"><option value="">Audioeingänge werden geladen …</option></select>
+      </label>
+      <p id="rec-device-help" class="small">Für Gesprächspartner aus einem Online-Meeting müssen sie über diesen Eingang hörbar sein.</p>
+      <label id="rec-source-wrap" hidden>Browserquelle
         <select id="rec-source">
           <option value="mic">Mikrofon (Gespräch vor Ort)</option>
           <option value="mix">Mikrofon + Tab-/Bildschirmton (Online-Meeting)</option>
@@ -216,7 +227,7 @@
       <menu>
         <button value="cancel" id="rec-cancel" formnovalidate>Abbrechen</button>
         <button type="button" id="rec-start" class="primary">Start</button>
-        <button type="button" id="rec-stop" class="primary" hidden>Stopp &amp; transkribieren</button>
+        <button type="button" id="rec-stop" class="primary" hidden>Stopp &amp; auswerten</button>
       </menu>
     </form>
   </dialog>

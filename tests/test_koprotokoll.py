@@ -42,6 +42,11 @@ class NoLLM:
         return False
 
 
+class FailingDiarizer:
+    def diarize(self, audio, num_speakers, progress):
+        raise RuntimeError("Testfehler der Sprechererkennung")
+
+
 @pytest.fixture
 def client(tmp_path):
     settings = Settings(data_dir=tmp_path)
@@ -112,6 +117,18 @@ def test_full_flow(client, tmp_path):
     assert [s["speaker"] for s in m["segments"]] == ["S1", "S2", "S1", "S2", "S1"]
     assert m["summary"]["engine"] == "heuristik"
     assert set(m["talk_time"]) == {"S1", "S2"}
+    assert m["meta"]["diarization"] == {
+        "status": "completed",
+        "turn_count": 5,
+        "speaker_count": 2,
+        "turns": [
+            {"start": 0.0, "end": 4.5, "speaker": 0},
+            {"start": 5.0, "end": 9.5, "speaker": 1},
+            {"start": 10.0, "end": 14.5, "speaker": 0},
+            {"start": 15.0, "end": 19.5, "speaker": 1},
+            {"start": 20.0, "end": 24.5, "speaker": 0},
+        ],
+    }
 
     # Sprecher umbenennen
     client.patch(f"/api/meetings/{mid}", json={"speakers": {"S1": "Anna"}})
@@ -147,6 +164,67 @@ def test_full_flow(client, tmp_path):
 def test_rejects_unknown_file_type(client):
     r = client.post("/api/meetings", files={"file": ("x.exe", b"MZ", "application/octet-stream")})
     assert r.status_code == 400
+
+
+def test_diarization_failure_is_visible_in_meeting_metadata(tmp_path):
+    settings = Settings(data_dir=tmp_path)
+    app = create_app(settings, transcriber=FakeTranscriber(), diarizer=FailingDiarizer(), llm=NoLLM())
+    with TestClient(app) as c:
+        r = c.post("/api/meetings", files={"file": ("fehler.wav", wav_bytes(tmp_path), "audio/wav")},
+                   data={"num_speakers": "2"})
+        m = wait_done(c, r.json()["id"])
+
+    assert m["status"] == "done"
+    assert m["meta"]["diarization"] == {
+        "status": "failed", "error": "Testfehler der Sprechererkennung"
+    }
+    assert {s["speaker"] for s in m["segments"]} == {"S1"}
+
+
+def test_hardware_capture_starts_pipeline_only_after_stop(tmp_path, monkeypatch):
+    import soundfile as sf
+    import koprotokoll.app as app_mod
+
+    original = tmp_path / "hardware.wav"
+    sf.write(original, np.zeros(48_000, dtype=np.float32), 48_000)
+
+    class FakeRecorder:
+        def __init__(self, _capture_dir):
+            self.active = False
+
+        def devices(self):
+            return {"backend": "test", "devices": [{"id": "0", "name": "Testmikrofon"}], "details": ""}
+
+        def status(self):
+            return {"active": self.active}
+
+        def start(self, device, channels, sample_rate):
+            assert (device, channels, sample_rate) == ("0", 2, 48_000)
+            self.active = True
+            return {"active": True, "device": device, "started_at": 1.0}
+
+        def stop(self):
+            self.active = False
+            return original, 1.0, "Testmikrofon"
+
+    monkeypatch.setattr(app_mod, "HardwareRecorder", FakeRecorder)
+    settings = Settings(data_dir=tmp_path / "data")
+    app = app_mod.create_app(settings, transcriber=FakeTranscriber(), diarizer=FakeDiarizer(), llm=NoLLM())
+    with TestClient(app) as c:
+        devices = c.get("/api/capture/devices").json()
+        assert devices["devices"] == [{"id": "0", "name": "Testmikrofon"}]
+        started = c.post("/api/capture/start", json={"device": "0", "title": "Hardwaretest", "num_speakers": 2})
+        assert started.status_code == 200 and started.json()["active"] is True
+        # Bis zum Stopp gibt es kein neues Meeting und damit keine Inferenz.
+        assert c.get("/api/meetings").json() == []
+        meeting = c.post("/api/capture/stop").json()
+        result = wait_done(c, meeting["id"])
+
+    assert result["status"] == "done"
+    assert result["meta"]["source"] == "hardware"
+    assert result["meta"]["device"] == "Testmikrofon"
+    assert (settings.media_dir / f"{meeting['id']}.original.wav").exists()
+    assert (settings.media_dir / f"{meeting['id']}.normalized.wav").exists()
 
 
 @pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg fehlt")

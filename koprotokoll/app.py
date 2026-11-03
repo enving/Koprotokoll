@@ -20,6 +20,7 @@ from . import auth
 from .bot.platforms import SUPPORTED, detect_platform, find_meeting_url
 from .caldav_source import CalDavCalendarSource, CalDavError, normalize_server_url
 from .calendar_source import CalendarEvent
+from .capture import HardwareRecorder
 from .config import CALDAV_PRESETS, Settings
 from .db import Database
 from .events import EVENTS, EventBus
@@ -51,6 +52,16 @@ class BookmarkIn(BaseModel):
     end: float
     kind: str = "soundbite"
     note: str = ""
+
+
+class CaptureStart(BaseModel):
+    """Explizit gestartete, lokale Aufnahme eines Betriebssystem-Audioeingangs."""
+
+    device: str
+    title: str = ""
+    num_speakers: int | None = None
+    channels: int = 2
+    sample_rate: int = 48_000
 
 
 class Question(BaseModel):
@@ -133,6 +144,7 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
         llm = LLM(s)
     events = EventBus(db)
     pipeline = Pipeline(db, s.media_dir, transcriber, diarizer, llm, events)
+    capture = HardwareRecorder(s.data_dir / "captures")
     google = google or GoogleClient(s, db)
     microsoft = MicrosoftClient(s, db)
     events.subscribe(RecapMailer(google, s.public_url))
@@ -181,7 +193,7 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
                     "(lokale Anfragen ohne Proxy brauchen keinen Schlüssel).",
         version="2.0",
     )
-    app.state.db, app.state.pipeline, app.state.settings = db, pipeline, s
+    app.state.db, app.state.pipeline, app.state.settings, app.state.capture = db, pipeline, s, capture
     app.state.events, app.state.bots, app.state.google, app.state.calendar = events, bots, google, calendar
     api = APIRouter(dependencies=[Depends(auth.require_auth)])
     public = APIRouter()
@@ -204,6 +216,50 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
     def list_meetings():
         return [{k: m[k] for k in ("id", "title", "created_at", "duration", "status", "progress", "error")}
                 for m in db.list_meetings()]
+
+    @api.get("/api/capture/devices", tags=["recording"])
+    def capture_devices():
+        """Lokale Hardware-/Loopback-Eingänge; der Server ändert kein Audiogerät."""
+        try:
+            return capture.devices()
+        except RuntimeError as exc:
+            raise HTTPException(503, str(exc)) from exc
+
+    @api.get("/api/capture", tags=["recording"])
+    def capture_status():
+        return capture.status()
+
+    @api.post("/api/capture/start", tags=["recording"])
+    def start_hardware_capture(body: CaptureStart):
+        if body.num_speakers is not None and body.num_speakers < 1:
+            raise HTTPException(400, "Die Sprecherzahl muss positiv sein")
+        try:
+            state = capture.start(body.device, body.channels, body.sample_rate)
+        except (RuntimeError, ValueError) as exc:
+            raise HTTPException(409, str(exc)) from exc
+        # Der Titel wird nur bis zum ausdrücklichen Stopp im Speicher gehalten.
+        state["title"] = body.title.strip()
+        state["num_speakers"] = body.num_speakers
+        app.state.capture_request = state
+        return state
+
+    @api.post("/api/capture/stop", status_code=201, tags=["recording"])
+    def stop_hardware_capture():
+        try:
+            path, duration, device = capture.stop()
+        except RuntimeError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        request = getattr(app.state, "capture_request", {})
+        title = request.get("title") or f"Hardwareaufnahme {time.strftime('%Y-%m-%d %H:%M')}"
+        speakers = request.get("num_speakers")
+        meeting_id = db.create_meeting(title, path.stem, speakers,
+                                       meta={"source": "hardware", "device": device})
+        original = s.media_dir / f"{meeting_id}.original.wav"
+        shutil.move(str(path), original)
+        db.update_meeting(meeting_id, audio_path=str(original), duration=round(duration, 2))
+        pipeline.submit(meeting_id)
+        app.state.capture_request = {}
+        return db.get_meeting(meeting_id)
 
     @api.post("/api/meetings", status_code=201)
     def upload(file: UploadFile = File(...), title: str = Form(""), num_speakers: int | None = Form(None)):
