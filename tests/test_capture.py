@@ -57,3 +57,30 @@ def test_parse_macos_audio_devices_without_video_devices():
 def test_record_command_rejects_ambiguous_or_lossy_input(kwargs):
     with pytest.raises(ValueError):
         record_command(platform="darwin", **kwargs)
+
+
+def test_validate_stem_durations_rejects_incomplete_microphone_track(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    import koprotokoll.capture as capture
+
+    monkeypatch.setattr(capture.shutil, "which", lambda _: "/usr/bin/ffprobe")
+    durations = iter(("1.14\n", "0.10\n"))
+    monkeypatch.setattr(capture.subprocess, "run", lambda *args, **kwargs: SimpleNamespace(
+        stdout=next(durations), returncode=0,
+    ))
+
+    with pytest.raises(RuntimeError, match="unterschiedlich lang"):
+        capture._validate_stem_durations(tmp_path / "system.wav", tmp_path / "mikrofon.wav")
+
+
+def test_validate_stem_durations_accepts_aligned_tracks(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    import koprotokoll.capture as capture
+
+    monkeypatch.setattr(capture.shutil, "which", lambda _: "/usr/bin/ffprobe")
+    durations = iter(("30.00\n", "29.92\n"))
+    monkeypatch.setattr(capture.subprocess, "run", lambda *args, **kwargs: SimpleNamespace(
+        stdout=next(durations), returncode=0,
+    ))
+
+    assert capture._validate_stem_durations(tmp_path / "system.wav", tmp_path / "mikrofon.wav") == (30.0, 29.92)

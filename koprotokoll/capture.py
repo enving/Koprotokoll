@@ -85,6 +85,39 @@ def record_command(device: str, output: Path, seconds: float | None = None, chan
     return command + [str(output)]
 
 
+def _audio_duration(path: Path) -> float:
+    """Liest die Containerdauer einer Spur einschließlich Float-PCM-WAV."""
+    ffprobe = shutil.which("ffprobe")
+    if not ffprobe:
+        raise RuntimeError("ffprobe wurde nicht gefunden; die Audiowege lassen sich nicht vergleichen.")
+    try:
+        proc = subprocess.run(
+            [ffprobe, "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
+            capture_output=True, text=True, check=False,
+        )
+    except OSError as exc:
+        raise RuntimeError(f"Audiospur ließ sich nicht prüfen: {path.name}") from exc
+    try:
+        duration = float(proc.stdout.strip())
+    except ValueError as exc:
+        raise RuntimeError(f"Dauer der Audiospur ließ sich nicht lesen: {path.name}") from exc
+    if proc.returncode != 0 or not math.isfinite(duration) or duration <= 0:
+        raise RuntimeError(f"Ungültige Audiospur: {path.name}")
+    return duration
+
+
+def _validate_stem_durations(system_path: Path, mic_path: Path, tolerance: float = 0.5) -> tuple[float, float]:
+    system_duration = _audio_duration(system_path)
+    mic_duration = _audio_duration(mic_path)
+    if abs(system_duration - mic_duration) > tolerance:
+        raise RuntimeError(
+            "Systemton- und Mikrofonspur sind unterschiedlich lang "
+            f"({system_duration:.2f} s und {mic_duration:.2f} s); Aufnahme bleibt lokal und wird nicht ausgewertet."
+        )
+    return system_duration, mic_duration
+
+
 def parse_devices(details: str, platform: str | None = None) -> list[dict[str, str]]:
     """Extrahiert Audioquellen aus der ffmpeg-Ausgabe, soweit das Modul sie benennt."""
     source = backend(platform)
@@ -274,6 +307,7 @@ class HardwareRecorder:
         if active.system_path is not None and active.mic_path is not None:
             if not active.system_path.is_file() or not active.mic_path.is_file():
                 raise RuntimeError("Systemton oder Standardmikrofon lieferte keine Audiodatei.")
+            _validate_stem_durations(active.system_path, active.mic_path)
             mixed = subprocess.run([
                 "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-n",
                 "-i", str(active.system_path), "-i", str(active.mic_path),

@@ -50,7 +50,9 @@ ausdrücklichen Stopp.
 
    Die Originaldatei ist verlustfreies WAV (standardmäßig 48 kHz, Stereo) und
    wird wegen `ffmpeg -n` nie überschrieben. Sie bleibt vor der Konvertierung
-   erhalten.
+   erhalten. Bei der macOS-Systemtonaufnahme vergleicht Koprotokoll vor dem Start
+   der Pipeline die Dauer der beiden Spuren. Weichen sie um mehr als 0,5 Sekunden
+   ab, wird das Meeting nicht angelegt; die Spuren bleiben lokal für die Prüfung.
 4. Sofort prüfen, ob sie wirklich beide Seiten enthält:
 
    ```bash
