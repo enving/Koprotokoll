@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import importlib.util
 import sys
 
@@ -57,7 +57,8 @@ def outlook_date(timestamp: float) -> str:
     import win32api
     import win32con
 
-    value = datetime.fromtimestamp(timestamp)
+    # win32api rechnet nach UTC um; für diese Formatierung müssen lokale Uhrfelder erhalten bleiben.
+    value = datetime.fromtimestamp(timestamp).replace(tzinfo=timezone.utc)
     date = win32api.GetDateFormat(win32con.LOCALE_USER_DEFAULT, win32con.DATE_SHORTDATE, value, None)
     time = win32api.GetTimeFormat(win32con.LOCALE_USER_DEFAULT, win32con.TIME_NOSECONDS, value, None)
     return f"{date} {time}"
@@ -79,7 +80,10 @@ class OutlookComCalendarSource:
             return []
         events = []
         try:
-            start_filter, end_filter = outlook_date(time_min), outlook_date(time_max)
+            # Ganze lokale Tage vermeiden Minutenverluste und mehrdeutige DST-Uhrzeiten im Jet-Filter.
+            first_day = datetime.fromtimestamp(time_min).replace(hour=0, minute=0, second=0, microsecond=0)
+            last_day = datetime.fromtimestamp(time_max).replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+            start_filter, end_filter = outlook_date(first_day.timestamp()), outlook_date(last_day.timestamp())
             with outlook_session() as app:
                 items = app.GetNamespace("MAPI").GetDefaultFolder(9).Items
                 # Outlook verlangt Sortieren vor IncludeRecurrences und anschließend Restrict.
@@ -87,13 +91,13 @@ class OutlookComCalendarSource:
                 items.IncludeRecurrences = True
                 restricted = items.Restrict(f"[Start] >= '{start_filter}' AND [Start] < '{end_filter}'")
                 for item in restricted:
-                    start = item.Start.timestamp()
+                    start = item.StartUTC.replace(tzinfo=timezone.utc).timestamp()
                     if not time_min <= start < time_max:
                         continue
                     attendees = [recipient_address(r) for r in item.Recipients if getattr(r, "Type", 1) != 3]
                     events.append(CalendarEvent(
                         id=f"{item.EntryID}:{start:.0f}", title=item.Subject or "Meeting",
-                        start=start, end=item.End.timestamp(), all_day=bool(item.AllDayEvent),
+                        start=start, end=item.EndUTC.replace(tzinfo=timezone.utc).timestamp(), all_day=bool(item.AllDayEvent),
                         location=item.Location or "", description=item.Body or "",
                         attendees=list(dict.fromkeys(a for a in attendees if a)),
                         self_response={1: "accepted", 2: "tentative", 3: "accepted", 4: "declined"}.get(item.ResponseStatus),

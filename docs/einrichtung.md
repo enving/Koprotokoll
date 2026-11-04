@@ -147,6 +147,12 @@ iCalendar-Abo eintragen (Outlook „Kalender veröffentlichen“, Google „gehe
 Nextcloud, iCloud …) – inklusive Serien-Terminen und Zeitzonen, ebenfalls nur lesend.
 Lokale `.ics`-Dateien müssen im Datenordner (`KOPROTOKOLL_DATA`, Standard `./data`) liegen.
 
+Nach unabhängigem Review werden Termine über Outlooks `StartUTC`/`EndUTC`
+gelesen. Die Windows-Formatierung erhält die lokalen Uhrfelder ausdrücklich;
+der Jet-Filter liest ganze lokale Tage, danach begrenzt Python exakt auf das
+angefragte UTC-Fenster. Regressionen bilden die pywin32-Konvertierung und eine
+angebrochene letzte Minute nach. Der echte Windows-Test bleibt weiterhin offen.
+
 > **Sicherheit:** Das CalDAV-Passwort wird **im Klartext** in der lokalen Datenbank
 > (`koprotokoll.sqlite3` im Datenordner) gespeichert. Legt deshalb unbedingt ein
 > **App-Passwort** an (nicht das Haupt-Kontopasswort) und widerruft es beim Entfernen
