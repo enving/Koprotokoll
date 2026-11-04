@@ -34,30 +34,39 @@ Beim ersten Start baut Koprotokoll eine kleine lokale App unter
 `data/desktop/Koprotokoll.app`. Dafür werden macOS 12+, `ffmpeg` und die
 Apple-Entwicklerwerkzeuge (`swiftc`) benötigt. Die App startet den lokalen
 Server oder verwendet einen bereits laufenden Koprotokoll-Server am gewählten
-Port. In der Menüleiste erscheint **Ko**. Es beginnt noch keine Aufnahme.
+Port. Ein Finder-Einstieg unter `~/Applications/Koprotokoll.app` öffnet dieselbe
+App per Doppelklick; eine bereits vorhandene andere Installation wird erhalten.
+Das Einstellungsfenster öffnet sich beim Start und beim erneuten Öffnen der App.
+Es ist auch über **Ko → Einstellungen …** erreichbar. Es beginnt noch keine Aufnahme.
 
-1. Im ersten Dialog die **Audioquelle** wählen. Sie lässt sich später über das
-   Ko-Menü wechseln. Die Quelle wird anhand ihres Namens gespeichert und vor
+1. Unter **Audioquelle** den gewünschten Eingang wählen. Er lässt sich auch über
+   das Ko-Menü wechseln. Die Quelle wird anhand ihres Namens gespeichert und vor
    jeder Aufnahme neu zugeordnet. Ist sie nicht mehr eindeutig verfügbar, wird
    der Start mit einer Fehlermeldung abgebrochen.
-2. Falls macOS nach **Eingabeüberwachung** fragt, Koprotokoll unter
+2. Unter **Tastenkürzel** das globale Kürzel ein- oder ausschalten und die
+   Doppeltipp-Taste wählen: **Alt/Option**, **Control** oder **Umschalt**, jeweils
+   links oder rechts. Standard bleibt Alt. Änderungen werden sofort gespeichert
+   und gelten ohne Neustart. Beim Wechsel verwirft die App einen begonnenen
+   Doppeltipp. Während einer Aufnahme sind diese Einstellungen gesperrt.
+3. **Freigabe prüfen** zeigt den aktuellen Zustand der Eingabeüberwachung und
+   fordert sie bei Bedarf an. **macOS-Einstellungen öffnen** führt zur
+   Einstellungs-App. Dort Koprotokoll unter
    **Systemeinstellungen → Datenschutz & Sicherheit → Eingabeüberwachung**
-   freigeben. Danach im Ko-Menü **Tastenkürzel prüfen** wählen; falls macOS es
-   verlangt, die App schließen und über `Koprotokoll.command` erneut öffnen.
-3. **Alt/Option (⌥) zweimal kurz drücken und loslassen** startet die Aufnahme.
-   In der Menüleiste erscheint **●** mit der Aufnahmedauer. Normale
-   Alt-Tastenkombinationen und längeres Halten lösen keine Aufnahme aus.
-4. **Alt zweimal erneut** stoppt und sichert die Aufnahme. Erst danach beginnt
+   freigeben. Falls macOS es verlangt, die App neu öffnen. Die App zeigt die
+   Freigabe an, erteilt sie aber nicht selbst.
+4. **Die gewählte Taste zweimal kurz drücken und loslassen** startet die Aufnahme.
+   In der Menüleiste erscheint **●** mit der Aufnahmedauer. Kombinationen mit
+   anderen Tasten und längeres Halten lösen keine Aufnahme aus.
+5. **Dieselbe Taste zweimal erneut** stoppt und sichert die Aufnahme. Erst danach beginnt
    die Auswertung; das Meeting öffnet sich im Standardbrowser.
 
-Start und Stopp sind auch direkt im Ko-Menü verfügbar, unabhängig von der
+Start und Stopp sind auch im Einstellungsfenster und im Ko-Menü verfügbar, unabhängig von der
 Tastenkürzel-Freigabe. Audioquelle und Pegel müssen vor dem eigentlichen
 Gespräch wie unten beschrieben geprüft werden. Für Systemton plus Mikrofon
 gelten weiterhin die gesonderten Voraussetzungen; die Menüleistensteuerung
 belegt nicht, dass beide Gesprächsseiten aufgenommen werden.
 
-Das Tastenkürzel reagiert auf linkes oder rechtes Alt. Es speichert keine
-Tastendrücke oder Texte. Es steht zur Verfügung, solange die Menüleisten-App
+Das Tastenkürzel speichert keine Tastendrücke oder Texte. Es steht zur Verfügung, solange die Menüleisten-App
 läuft; ein automatischer Start bei der Anmeldung wird nicht eingerichtet.
 **Tastenkürzel beenden** schließt die Menüleiste nach dem Stopp einer Aufnahme.
 Der lokale Server bleibt für die Auswertung und Oberfläche geöffnet. Sein

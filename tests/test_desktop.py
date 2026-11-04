@@ -11,7 +11,7 @@ from types import SimpleNamespace
 import pytest
 
 from koprotokoll.config import Settings
-from koprotokoll.desktop import build_app
+from koprotokoll.desktop import build_app, link_app
 
 
 @pytest.mark.skipif(sys.platform != "darwin" or shutil.which("swiftc") is None,
@@ -22,7 +22,7 @@ def test_alt_double_tap_rejects_combinations_and_holds(tmp_path):
     subprocess.run(["swiftc", str(source / "koprotokoll/macos_hotkey.swift"),
                     str(source / "tests/fixtures/hotkey_macos_test.swift"), "-o", str(binary)], check=True)
     result = subprocess.run([str(binary)], capture_output=True, text=True, check=True)
-    assert "9 Tastenkürzel-Fälle bestanden" in result.stdout
+    assert "14 Tastenkürzel- und Einstellungsfälle bestanden" in result.stdout
 
 
 def test_app_bundle_points_to_local_backend_without_extra_python_packages(tmp_path, monkeypatch):
@@ -58,3 +58,23 @@ def test_desktop_rejects_unsupported_platform_before_writing(tmp_path, monkeypat
     with pytest.raises(RuntimeError, match="nur für macOS"):
         build_app(Settings(data_dir=tmp_path))
     assert not list(tmp_path.iterdir())
+
+
+def test_finder_launcher_reopens_the_same_generated_app(tmp_path):
+    app = tmp_path / "data/desktop/Koprotokoll.app"
+    app.mkdir(parents=True)
+    applications = tmp_path / "Applications"
+    launcher = link_app(app, applications)
+    assert launcher.is_symlink()
+    assert launcher.resolve() == app
+    assert link_app(app, applications) == launcher
+
+
+def test_finder_launcher_preserves_an_existing_app(tmp_path):
+    applications = tmp_path / "Applications"
+    installed = applications / "Koprotokoll.app"
+    installed.mkdir(parents=True)
+    original = installed / "vorhanden.txt"
+    original.write_text("Vorhandene Installation")
+    assert link_app(tmp_path / "anderes/Koprotokoll.app", applications) is None
+    assert original.read_text() == "Vorhandene Installation"

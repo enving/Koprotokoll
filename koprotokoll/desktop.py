@@ -66,12 +66,25 @@ def build_app(settings: Settings, port: int = 8000) -> Path:
     return app
 
 
+def link_app(app: Path, applications_dir: Path | None = None) -> Path | None:
+    """Einen Finder-Einstieg anlegen; vorhandene fremde Apps niemals ersetzen."""
+    folder = applications_dir or Path.home() / "Applications"
+    folder.mkdir(parents=True, exist_ok=True)
+    launcher = folder / "Koprotokoll.app"
+    if launcher.is_symlink() and launcher.resolve() == app.resolve():
+        return launcher
+    if launcher.exists() or launcher.is_symlink():
+        return None
+    launcher.symlink_to(app.resolve(), target_is_directory=True)
+    return launcher
+
+
 def main(port: int = 8000) -> None:
     try:
         app = build_app(Settings(), port)
+        launcher = link_app(app)
         subprocess.run(["open", str(app)], check=True)
     except (RuntimeError, subprocess.CalledProcessError) as exc:
         raise SystemExit(str(exc)) from exc
-    print("Koprotokoll ist in der Menüleiste. Alt zweimal startet bzw. stoppt die Aufnahme.")
-    print("Beim ersten Start Audioquelle wählen und gegebenenfalls macOS-Eingabeüberwachung freigeben.")
-    print(f"App zum erneuten Öffnen: {app}")
+    print("Koprotokoll geöffnet. Audioquelle und Tastenkürzel im Einstellungsfenster ändern.")
+    print(f"App zum erneuten Öffnen: {launcher or app}")

@@ -455,3 +455,38 @@ Start-/Stopp-Ablauf über die native App sind noch nicht bestätigt. Der
 UI-Zugriff konnte die erste Fehlermeldung lesen, erreichte danach die reine
 Menüleiste nicht (`noWindowsAvailable` bzw. `timeoutReached`). Die vorhandenen
 Grenzen beim echten Systemton bleiben bestehen. Dies schließt #31 nicht ab.
+
+### Einstellungen direkt in der Mac-App (04.11.2026)
+
+Auf Nutzerwunsch hat dieselbe native App jetzt ein dauerhaftes
+Einstellungsfenster: Audioquelle, Tastenkürzel ein/aus, Doppeltipp auf Alt,
+Control oder Umschalt, Status der Eingabeüberwachung, Prüfung/Anforderung der
+Freigabe und Einstieg in die macOS-Einstellungen. Start/Stopp und der Zugang
+zu den Meetings sind ebenfalls im Fenster erreichbar. Das Fenster öffnet sich
+beim App-Start und beim erneuten Öffnen; das Ko-Menü enthält „Einstellungen …“.
+Ein Finder-Einstieg verweist auf das erzeugte App-Paket, ohne eine vorhandene
+andere Installation zu überschreiben.
+
+Die vorhandene Audioquellen-Auswahl bleibt erhalten. Alle Einstellungen liegen
+an derselben Stelle in den App-Präferenzen, statt als zusätzliche Server- oder
+Browserkonfiguration. Ändern oder Abschalten des Kürzels verwirft einen
+begonnenen Doppeltipp. Während einer Aufnahme sind die Einstellungen gesperrt.
+
+Prüfung: `.venv/bin/pytest -q -ra` meldete **92 bestanden in 104,58 s**, keine
+übersprungenen Tests. Der native Test umfasst nun 14 Fälle einschließlich
+Präferenz-Persistenz, Übernahme der vorhandenen Audioquelle, ungültigem
+Tastennamen, Tastenwechsel und Abschalten zwischen zwei Tipps. Zwei zusätzliche
+Python-Tests prüfen den Finder-Einstieg und den Erhalt einer vorhandenen App.
+Swift-Build und Codesign-Prüfung bestanden.
+
+Das neue Fenster wurde tatsächlich mit dem nativen UI-Werkzeug gelesen und
+visuell geprüft: alle Bereiche und Schaltflächen sichtbar, gespeicherte
+Audioquelle ausgewählt, Alt als Standard, Eingabeüberwachung als fehlend
+gekennzeichnet. Ausschalten des Kürzels deaktivierte die Tastenwahl sichtbar;
+anschließend wurde der eingeschaltete Alt-Standard wiederhergestellt. Die
+Auswahlliste enthielt die drei vorgesehenen Tasten. Die Umschaltung auf Control
+wurde durch eine Zustandsänderung während der UI-Automation nicht bestätigt;
+der native Präferenztest deckt diese Speicherung separat ab.
+
+Keine macOS-Freigabe wurde automatisch erteilt und keine echte Aufnahme gestartet.
+Der vollständige Aufnahme-/Hotkey-Nachweis und die übrigen Grenzen oben bleiben offen.

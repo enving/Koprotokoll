@@ -18,6 +18,38 @@ struct AudioSource: Decodable {
 
 struct SourceList: Decodable { let devices: [AudioSource] }
 
+final class ShortcutMonitor: @unchecked Sendable {
+    private let lock = NSLock()
+    private var detector = ConfigurableShortcut()
+
+    func configure(enabled: Bool, modifier: ShortcutModifier) {
+        lock.lock()
+        defer { lock.unlock() }
+        detector.configure(enabled: enabled, modifier: modifier)
+    }
+
+    func start(_ triggered: @escaping @Sendable () -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            while let monitor = self {
+                if monitor.sample() { triggered() }
+                Thread.sleep(forTimeInterval: 0.01)
+            }
+        }
+    }
+
+    private func sample() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard detector.enabled else { return false }
+        let keys = detector.modifier.keyCodes
+        let down = keys.contains { CGEventSource.keyState(.hidSystemState, key: $0) }
+        let other = (down || detector.needsOtherKeys) && (UInt16(0)..<128).contains {
+            !keys.contains($0) && $0 != 57 && CGEventSource.keyState(.hidSystemState, key: $0)
+        }
+        return detector.update(down: down, otherKey: other, at: ProcessInfo.processInfo.systemUptime)
+    }
+}
+
 @MainActor
 final class DesktopApp: NSObject, NSApplicationDelegate {
     private var config: Launcher!
@@ -27,15 +59,26 @@ final class DesktopApp: NSObject, NSApplicationDelegate {
     private let toggleItem = NSMenuItem(title: "Aufnahme starten · ⌥ zweimal", action: #selector(toggleAction), keyEquivalent: "")
     private let sourcesMenu = NSMenu()
     private var sources: [AudioSource] = []
-    private var selectedName = UserDefaults.standard.string(forKey: "audioSourceName")
+    private let preferences = DesktopPreferences(defaults: .standard)
+    private var selectedName: String? { preferences.sourceName }
     private var active = false
     private var startedAt = 0.0
     private var busy = true
     private var refreshing = false
+    private var sourcesLoading = false
     private var listening = false
     private var server: Process?
     private var timer: Timer?
     private var activity: NSObjectProtocol?
+    private var monitor: ShortcutMonitor?
+    private var settingsWindow: NSWindow?
+    private let sourcePicker = NSPopUpButton()
+    private let modifierPicker = NSPopUpButton()
+    private let shortcutToggle = NSButton(checkboxWithTitle: "Globales Tastenkürzel aktivieren", target: nil, action: nil)
+    private let permissionLabel = NSTextField(wrappingLabelWithString: "")
+    private let recordingLabel = NSTextField(wrappingLabelWithString: "Koprotokoll startet …")
+    private let recordButton = NSButton(title: "Aufnahme starten", target: nil, action: nil)
+    private let refreshButton = NSButton(title: "Audioquellen aktualisieren", target: nil, action: nil)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard let url = Bundle.main.url(forResource: "launcher", withExtension: "json"),
@@ -62,10 +105,153 @@ final class DesktopApp: NSObject, NSApplicationDelegate {
         menu.addItem(sourceItem)
         addItem("Audioquellen aktualisieren", action: #selector(refreshSourcesAction))
         menu.addItem(.separator())
+        addItem("Einstellungen …", action: #selector(showSettings))
         addItem("Oberfläche öffnen", action: #selector(openUI))
         addItem("Tastenkürzel prüfen", action: #selector(checkShortcut))
         addItem("Tastenkürzel beenden", action: #selector(quit))
+        showSettings()
         Task { await prepare() }
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        showSettings()
+        return true
+    }
+
+    @objc private func showSettings() {
+        if settingsWindow == nil { buildSettingsWindow() }
+        updateSettingsControls()
+        settingsWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func buildSettingsWindow() {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 570, height: 560),
+                              styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
+        window.title = "Koprotokoll – Einstellungen"
+        window.isReleasedWhenClosed = false
+        window.center()
+        settingsWindow = window
+        guard let content = window.contentView else { return }
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 12
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 24),
+            stack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -24),
+            stack.topAnchor.constraint(equalTo: content.topAnchor, constant: 24),
+            stack.bottomAnchor.constraint(lessThanOrEqualTo: content.bottomAnchor, constant: -24),
+        ])
+        func label(_ text: String, heading: Bool = false) {
+            let field = NSTextField(wrappingLabelWithString: text)
+            if heading { field.font = .systemFont(ofSize: 15, weight: .semibold) }
+            stack.addArrangedSubview(field)
+            field.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        }
+        func button(_ button: NSButton, action: Selector) {
+            button.target = self
+            button.action = action
+            button.bezelStyle = .rounded
+        }
+        label("Audioquelle", heading: true)
+        sourcePicker.target = self
+        sourcePicker.action = #selector(selectSettingsSource)
+        sourcePicker.setAccessibilityLabel("Audioquelle")
+        stack.addArrangedSubview(sourcePicker)
+        sourcePicker.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        button(refreshButton, action: #selector(refreshSourcesAction))
+        stack.addArrangedSubview(refreshButton)
+        label("Für ein Raumgespräch ein Mikrofon wählen. Für ein Online-Meeting müssen Systemton und Mikrofon enthalten sein.")
+        label("Tastenkürzel", heading: true)
+        shortcutToggle.target = self
+        shortcutToggle.action = #selector(changeShortcut)
+        stack.addArrangedSubview(shortcutToggle)
+        modifierPicker.addItems(withTitles: ShortcutModifier.allCases.map(\.title))
+        modifierPicker.target = self
+        modifierPicker.action = #selector(changeShortcut)
+        modifierPicker.setAccessibilityLabel("Doppeltipp-Taste")
+        stack.addArrangedSubview(modifierPicker)
+        modifierPicker.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        label("Die gewählte Taste zweimal kurz drücken und loslassen: starten; erneut zweimal: stoppen und auswerten.")
+        stack.addArrangedSubview(permissionLabel)
+        permissionLabel.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        let permissionRow = NSStackView()
+        permissionRow.spacing = 8
+        let check = NSButton(title: "Freigabe prüfen", target: nil, action: nil)
+        let system = NSButton(title: "macOS-Einstellungen öffnen", target: nil, action: nil)
+        button(check, action: #selector(checkShortcut))
+        button(system, action: #selector(openSystemSettings))
+        permissionRow.addArrangedSubview(check)
+        permissionRow.addArrangedSubview(system)
+        stack.addArrangedSubview(permissionRow)
+        label("Unter Datenschutz & Sicherheit → Eingabeüberwachung muss Koprotokoll freigegeben sein. Änderungen hier werden sofort gespeichert.")
+        label("Aufnahme", heading: true)
+        stack.addArrangedSubview(recordingLabel)
+        recordingLabel.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        let actions = NSStackView()
+        actions.spacing = 8
+        button(recordButton, action: #selector(toggleAction))
+        let meetings = NSButton(title: "Meetings öffnen", target: nil, action: nil)
+        button(meetings, action: #selector(openUI))
+        actions.addArrangedSubview(recordButton)
+        actions.addArrangedSubview(meetings)
+        stack.addArrangedSubview(actions)
+        content.layoutSubtreeIfNeeded()
+        window.setContentSize(NSSize(width: 570, height: max(560, stack.fittingSize.height + 48)))
+        window.center()
+    }
+
+    private func updateSettingsControls() {
+        guard settingsWindow != nil else { return }
+        var titles = ["Bitte Audioquelle wählen …"] + sources.map(\.name)
+        let selected = selectedName.flatMap { name in sources.firstIndex { $0.name == name } }
+        if let name = selectedName, selected == nil { titles.append("Nicht verfügbar: \(name)") }
+        if sourcePicker.itemTitles != titles {
+            sourcePicker.removeAllItems()
+            sourcePicker.addItems(withTitles: titles)
+            for (index, source) in sources.enumerated() {
+                sourcePicker.item(at: index + 1)?.representedObject = source.name
+            }
+        }
+        let selectedIndex = selected.map { $0 + 1 } ?? (selectedName == nil ? 0 : titles.count - 1)
+        if sourcePicker.indexOfSelectedItem != selectedIndex { sourcePicker.selectItem(at: selectedIndex) }
+        sourcePicker.isEnabled = !active && !busy && !sourcesLoading && !sources.isEmpty
+        refreshButton.isEnabled = !busy && !sourcesLoading
+        shortcutToggle.state = preferences.shortcutEnabled ? .on : .off
+        shortcutToggle.isEnabled = !active && !busy
+        let modifierIndex = ShortcutModifier.allCases.firstIndex(of: preferences.modifier) ?? 0
+        if modifierPicker.indexOfSelectedItem != modifierIndex { modifierPicker.selectItem(at: modifierIndex) }
+        modifierPicker.isEnabled = preferences.shortcutEnabled && !active && !busy
+        let granted = CGPreflightListenEventAccess()
+        permissionLabel.stringValue = granted
+            ? (preferences.shortcutEnabled ? "Eingabeüberwachung freigegeben. Tastenkürzel aktiv." : "Eingabeüberwachung freigegeben. Tastenkürzel ausgeschaltet.")
+            : "Eingabeüberwachung fehlt. Start und Stopp über die Schaltfläche sind verfügbar."
+        recordingLabel.stringValue = stateItem.title
+        recordButton.title = active ? "Stopp und auswerten" : "Aufnahme starten"
+        recordButton.isEnabled = !busy
+    }
+
+    @objc private func selectSettingsSource() {
+        guard !active && !busy, let name = sourcePicker.selectedItem?.representedObject as? String else { return }
+        rememberSource(name)
+    }
+
+    @objc private func changeShortcut() {
+        guard !active && !busy else { return }
+        preferences.shortcutEnabled = shortcutToggle.state == .on
+        preferences.modifier = ShortcutModifier.allCases[modifierPicker.indexOfSelectedItem]
+        enableShortcut()
+        updateSettingsControls()
+        Task { await refreshState() }
+    }
+
+    @objc private func openSystemSettings() {
+        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.systempreferences") {
+            NSWorkspace.shared.openApplication(at: url, configuration: .init())
+        }
     }
 
     private func addItem(_ title: String, action: Selector) {
@@ -99,7 +285,7 @@ final class DesktopApp: NSObject, NSApplicationDelegate {
     }
 
     private func prepare() async {
-        defer { busy = false }
+        defer { busy = false; updateSettingsControls() }
         if !(await serverReady()) {
             let process = Process()
             process.executableURL = URL(fileURLWithPath: config.python)
@@ -135,7 +321,6 @@ final class DesktopApp: NSObject, NSApplicationDelegate {
         toggleItem.isEnabled = true
         await refreshSources()
         await refreshState()
-        if selectedName == nil && !sources.isEmpty { chooseSource() }
         enableShortcut()
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor in await self?.refreshState() }
@@ -145,6 +330,10 @@ final class DesktopApp: NSObject, NSApplicationDelegate {
     @objc private func refreshSourcesAction() { Task { await refreshSources() } }
 
     private func refreshSources() async {
+        guard !sourcesLoading else { return }
+        sourcesLoading = true
+        refreshButton.isEnabled = false
+        defer { sourcesLoading = false; updateSettingsControls() }
         do {
             sources = try JSONDecoder().decode(SourceList.self, from: await request("/api/capture/devices")).devices
             sourcesMenu.removeAllItems()
@@ -162,24 +351,14 @@ final class DesktopApp: NSObject, NSApplicationDelegate {
     }
 
     private func chooseSource() {
-        let alert = NSAlert()
-        alert.messageText = "Audioquelle für Koprotokoll wählen"
-        alert.informativeText = "Wähle ein Mikrofon für ein Raumgespräch oder Systemton plus Mikrofon für ein Online-Meeting. Die Aufnahme beginnt erst nach Alt zweimal oder über das Menü."
-        alert.addButton(withTitle: "Übernehmen")
-        alert.addButton(withTitle: "Abbrechen")
-        let popup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 390, height: 28))
-        popup.addItems(withTitles: sources.map(\.name))
-        alert.accessoryView = popup
-        NSApp.activate(ignoringOtherApps: true)
-        if alert.runModal() == .alertFirstButtonReturn, let name = popup.titleOfSelectedItem {
-            rememberSource(name)
-        }
+        showSettings()
+        settingsWindow?.makeFirstResponder(sourcePicker)
     }
 
     private func rememberSource(_ name: String) {
-        selectedName = name
-        UserDefaults.standard.set(name, forKey: "audioSourceName")
+        preferences.sourceName = name
         for entry in sourcesMenu.items { entry.state = entry.title == name ? .on : .off }
+        updateSettingsControls()
     }
 
     @objc private func selectSource(_ sender: NSMenuItem) {
@@ -190,7 +369,8 @@ final class DesktopApp: NSObject, NSApplicationDelegate {
     private func refreshState() async {
         guard !refreshing && !busy else { return }
         refreshing = true
-        defer { refreshing = false }
+        defer { refreshing = false; updateSettingsControls() }
+        enableShortcut()
         do {
             let data = try await request("/api/capture")
             let state = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
@@ -202,11 +382,11 @@ final class DesktopApp: NSObject, NSApplicationDelegate {
                 item.button?.title = "● \(time)"
                 let level = Int(state["level_db"] as? Double ?? -120)
                 stateItem.title = "Aufnahme läuft · Pegel \(level) dB"
-                toggleItem.title = "Stopp und auswerten · ⌥ zweimal"
+                toggleItem.title = "Stopp und auswerten"
             } else {
                 item.button?.title = "Ko"
-                stateItem.title = listening ? "Bereit · Alt zweimal" : "Tastenkürzel benötigt Eingabeüberwachung"
-                toggleItem.title = "Aufnahme starten · ⌥ zweimal"
+                stateItem.title = listening ? "Bereit · \(preferences.modifier.title)" : "Bereit · Start über die Schaltfläche"
+                toggleItem.title = "Aufnahme starten"
             }
             for entry in sourcesMenu.items { entry.isEnabled = !active }
         } catch {
@@ -221,7 +401,8 @@ final class DesktopApp: NSObject, NSApplicationDelegate {
         guard !busy else { return }
         busy = true
         toggleItem.isEnabled = false
-        defer { busy = false; toggleItem.isEnabled = true; Task { await refreshState() } }
+        updateSettingsControls()
+        defer { busy = false; toggleItem.isEnabled = true; updateSettingsControls(); Task { await refreshState() } }
         do {
             let data = try await request("/api/capture")
             let state = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
@@ -250,35 +431,32 @@ final class DesktopApp: NSObject, NSApplicationDelegate {
     }
 
     @objc private func checkShortcut() {
+        if preferences.shortcutEnabled && !CGPreflightListenEventAccess() { _ = CGRequestListenEventAccess() }
         enableShortcut()
-        fail(listening
-             ? "Alt zweimal ist aktiviert. Die Aufnahme lässt sich auch im Ko-Menü starten und stoppen."
-             : "Bitte Koprotokoll unter Systemeinstellungen → Datenschutz & Sicherheit → Eingabeüberwachung freigeben. Danach erneut prüfen oder die App neu öffnen. Start und Stopp im Ko-Menü funktionieren auch ohne Tastenkürzel.")
+        showSettings()
     }
 
     private func enableShortcut() {
-        guard !listening else { return }
-        guard CGPreflightListenEventAccess() || CGRequestListenEventAccess() else {
-            stateItem.title = "Eingabeüberwachung für Koprotokoll freigeben"
-            return
-        }
-        listening = true
-        activity = ProcessInfo.processInfo.beginActivity(options: [.userInitiatedAllowingIdleSystemSleep],
-                                                        reason: "Koprotokoll Alt-Doppeltipp")
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            var detector = AltDoubleTap()
-            let optionKeys: Set<CGKeyCode> = [58, 61]
-            let otherKeys = (0..<128).map { CGKeyCode($0) }.filter { !optionKeys.contains($0) && $0 != 57 }
-            while true {
-                let down = optionKeys.contains { CGEventSource.keyState(.hidSystemState, key: $0) }
-                let other = (down || detector.needsOtherKeys)
-                    && otherKeys.contains { CGEventSource.keyState(.hidSystemState, key: $0) }
-                if detector.update(down: down, otherKey: other, at: ProcessInfo.processInfo.systemUptime) {
-                    Task { @MainActor in await self?.toggle() }
+        listening = preferences.shortcutEnabled && CGPreflightListenEventAccess()
+        if listening && monitor == nil {
+            let sampler = ShortcutMonitor()
+            monitor = sampler
+            sampler.start { [weak self] in
+                Task { @MainActor in
+                    guard let self = self, self.listening else { return }
+                    await self.toggle()
                 }
-                Thread.sleep(forTimeInterval: 0.01)
             }
         }
+        monitor?.configure(enabled: listening, modifier: preferences.modifier)
+        if listening && activity == nil {
+            activity = ProcessInfo.processInfo.beginActivity(options: [.userInitiatedAllowingIdleSystemSleep],
+                                                            reason: "Koprotokoll Tastenkürzel")
+        } else if !listening, let previous = activity {
+            ProcessInfo.processInfo.endActivity(previous)
+            activity = nil
+        }
+        item.button?.toolTip = "Koprotokoll: \(preferences.modifier.title) startet oder stoppt die Aufnahme"
     }
 
     @objc private func openUI() { NSWorkspace.shared.open(URL(string: config.baseURL)!) }

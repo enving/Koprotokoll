@@ -26,7 +26,7 @@ struct HotkeyTests {
                                                   (0.6, true, false), (0.65, false, false)], 2),
         ]
         for (name, events, expected) in cases {
-            var detector = AltDoubleTap()
+            var detector = ModifierDoubleTap()
             var count = 0
             for (time, down, other) in events {
                 if detector.update(down: down, otherKey: other, at: time) { count += 1 }
@@ -36,11 +36,43 @@ struct HotkeyTests {
                 exit(1)
             }
         }
-        var expired = AltDoubleTap()
+        var expired = ModifierDoubleTap()
         _ = expired.update(down: true, otherKey: false, at: 0)
         _ = expired.update(down: false, otherKey: false, at: 0.05)
         _ = expired.update(down: false, otherKey: false, at: 1)
         guard !expired.needsOtherKeys else { exit(1) }
-        print("9 Tastenkürzel-Fälle bestanden")
+        let suite = "koprotokoll-tests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preferences = DesktopPreferences(defaults: defaults)
+        guard preferences.shortcutEnabled, preferences.modifier == .option, preferences.sourceName == nil else { exit(1) }
+        defaults.set("Vorhandenes Mikrofon", forKey: "audioSourceName")
+        preferences.modifier = .control
+        preferences.shortcutEnabled = false
+        let reopened = DesktopPreferences(defaults: UserDefaults(suiteName: suite)!)
+        guard reopened.sourceName == "Vorhandenes Mikrofon", reopened.modifier == .control,
+              !reopened.shortcutEnabled else { exit(1) }
+        defaults.set("unbekannte-taste", forKey: "shortcutModifier")
+        guard preferences.modifier == .option else { exit(1) }
+
+        var configurable = ConfigurableShortcut()
+        configurable.configure(enabled: true, modifier: .option)
+        _ = configurable.update(down: true, otherKey: false, at: 0)
+        _ = configurable.update(down: false, otherKey: false, at: 0.05)
+        configurable.configure(enabled: true, modifier: .control)
+        _ = configurable.update(down: true, otherKey: false, at: 0.20)
+        guard !configurable.update(down: false, otherKey: false, at: 0.25) else { exit(1) }
+        _ = configurable.update(down: true, otherKey: false, at: 0.40)
+        guard configurable.update(down: false, otherKey: false, at: 0.45) else { exit(1) }
+
+        _ = configurable.update(down: true, otherKey: false, at: 1)
+        _ = configurable.update(down: false, otherKey: false, at: 1.05)
+        configurable.configure(enabled: false, modifier: .control)
+        _ = configurable.update(down: true, otherKey: false, at: 1.20)
+        guard !configurable.update(down: false, otherKey: false, at: 1.25) else { exit(1) }
+        configurable.configure(enabled: true, modifier: .control)
+        _ = configurable.update(down: true, otherKey: false, at: 1.30)
+        guard !configurable.update(down: false, otherKey: false, at: 1.35) else { exit(1) }
+        print("14 Tastenkürzel- und Einstellungsfälle bestanden")
     }
 }
