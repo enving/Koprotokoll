@@ -28,11 +28,12 @@ JOIN_EARLY_S = 60
 
 class CalendarScheduler:
     def __init__(self, db: Database, sources: Iterable[CalendarSource],
-                 poll_seconds: float = 60, jitsi_hosts: tuple[str, ...] = ()):
+                 poll_seconds: float = 60, jitsi_hosts: tuple[str, ...] = (), bbb_hosts: tuple[str, ...] = ()):
         self.db = db
         self.sources = list(sources)
         self.poll = poll_seconds
         self.jitsi_hosts = jitsi_hosts
+        self.bbb_hosts = bbb_hosts
         self._stop = threading.Event()
         self.last_sync: dict = {}
 
@@ -92,7 +93,7 @@ class CalendarScheduler:
             found = find_meeting_url(
                 {"location": event.location, "description": event.description,
                  "meeting_url": event.meeting_url or ""},
-                self.jitsi_hosts)
+                self.jitsi_hosts, self.bbb_hosts)
             if not found or found[1] not in SUPPORTED:
                 continue
             url, platform = found

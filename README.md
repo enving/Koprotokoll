@@ -199,7 +199,8 @@ Die Analyse des Vorbilds Fireflies.ai mit [REA](https://github.com/morluto/rea) 
 - [ ] Recap per **SMTP** oder als **Entwurf** in Outlook/Thunderbird, Aufgaben-Export
 - [ ] **Kodiktat** als Begleit-App für Teams-/Zoom-Apps und Telefonate
 - [x] Meeting-Bot für **Microsoft Teams** (Web-Client, Gastbeitritt)
-- [ ] Meeting-Bot für **BigBlueButton** und **Zoom**
+- [ ] Meeting-Bot für **BigBlueButton**: Adapter implementiert, echter Beitritt noch zu prüfen
+- [ ] Meeting-Bot für **Zoom**
 - [ ] **Live-Transkript** während des Meetings
 - [ ] Sprecher **wiedererkennen** über Meetings hinweg (Stimmprofile)
 - [ ] **Docker**-Image und Installer für Windows/macOS

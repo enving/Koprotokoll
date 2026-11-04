@@ -87,6 +87,8 @@ class Settings:
             h.strip().lower() for h in _env("KOPROTOKOLL_JITSI_HOSTS", "").split(",") if h.strip()
         )
     )
+    bbb_hosts: tuple[str, ...] = field(default_factory=lambda: tuple(
+        host.strip().lower() for host in _env("KOPROTOKOLL_BBB_HOSTS", "").split(",") if host.strip()))
 
     @property
     def db_path(self) -> Path:

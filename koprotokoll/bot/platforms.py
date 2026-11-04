@@ -7,14 +7,21 @@ import time
 import urllib.parse
 from typing import Iterable
 
+
+def bbb_pattern(bbb_hosts: Iterable[str] = ()) -> re.Pattern:
+    hosts = "|".join(re.escape(host.strip().lower()) for host in ("demo.bigbluebutton.org", *bbb_hosts) if host.strip())
+    return re.compile(r"https://(?:" + hosts + r")/(?:b/[^\s\"'<>]+|rooms/[^/\s\"'<>?#]+/join(?:/?(?:[?#][^\s\"'<>]*)?)?)(?=$|[\s\"'<>])", re.I)
+
+
 PATTERNS = {
     "google_meet": re.compile(r"https://meet\.google\.com/[a-z]{3}-[a-z]{4}-[a-z]{3}(?:\?[^\s\"'<>]*)?", re.I),
     "zoom": re.compile(r"https://(?:[\w-]+\.)?zoom\.us/(?:j|my|w)/[^\s\"'<>]+", re.I),
     "teams": re.compile(r"https://teams\.(?:microsoft|live)\.com/(?:l/meetup-join|(?:v2/)?meet)/(?!meet-now(?:[/?#]|$))[^\s\"'<>]+", re.I),
     "jitsi": re.compile(r"https://meet\.jit\.si/[^\s\"'<>]+", re.I),
+    "bbb": bbb_pattern(),
 }
 # Plattformen, denen der Bot beitreten kann. Zoom wird erkannt, aber noch nicht unterstützt.
-SUPPORTED = {"google_meet", "web", "jitsi", "teams"}
+SUPPORTED = {"google_meet", "web", "jitsi", "teams", "bbb"}
 
 
 class BotError(RuntimeError):
@@ -31,10 +38,12 @@ def jitsi_pattern(jitsi_hosts: Iterable[str] = ()) -> re.Pattern:
     return re.compile(r"https://(?:" + "|".join(hosts) + r")/[^\s\"'<>]+", re.I)
 
 
-def detect_platform(url: str, jitsi_hosts: Iterable[str] = ()) -> str | None:
+def detect_platform(url: str, jitsi_hosts: Iterable[str] = (), bbb_hosts: Iterable[str] = ()) -> str | None:
     for name, pattern in PATTERNS.items():
         if name == "jitsi":
             pattern = jitsi_pattern(jitsi_hosts)
+        elif name == "bbb":
+            pattern = bbb_pattern(bbb_hosts)
         if pattern.match(url.strip()):
             return name
     return None
@@ -59,7 +68,7 @@ def link_hint(url: str) -> str | None:
     return None
 
 
-def find_meeting_url(event: dict, jitsi_hosts: Iterable[str] = ()) -> tuple[str, str] | None:
+def find_meeting_url(event: dict, jitsi_hosts: Iterable[str] = (), bbb_hosts: Iterable[str] = ()) -> tuple[str, str] | None:
     """Meeting-Link aus einem Kalendertermin ziehen → (url, plattform).
 
     Akzeptiert Google-spezifische Felder (``hangoutLink``, ``conferenceData``)
@@ -78,6 +87,8 @@ def find_meeting_url(event: dict, jitsi_hosts: Iterable[str] = ()) -> tuple[str,
             for name, pattern in PATTERNS.items():
                 if name == "jitsi":
                     pattern = jitsi_pattern(jitsi_hosts)
+                elif name == "bbb":
+                    pattern = bbb_pattern(bbb_hosts)
                 m = pattern.search(text)
                 if m and (not want_supported or name in SUPPORTED):
                     return m.group(0), name
@@ -564,4 +575,84 @@ def _visible(locator, timeout_ms: int) -> bool:
         return False
 
 
-ADAPTERS = {"google_meet": GoogleMeet, "jitsi": Jitsi, "teams": Teams, "web": Adapter}
+class BigBlueButton(Adapter):
+    """Greenlight-Gastbeitritt; Audio ausdrücklich über „Nur zuhören“."""
+
+    JOIN = re.compile(r"^(join(?: meeting)?|beitreten|teilnehmen)$", re.I)
+    LEAVE = re.compile(r"^(leave (?:meeting|session|conference)|konferenz verlassen|besprechung verlassen)$", re.I)
+    ENDED = re.compile(r"(?:meeting|conference) (?:has |was )?ended|you (?:have )?left (?:the )?(?:meeting|conference)|konferenz wurde beendet", re.I)
+    DENIED = re.compile(r"access denied|not authorized|invalid access code|room not found|zugang verweigert|ungültiger zugangscode", re.I)
+
+    @staticmethod
+    def _text(page) -> str:
+        try:
+            return page.inner_text("body", timeout=1000)
+        except Exception:
+            return ""
+
+    def join(self, page, url: str, bot_name: str, admit_timeout: float, on_status) -> None:
+        page.goto(url, wait_until="domcontentloaded")
+        deadline = time.monotonic() + admit_timeout
+        name_set = joined = audio_selected = False
+        while time.monotonic() < deadline:
+            text = self._text(page)
+            if self.DENIED.search(text) or self.ENDED.search(text):
+                raise BotError("BigBlueButton-Beitritt abgelehnt oder die Konferenz wurde beendet.")
+            if not name_set:
+                name = page.locator("input[name='name'], input[placeholder*='name' i]").first
+                if _visible(name, 200):
+                    if not name.is_enabled():
+                        raise BotError("Der sichtbare Bot-Name kann nicht gesetzt werden. Einen Gastzugang verwenden.")
+                    name.fill(bot_name)
+                    name_set = True
+            if not joined:
+                button = page.get_by_role("button", name=self.JOIN).first
+                if _visible(button, 200):
+                    if not name_set:
+                        raise BotError("BigBlueButton bietet kein Feld für den sichtbaren Bot-Namen.")
+                    consent = page.get_by_role("checkbox", name=re.compile(r"recording|aufzeichnung", re.I)).first
+                    if _visible(consent, 100):
+                        consent.check()
+                    button.click()
+                    joined = True
+            if not audio_selected:
+                listen = page.locator('[data-test="listenOnlyBtn"]').first
+                if not _visible(listen, 200):
+                    listen = page.get_by_role("button", name=re.compile(r"^(listen only|nur zuhören)$", re.I)).first
+                if _visible(listen, 200):
+                    if not name_set:
+                        raise BotError("Der sichtbare Bot-Name wurde nicht bestätigt. Den Greenlight-Gastlink verwenden.")
+                    listen.click()
+                    audio_selected = True
+            if audio_selected and _visible(page.locator('[data-test="leaveMeetingDropdown"]').first, 200):
+                if not page.locator('[data-test="audioModal"]').is_visible():
+                    return
+            if re.search(r"waiting|not started|warten|noch nicht gestartet", text, re.I):
+                on_status("waiting_admit")
+            page.wait_for_timeout(100)
+        raise BotError("BigBlueButton-Beitritt oder Audioverbindung nicht rechtzeitig möglich. Gastzugang und Raumfreigabe prüfen.")
+
+    def ended(self, page) -> bool:
+        if page.is_closed():
+            return True
+        if _visible(page.locator('[data-test="leaveMeetingDropdown"]').first, 200):
+            return False
+        return bool(self.ENDED.search(self._text(page)))
+
+    def leave(self, page) -> None:
+        button = page.locator('[data-test="leaveMeetingDropdown"]').first
+        if _visible(button, 300):
+            button.click()
+        target = page.locator("#app-leave-meeting-menu").get_by_text(self.LEAVE).first
+        if _visible(target, 500):
+            target.click()
+        else:
+            target = page.get_by_role("menuitem", name=self.LEAVE).first
+            if _visible(target, 300):
+                target.click()
+        confirm = page.get_by_role("dialog").get_by_role("button", name=self.LEAVE).first
+        if _visible(confirm, 300):
+            confirm.click()
+
+
+ADAPTERS = {"google_meet": GoogleMeet, "jitsi": Jitsi, "teams": Teams, "bbb": BigBlueButton, "web": Adapter}

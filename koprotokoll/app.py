@@ -203,7 +203,7 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
         """Quellenliste des Schedulers nach Änderungen neu aufbauen."""
         calendar.sources = build_sources()
 
-    calendar = CalendarScheduler(db, build_sources(), s.calendar_poll_seconds, s.jitsi_hosts)
+    calendar = CalendarScheduler(db, build_sources(), s.calendar_poll_seconds, s.jitsi_hosts, s.bbb_hosts)
     if background:
         calendar.start()
 
@@ -493,7 +493,7 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
     @api.post("/api/bots", status_code=201, tags=["bots"])
     def create_bot(b: BotIn):
         url = b.meeting_url.strip()
-        platform = b.platform or detect_platform(url, s.jitsi_hosts)
+        platform = b.platform or detect_platform(url, s.jitsi_hosts, s.bbb_hosts)
         if not url.startswith(("http://", "https://")):
             raise HTTPException(400, "meeting_url muss mit http:// oder https:// beginnen")
         if platform is None:
@@ -809,7 +809,7 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
             for e in source_events:
                 found = find_meeting_url(
                     {"location": e.location, "description": e.description,
-                     "meeting_url": e.meeting_url or ""}, s.jitsi_hosts)
+                     "meeting_url": e.meeting_url or ""}, s.jitsi_hosts, s.bbb_hosts)
                 url, platform = found or ("", "")
                 will_join = bool(found and platform in SUPPORTED and source.enabled()
                                  and not e.all_day and e.self_response != "declined")
