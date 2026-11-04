@@ -629,6 +629,10 @@ und vier Sprecherlabels. Die Zusammenfassung verwendet die Heuristik.
 Die lokale API bestätigte bei dieser Ergänzung `status: done`, Fortschritt 1,0
 und vier Sprechergruppen. Die Aufnahme wurde inzwischen vollständig verarbeitet.
 
+Der Nutzer bestätigte anschließend ausdrücklich, dass der sichtbare Inhalt
+unsensibel ist und dieses Bild auch in die README aufgenommen werden soll.
+Die README verweist auf dieselbe Bilddatei wie dieser Nachweis.
+
 Der sichtbare Wortlaut ist ein Modellergebnis und enthält erkennbare Fehler.
 Vier Labels belegen vier Modellgruppen, keine unabhängig bestätigte Zahl realer
 Personen. Das Bild dient als Nachweis des sichtbaren Ergebnisses; eine menschlich

@@ -107,6 +107,13 @@ Kanzleien, Behörden oder einfach vertrauliche Team-Meetings ist das oft ein No-
 ## 🖼️ So sieht's aus
 
 <p align="center">
+  <img src="docs/nachweise/assets/issue-31/transkript-realaufnahme.png" alt="Echte Hardwareaufnahme in Koprotokoll: Audioplayer und Transkript mit Zeitmarken und automatisch geschätzten Sprechergruppen" width="100%">
+</p>
+
+Echte Hardwareaufnahme mit 2:13 Minuten Laufzeit, lokal transkribiert und mit
+Sprechergruppen versehen. [Prüfprotokoll und Grenzen des Nachweises](docs/nachweise/issue-31-lokale-audioaufnahme.md#fertige-auswertung-der-hardwareaufnahme).
+
+<p align="center">
   <img src="docs/assets/screenshot-uebersicht.png" alt="Übersicht eines Meetings mit Zusammenfassung, Action Items und Redeanteilen" width="100%">
 </p>
 
