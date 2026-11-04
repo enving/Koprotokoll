@@ -671,6 +671,7 @@ vorhanden, PNG-Prüfsummen und dekodierbare Bilddaten geprüft, keine Text-/EXIF
 | `dokumente-freigabe.png` | Screenshot-Ordner: `Bildschirmfoto 2026-11-04 um 11.49.19.png` |
 | `systemaudio-freigabe.png` | Weiterer Nutzeranhang `image.png` mit Systemaudio-Abfrage |
 | `transkript-realaufnahme.png` | Weiterer Nutzeranhang `image.png` mit Ergebnis der 133-Sekunden-Aufnahme |
+| `eingabeueberwachung-freigegeben.png` | Weiterer Nutzeranhang `image.png` mit eingeschalteter Eingabeüberwachung |
 
 <details>
 <summary>SHA-256 der unveränderten Originaldateien</summary>
@@ -682,6 +683,7 @@ ed92c079c110a96b3acd8799941c5e5a5e1d99c674249be1bea7e6963b5c2fd8  app-tastenausw
 fd5741a1192b4fee9d9aa36f8f28c8780a599b1c66eb1f37cf0fd6486ed72395  dokumente-freigabe.png (Original)
 b2e61c63c923a5faf90e12e20a482b3c1f568f5fd7001a7eaa18e7cb78db801b  systemaudio-freigabe.png (Original)
 cc753866444a0d3eca8267fe7f9744df4b73ea8e7b63194a14456f21baf10772  transkript-realaufnahme.png (Original)
+d58e67d8ae1cc1ee60d9139fac1e869e51a7b8b0cb2cc13f32ecfe0d0576000e  eingabeueberwachung-freigegeben.png (Original)
 ```
 
 </details>
@@ -756,3 +758,24 @@ nicht verändert, gebaut oder neu signiert.
 
 Prüfung dieser Dokumentation: `pytest -q -ra` → **96 bestanden in 36,87 s**,
 keine übersprungenen Tests; `git diff --check` ohne Befund.
+
+
+### Screenshot der eingeschalteten Eingabeüberwachung
+
+![macOS-Eingabeüberwachung mit eingeschaltetem Koprotokoll-Schalter](assets/issue-31/eingabeueberwachung-freigegeben.png)
+
+**Weiterer Nutzeranhang vom 04.11.2026.** Der Screenshot zeigt den
+Koprotokoll-Schalter in der macOS-Eingabeüberwachung eingeschaltet. Er ergänzt
+die zuvor beobachtete Freigabemeldung der App. Start und Stopp per Alt-Doppeltipp
+hat der Nutzer gesondert bestätigt; der Schalter allein belegt diese Aktionen
+nicht. Der Zertifikatsdialog bleibt ausgeschlossen.
+
+Das Bild wurde mit unveränderten Bild-/Farbblöcken übernommen; ausschließlich
+PNG-Text-/EXIF-Metadaten entfernt. Originaldatei und dekodierte Bilddaten wurden
+gegengeprüft und unverändert belassen. Die Herkunft und Original-Prüfsumme sind
+in der bestehenden Tabelle dokumentiert. Der Nachweis enthält damit sieben
+Nutzerbilder.
+
+Prüfung dieser Ergänzung: sieben Bildverweise und PNG-Blöcke erfolgreich
+geprüft; `pytest -q -ra`: **96 bestanden in 31,72 s**, keine übersprungenen
+Tests. `git diff --check` ohne Befund.
