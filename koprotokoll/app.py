@@ -39,6 +39,7 @@ from .scheduler import CalendarScheduler
 from .speech import Diarizer, SherpaDiarizer, Transcriber, create_transcriber
 from .summarize import LLM, ask
 from .transcriptions import FORMATS, render, transcribe_upload
+from .tasks import TaskError, TaskExporter, meeting_tasks, tasks_ics
 
 log = logging.getLogger(__name__)
 STATIC = Path(__file__).parent / "static"
@@ -147,6 +148,10 @@ class EmailSettingsIn(BaseModel):
     recap_to_attendees: bool | None = None
 
 
+class TaskExportIn(BaseModel):
+    target: str
+
+
 def create_app(settings: Settings | None = None, transcriber: Transcriber | None = None,
                diarizer: Diarizer | None = None, llm: LLM | None = None,
                google: GoogleClient | None = None, background: bool = True) -> FastAPI:
@@ -165,6 +170,7 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
     google = google or GoogleClient(s, db)
     microsoft = MicrosoftClient(s, db)
     mail = MailService(s, db, google, microsoft)
+    task_exporter = TaskExporter(db, microsoft)
     events.subscribe(RecapMailer(mail, s.public_url))
     from .bot.runner import BotManager
 
@@ -260,6 +266,32 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
         if meeting["status"] != "done":
             raise HTTPException(409, "Das Meeting muss zuerst fertig ausgewertet sein.")
         return meeting
+
+    def tasks_for(meeting_id: int) -> list[dict]:
+        meeting = finished_meeting(meeting_id)
+        try:
+            return meeting_tasks(meeting, db.get_segments(meeting_id), s.public_url, db.task_namespace())
+        except TaskError as e:
+            raise HTTPException(400, str(e)) from e
+
+    @api.get("/api/tasks/targets", tags=["tasks"])
+    def task_targets():
+        return task_exporter.targets()
+
+    @api.get("/api/meetings/{meeting_id}/aufgaben.ics", tags=["tasks"])
+    def download_tasks(meeting_id: int):
+        return Response(tasks_ics(tasks_for(meeting_id)), media_type="text/calendar",
+                        headers={"Content-Disposition": f'attachment; filename="meeting-{meeting_id}-aufgaben.ics"'})
+
+    @api.post("/api/meetings/{meeting_id}/tasks/export", tags=["tasks"])
+    def write_tasks(meeting_id: int, body: TaskExportIn):
+        tasks = tasks_for(meeting_id)
+        try:
+            return task_exporter.export(body.target, tasks)
+        except (TaskError, CalDavError, MicrosoftError) as e:
+            raise HTTPException(400, str(e)) from e
+        except Exception:
+            raise HTTPException(400, "Aufgabenexport fehlgeschlagen. Bereits angelegte Aufgaben bleiben erhalten; Verbindung prüfen und erneut exportieren.") from None
 
     @api.get("/api/integrations/email/drafts", tags=["email"])
     def email_draft_targets(request: Request):
@@ -601,9 +633,9 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
             raise HTTPException(400, str(e)) from e
 
     @api.post("/api/integrations/microsoft/device", tags=["microsoft"])
-    def microsoft_device_start():
+    def microsoft_device_start(tasks: bool = False):
         try:
-            return microsoft.start_device()
+            return microsoft.start_device(include_tasks=tasks)
         except (MicrosoftError, OSError) as e:
             raise HTTPException(400, str(e)) from e
 

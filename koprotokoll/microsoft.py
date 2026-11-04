@@ -106,6 +106,7 @@ class MicrosoftClient:
         tokens = self.db.get_kv("microsoft_tokens", {})
         return {"configured": self.configured(), "connected": self.connected(),
                 "redirect_available": bool(self._client()[1]),
+                "tasks_enabled": self.has_scope("Tasks.ReadWrite"),
                 "email": tokens.get("email"), "redirect_uri": self.redirect_uri,
                 "settings": self.settings()}
 
@@ -131,11 +132,16 @@ class MicrosoftClient:
             "scope": " ".join(SCOPES), "response_mode": "query", "state": state,
         })
 
-    def start_device(self) -> dict:
+    def has_scope(self, scope: str) -> bool:
+        scopes = self.db.get_kv("microsoft_tokens", {}).get("scope") or ""
+        return scope.casefold() in {s.rsplit("/", 1)[-1].casefold() for s in scopes.split()}
+
+    def start_device(self, include_tasks: bool = False) -> dict:
         client_id, _ = self._client()
         if not client_id:
             raise MicrosoftError("Microsoft-Client-ID fehlt. Zuerst die App-Registrierung eintragen.")
-        data = _http("POST", DEVICE_URL, form={"client_id": client_id, "scope": " ".join(SCOPES)})
+        scope = " ".join(SCOPES + (["Tasks.ReadWrite"] if include_tasks else []))
+        data = _http("POST", DEVICE_URL, form={"client_id": client_id, "scope": scope})
         uri = urllib.parse.urlsplit(data["verification_uri"])
         if uri.scheme != "https" or not (uri.hostname in ("microsoft.com", "microsoftonline.com") or
                                          (uri.hostname or "").endswith((".microsoft.com", ".microsoftonline.com"))):
@@ -143,7 +149,7 @@ class MicrosoftClient:
         interval = max(5, int(data.get("interval", 5)))
         self.db.set_kv("microsoft_device", {"device_code": data["device_code"],
                        "expires": time.time() + int(data["expires_in"]), "interval": interval,
-                       "next_poll": time.time() + interval})
+                       "next_poll": time.time() + interval, "scope": scope})
         return {"user_code": data["user_code"], "verification_uri": data["verification_uri"],
                 "expires_in": int(data["expires_in"]), "interval": interval}
 
@@ -172,7 +178,7 @@ class MicrosoftClient:
             if e.code in ("expired_token", "authorization_declined"):
                 raise MicrosoftError("Anmeldung abgelehnt oder abgelaufen. Bitte bei Bedarf neu starten.") from None
             raise
-        self._store_tokens(token, "device")
+        self._store_tokens({**token, "scope": token.get("scope") or pending["scope"]}, "device")
         self.db.set_kv("microsoft_device", None)
         return {"status": "connected", **self.status()}
 

@@ -160,3 +160,13 @@ def test_device_login_in_real_browser_with_fake_provider(tmp_path, monkeypatch):
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
         assert errors == []
         browser.close()
+
+
+def test_task_permissions_are_requested_only_explicitly(tmp_path, monkeypatch):
+    fake = FakeGraph()
+    monkeypatch.setattr(ms, "_http", fake)
+    with make_client(tmp_path, microsoft_client_id="public-client") as client:
+        client.post("/api/integrations/microsoft/device")
+        assert "Tasks.ReadWrite" not in fake.calls[-1][2]["scope"]
+        client.post("/api/integrations/microsoft/device?tasks=1")
+        assert "Tasks.ReadWrite" in fake.calls[-1][2]["scope"]

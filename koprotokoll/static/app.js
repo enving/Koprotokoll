@@ -124,7 +124,8 @@ async function openMeeting(id, { keepTab = false, seekTo = null } = {}) {
   const changedMeeting = state.current?.id !== id;
   state.current = m;
   showView("meeting");
-  if (location.hash !== `#meeting=${id}`) history.replaceState(null, "", `#meeting=${id}`);
+  const canonical = `#meeting=${id}` + (seekTo !== null ? `&t=${seekTo}` : "");
+  if (location.hash !== canonical) history.replaceState(null, "", canonical);
   $("#m-title").textContent = m.title;
   const created = new Date(m.created_at * 1000).toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" });
   const diarization = m.meta?.diarization;
@@ -162,6 +163,40 @@ async function openMeeting(id, { keepTab = false, seekTo = null } = {}) {
   document.querySelectorAll(".m-item").forEach((el, i) =>
     el.classList.toggle("active", state.meetings[i]?.id === id));
   if (seekTo !== null) { showTab("transcript"); seek(seekTo); }
+}
+
+function taskExportControls(meetingId) {
+  const content = h("div", { class: "stack" });
+  let loaded = false;
+  const details = h("details", { class: "task-export", ontoggle: async () => {
+    if (!details.open || loaded) return;
+    loaded = true;
+    content.replaceChildren(h("p", { role: "status" }, "Aufgabenlisten werden geladen …"));
+    try {
+      const result = await api("/api/tasks/targets");
+      const status = h("p", { role: "status", class: "muted small" }, result.errors.join(" "));
+      if (!result.targets.length) {
+        content.replaceChildren(h("p", {}, "Keine verbundene Aufgabenliste verfügbar. Die ICS-Datei lässt sich lokal importieren."), status);
+        return;
+      }
+      const select = h("select", { id: "task-target" }, ...result.targets.map((target) => h("option", { value: target.id }, target.label)));
+      const button = h("button", { type: "button", onclick: async () => {
+        button.disabled = true; status.textContent = "Aufgaben werden exportiert …";
+        try {
+          const report = await api(`/api/meetings/${meetingId}/tasks/export`, jsonOpts("POST", { target: select.value }));
+          status.textContent = `${report.created} ${report.created === 1 ? "Aufgabe" : "Aufgaben"} angelegt, ${report.skipped} bereits vorhanden.`;
+        } catch (err) { status.textContent = err.message; }
+        finally { button.disabled = false; }
+      } }, "In gewählte Aufgabenliste exportieren");
+      content.replaceChildren(h("label", { for: "task-target" }, "Aufgabenliste"), select, button, status);
+    } catch (err) {
+      loaded = false;
+      content.replaceChildren(h("p", { role: "alert" }, err.message),
+        h("p", {}, "Zum erneuten Laden zuklappen und wieder öffnen."));
+    }
+  } }, h("summary", {}, "Aufgaben exportieren"),
+    h("p", {}, h("a", { href: withKey(`/api/meetings/${meetingId}/aufgaben.ics`) }, "ICS-Datei mit Aufgaben herunterladen")), content);
+  return details;
 }
 
 function seek(sec) {
@@ -217,7 +252,7 @@ function renderSummary() {
         h("input", { type: "checkbox", style: "width:auto" }),
         h("span", { class: "grow" }, a.owner ? h("b", {}, `${a.owner}: `) : null, a.task,
           a.due ? h("span", { class: "muted" }, ` (Frist: ${a.due})`) : null),
-        timeOf(a.time) !== null ? tsLink(timeOf(a.time), a.time) : null)))));
+        timeOf(a.time) !== null ? tsLink(timeOf(a.time), a.time) : null))), taskExportControls(m.id)));
   }
   if (s.outline?.length) {
     left.push(h("div", { class: "card" }, h("h3", {}, "Gliederung"),
@@ -797,11 +832,11 @@ function msAdvanced(g, open) {
     } }, "Speichern")));
 }
 
-async function startMicrosoftDevice() {
+async function startMicrosoftDevice(tasks = false) {
   const box = $("#microsoft-box");
   box.replaceChildren(h("p", { role: "status" }, "Anmeldecode wird angefordert …"));
   try {
-    const device = await api("/api/integrations/microsoft/device", { method: "POST" });
+    const device = await api("/api/integrations/microsoft/device" + (tasks === true ? "?tasks=1" : ""), { method: "POST" });
     const status = h("p", { role: "status" }, "Nach der Bestätigung bei Microsoft die Anmeldung hier prüfen.");
     const button = h("button", { onclick: async () => {
       button.disabled = true;
@@ -847,6 +882,7 @@ async function renderMicrosoft() {
   const sync = g.last_sync?.at ? `Letzter Abgleich: ${new Date(g.last_sync.at * 1000).toLocaleTimeString("de-DE")}${g.last_sync.error ? ` – Fehler: ${g.last_sync.error}` : ""}` : "";
   box.replaceChildren(...[
     h("p", {}, "Verbunden als ", h("b", {}, g.email || "?")),
+    !g.tasks_enabled ? h("button", { onclick: () => startMicrosoftDevice(true) }, "Microsoft-Aufgabenrechte freigeben") : null,
     toggle("auto_join", "Bot tritt unterstützten Kalender-Meetings automatisch bei"),
     sync ? h("p", { class: "muted small" }, sync) : null,
     h("div", { class: "row" },
@@ -1003,7 +1039,11 @@ $("#btn-close-integrations").addEventListener("click", () => closeIntegrations()
 async function route() {
   const hash = location.hash;
   const m = hash.match(/^#meeting=(\d+)/);
-  if (m) await openMeeting(+m[1]).catch(() => showView("empty"));
+  if (m) {
+    const raw = new URLSearchParams(hash.slice(1)).get("t");
+    const timestamp = raw === null ? null : Number(raw);
+    await openMeeting(+m[1], { seekTo: timestamp !== null && Number.isFinite(timestamp) && timestamp >= 0 ? timestamp : null }).catch(() => showView("empty"));
+  }
   else if (hash.startsWith("#integrations")) await openIntegrations();
   else { showView("empty"); await renderUpcoming(); }
 }

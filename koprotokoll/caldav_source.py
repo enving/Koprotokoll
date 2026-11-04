@@ -64,7 +64,9 @@ def normalize_server_url(provider: str, server_url: str) -> str:
 
 
 def _request(method: str, url: str, *, body: bytes | None = None, depth: str | None = None,
-             username: str = "", password: str = "", timeout: float = TIMEOUT_S
+             username: str = "", password: str = "", timeout: float = TIMEOUT_S,
+             content_type: str = "application/xml; charset=utf-8", extra_headers: dict | None = None,
+             accepted_errors: tuple[int, ...] = (), follow_redirects: bool = True,
              ) -> tuple[int, bytes, str]:
     """DAV-Anfrage senden und (Status, Körper, End-URL) zurückgeben.
 
@@ -75,7 +77,8 @@ def _request(method: str, url: str, *, body: bytes | None = None, depth: str | N
     """
     headers = {"User-Agent": "Koprotokoll/1", "Accept": "text/calendar, application/xml"}
     if body is not None:
-        headers["Content-Type"] = "application/xml; charset=utf-8"
+        headers["Content-Type"] = content_type
+    headers.update(extra_headers or {})
     if depth is not None:
         headers["Depth"] = depth
     if username or password:
@@ -87,7 +90,9 @@ def _request(method: str, url: str, *, body: bytes | None = None, depth: str | N
             with _OPENER.open(req, timeout=timeout) as r:
                 return r.status, r.read(), url
         except urllib.error.HTTPError as e:
-            if e.code in (301, 302, 303, 307, 308) and e.headers.get("Location"):
+            if e.code in accepted_errors:
+                return e.code, e.read(), url
+            if follow_redirects and e.code in (301, 302, 303, 307, 308) and e.headers.get("Location"):
                 new_url = urllib.parse.urljoin(url, e.headers.get("Location", ""))
                 if urllib.parse.urlsplit(new_url).netloc != urllib.parse.urlsplit(url).netloc:
                     # Zugangsdaten niemals an fremde Hosts weiterreichen.
@@ -150,8 +155,8 @@ def _first_href(props: dict[str, ET.Element], tag: str) -> str:
 
 
 def discover(server_url: str, username: str = "", password: str = "",
-             timeout: float = TIMEOUT_S) -> list[dict]:
-    """Alle VEVENT-Kalender eines Kontos suchen (RFC 6764 + RFC 4791).
+             timeout: float = TIMEOUT_S, *, component: str = "VEVENT") -> list[dict]:
+    """Kollektionen für VEVENT oder den angefragten Komponententyp suchen (RFC 6764 + RFC 4791).
 
     Zurück kommt eine Liste aus ``{"url", "name"}`` – ein Konto kann mehrere
     Kalender haben, die dann gemeinsam ausgewertet werden. Jeder Schritt hat
@@ -190,7 +195,7 @@ def discover(server_url: str, username: str = "", password: str = "",
         home = ""
     home_url = urllib.parse.urljoin(base, home) if home else principal_url
 
-    # 4. Kalender-Kollektionen auflisten; Adressbücher/Aufgaben aussortieren.
+    # Kalender-Kollektionen nach dem angefragten Komponententyp filtern.
     responses, home_url = _propfind(
         home_url, "<d:resourcetype/><d:displayname/><c:supported-calendar-component-set/>",
         depth="1", **auth)
@@ -203,7 +208,7 @@ def discover(server_url: str, username: str = "", password: str = "",
         comps = props.get(f"{{{CAL_NS}}}supported-calendar-component-set")
         if comps is not None:
             names = [c.get("name", "") for c in comps if c.tag.endswith("}comp")]
-            if names and "VEVENT" not in names:
+            if names and component not in names:
                 continue
         href = _href(response)
         if not href:
