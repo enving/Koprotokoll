@@ -367,3 +367,63 @@ und `pipeline.log`. Es werden keine Gesprächsinhalte ins Repository übernommen
 Die erneute Abschlussprüfung vor dem Dokumentationscommit meldete
 `.venv/bin/pytest -q -ra`: **87 bestanden in 177,90 s**, keine übersprungenen
 Tests. Der Produktcode blieb seit `1e1af11` unverändert.
+
+### Selbständig gefundene Mehrsprecher-Fundstelle (04.11.2026)
+
+Der Nutzer kannte keine Zeitmarke mit Sprecherwechsel. Deshalb wurden kurze
+Proben über die Aufnahme verteilt ausgewählt. Mehrere spätere Proben bestanden
+vollständig aus Nullsamples. Eine anschließende Aktivitätsprüfung der gesamten
+extrahierten Audiospur mit `ffmpeg silencedetect=noise=-60dB:d=3` ergab
+27 nicht als Stille klassifizierte Bereiche mit zusammen rund 1.510,83 s.
+Diese Bereiche können Pausen und Geräusche enthalten; sie sind keine
+nachgewiesenen Sprachsegmente.
+
+Innerhalb vorhandener Tonbereiche wurden je zwei benachbarte achtsekündige
+Hälften mit dem bereits vorhandenen ERes2Net-Modell verglichen. Die
+Kosinusabstände dienten ausschließlich zur Rangfolge von Suchkandidaten.
+Es wurde weder eine neue Qualitätsschwelle eingeführt noch die Sprecherzahl
+aus dem Abstand abgeleitet. Embeddingvektoren wurden nicht gespeichert;
+Suchwerte und kurze Proben bleiben im privaten Realtest-Ordner.
+
+Eine Auffälligkeit um 00:58:30 führte zum natürlichen Ausschnitt
+**00:58:10 bis 00:59:10**. Er wurde als 16-kHz-Mono-WAV extrahiert und mit
+dem unveränderten `SherpaDiarizer` geprüft: automatisch geschätzte
+**zwei Sprechergruppen**, ohne vorgegebene Zahl, Clustering-Schwelle weiterhin
+0,8. Die Prüfung dauerte 194,378 s bei 36,902 s Prozess-CPU. Diese Werte
+entstanden erneut unter hoher Systemlast und sind kein Leistungsbenchmark.
+
+Anschließend wurden dieselbe Datei mit `ParakeetTranscriber` transkribiert und
+die echten, bereits berechneten Sprecherzeiten durch `build_utterances`
+zugeordnet. Das ist eine Funktionsprüfung mit den echten Modellfunktionen,
+kein weiterer API-/Browserdurchlauf. Ergebnis: 155 Wörter, sieben
+Textabschnitte mit S1 und S2; letzte Wortzeit 59,838 s im 60-s-Ausschnitt.
+Parakeet benötigte 142,683 s. Die Dateiprüfsumme wurde vor der Zusammenführung
+mit derjenigen der Sprecherprüfung verglichen.
+
+Der erste zugeordnete Wechsel zu S2 liegt in der Originalaufnahme bei
+**00:58:18,150**. Weitere Wechsel liegen bei 00:58:32,820, 00:58:34,820
+und 00:58:40,470. Das Modell liefert auch zeitweise überlappende Rohabschnitte.
+Diese Grenzen und Gruppen wurden nicht unabhängig von einem Menschen
+bestätigt; es werden keine Personen namentlich identifiziert und keine
+WER-/DER-Werte behauptet.
+
+Die privaten Dateien liegen unter
+`stimmensuche/kandidat-005810-005910/` innerhalb des Realtest-Ordners:
+`audio.wav`, `audio.mp3`, `sprecherzeiten.json`, `ergebnis.json` und
+`transkript.txt`. Das Transkript verwendet Zeitmarken der Originalaufnahme.
+MOV-Tonspur und extrahierte M4A beginnen laut `ffprobe` beide bei 0,000 s.
+Alle Modellaufrufe erfolgten mit gesperrtem externem Netzwerk; es wurden
+keine neuen Pakete oder Modelle installiert und keine Produkteinstellungen
+verändert.
+
+Die letzten zwölf Sekunden wurden separat mit demselben Parakeet-Modell
+transkribiert. Letzte Wortzeit (59,838 s) und letzte 21 normalisierte Wörter
+stimmen mit dem Rohtranskript überein. Diese Endkonsistenzprüfung ersetzt
+keine menschliche Referenz. Die Ergebnisse liegen zusätzlich als
+`endpruefung.json`, `fundstelle.json` und `fundstelle.md` bei den privaten
+Dateien; Gesprächsinhalte bleiben außerhalb von Git.
+
+Abschlussprüfung dieser Fortsetzung: `.venv/bin/pytest -q -ra` meldete
+**87 bestanden in 138,79 s**, keine übersprungenen Tests.
+`git diff --check` meldete keine Formatfehler; der Produktcode wurde nicht
+geändert.
