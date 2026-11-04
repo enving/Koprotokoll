@@ -21,6 +21,48 @@ erforderlich. Während der Aufnahme entstehen nur PCM-Samples, eine lokale WAV
 und ein laufender Spitzenpegel. Parakeet und Sherpa starten erst nach dem
 ausdrücklichen Stopp.
 
+## Mac: per Alt-Doppeltipp aufnehmen
+
+Nach dem [Schnellstart](../README.md#-schnellstart) im Projektordner
+**Koprotokoll.command** doppelt anklicken. Alternativ im aktivierten Python-Environment:
+
+```bash
+python -m koprotokoll desktop
+```
+
+Beim ersten Start baut Koprotokoll eine kleine lokale App unter
+`data/desktop/Koprotokoll.app`. Dafür werden macOS 12+, `ffmpeg` und die
+Apple-Entwicklerwerkzeuge (`swiftc`) benötigt. Die App startet den lokalen
+Server oder verwendet einen bereits laufenden Koprotokoll-Server am gewählten
+Port. In der Menüleiste erscheint **Ko**. Es beginnt noch keine Aufnahme.
+
+1. Im ersten Dialog die **Audioquelle** wählen. Sie lässt sich später über das
+   Ko-Menü wechseln. Die Quelle wird anhand ihres Namens gespeichert und vor
+   jeder Aufnahme neu zugeordnet. Ist sie nicht mehr eindeutig verfügbar, wird
+   der Start mit einer Fehlermeldung abgebrochen.
+2. Falls macOS nach **Eingabeüberwachung** fragt, Koprotokoll unter
+   **Systemeinstellungen → Datenschutz & Sicherheit → Eingabeüberwachung**
+   freigeben. Danach im Ko-Menü **Tastenkürzel prüfen** wählen; falls macOS es
+   verlangt, die App schließen und über `Koprotokoll.command` erneut öffnen.
+3. **Alt/Option (⌥) zweimal kurz drücken und loslassen** startet die Aufnahme.
+   In der Menüleiste erscheint **●** mit der Aufnahmedauer. Normale
+   Alt-Tastenkombinationen und längeres Halten lösen keine Aufnahme aus.
+4. **Alt zweimal erneut** stoppt und sichert die Aufnahme. Erst danach beginnt
+   die Auswertung; das Meeting öffnet sich im Standardbrowser.
+
+Start und Stopp sind auch direkt im Ko-Menü verfügbar, unabhängig von der
+Tastenkürzel-Freigabe. Audioquelle und Pegel müssen vor dem eigentlichen
+Gespräch wie unten beschrieben geprüft werden. Für Systemton plus Mikrofon
+gelten weiterhin die gesonderten Voraussetzungen; die Menüleistensteuerung
+belegt nicht, dass beide Gesprächsseiten aufgenommen werden.
+
+Das Tastenkürzel reagiert auf linkes oder rechtes Alt. Es speichert keine
+Tastendrücke oder Texte. Es steht zur Verfügung, solange die Menüleisten-App
+läuft; ein automatischer Start bei der Anmeldung wird nicht eingerichtet.
+**Tastenkürzel beenden** schließt die Menüleiste nach dem Stopp einer Aufnahme.
+Der lokale Server bleibt für die Auswertung und Oberfläche geöffnet. Sein
+Startprotokoll liegt unter `data/desktop/server.log`.
+
 ## Geeigneten Eingang wählen
 
 1. Vor dem Gespräch alle Beteiligten über die Aufnahme informieren und die

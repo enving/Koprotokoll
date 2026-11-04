@@ -1,0 +1,77 @@
+"""Native Mac-Menüleiste für Alt-Doppeltipp; verwendet die vorhandene Aufnahme-API."""
+
+from __future__ import annotations
+
+import json
+import os
+import platform
+import plistlib
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+from .config import Settings
+
+
+def build_app(settings: Settings, port: int = 8000) -> Path:
+    """Die lokale App aus den mitgelieferten Swift-Quellen bauen, ohne Zusatzpakete."""
+    if sys.platform != "darwin":
+        raise RuntimeError("Die Menüleistensteuerung ist derzeit nur für macOS verfügbar.")
+    compiler = shutil.which("swiftc")
+    if not compiler:
+        raise RuntimeError("Die Apple-Entwicklerwerkzeuge fehlen. Einmalig `xcode-select --install` ausführen.")
+    if not shutil.which("ffmpeg"):
+        raise RuntimeError("ffmpeg wurde nicht gefunden; siehe Installationsanleitung.")
+    sources = [Path(__file__).with_name(name) for name in ("macos_hotkey.swift", "desktop_macos.swift")]
+    app = settings.data_dir / "desktop" / "Koprotokoll.app"
+    contents = app / "Contents"
+    binary = contents / "MacOS" / "Koprotokoll"
+    resources = contents / "Resources"
+    binary.parent.mkdir(parents=True, exist_ok=True)
+    resources.mkdir(parents=True, exist_ok=True)
+    changed = not binary.exists() or any(p.stat().st_mtime > binary.stat().st_mtime for p in sources)
+    if changed:
+        temporary = binary.with_suffix(".neu")
+        result = subprocess.run(
+            [compiler, *map(str, sources), "-target", f"{platform.machine()}-apple-macosx12.0",
+             "-o", str(temporary)], capture_output=True, text=True,
+        )
+        if result.returncode:
+            raise RuntimeError("Die Mac-Steuerung ließ sich nicht bauen:\n" + result.stderr[-4000:])
+        if binary.exists():
+            shutil.copy2(binary, app.parent / "Koprotokoll.vorher")
+        os.replace(temporary, binary)
+    info = {
+        "CFBundleIdentifier": "de.digitalalchemisten.koprotokoll.desktop",
+        "CFBundleName": "Koprotokoll", "CFBundleExecutable": "Koprotokoll",
+        "CFBundlePackageType": "APPL", "CFBundleVersion": "1",
+        "LSUIElement": True, "LSMinimumSystemVersion": "12.0",
+        "NSMicrophoneUsageDescription": "Koprotokoll nimmt nach deinem Start die gewählte Audioquelle auf.",
+    }
+    info_data = plistlib.dumps(info)
+    config_data = json.dumps({
+        "project": str(Path(__file__).resolve().parents[1]),
+        "python": sys.executable,
+        "data": str(settings.data_dir.resolve()),
+        "port": port,
+        "path": os.environ.get("PATH", "/usr/bin:/bin:/usr/sbin:/sbin"),
+    }, ensure_ascii=False).encode()
+    for target, content in [(contents / "Info.plist", info_data), (resources / "launcher.json", config_data)]:
+        if not target.exists() or target.read_bytes() != content:
+            target.write_bytes(content)
+            changed = True
+    if changed:
+        subprocess.run(["codesign", "--force", "--sign", "-", str(app)], check=True, capture_output=True)
+    return app
+
+
+def main(port: int = 8000) -> None:
+    try:
+        app = build_app(Settings(), port)
+        subprocess.run(["open", str(app)], check=True)
+    except (RuntimeError, subprocess.CalledProcessError) as exc:
+        raise SystemExit(str(exc)) from exc
+    print("Koprotokoll ist in der Menüleiste. Alt zweimal startet bzw. stoppt die Aufnahme.")
+    print("Beim ersten Start Audioquelle wählen und gegebenenfalls macOS-Eingabeüberwachung freigeben.")
+    print(f"App zum erneuten Öffnen: {app}")

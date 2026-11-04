@@ -76,6 +76,7 @@ Kanzleien, Behörden oder einfach vertrauliche Team-Meetings ist das oft ein No-
 - **Meeting-Bot** tritt Google Meet und Jitsi als Teilnehmer bei – per Link oder automatisch aus dem Kalender
 - Aufnahme im Browser: Mikrofon oder Ton eines Tabs (Zoom, Teams, Meet im Browser)
 - Hardware-/Loopback-Aufnahme als WAV, unabhängig von Meeting-App und Browser ([Anleitung](docs/hardware-aufnahme.md))
+- Mac-Menüleiste: Alt zweimal startet oder stoppt die Aufnahme ([Starten](docs/hardware-aufnahme.md#mac-per-alt-doppeltipp-aufnehmen))
 - Upload von MP3, MP4, WAV, M4A, WebM, OGG, FLAC …
 
 **🧠 Verstehen**

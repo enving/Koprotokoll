@@ -427,3 +427,31 @@ Abschlussprüfung dieser Fortsetzung: `.venv/bin/pytest -q -ra` meldete
 **87 bestanden in 138,79 s**, keine übersprungenen Tests.
 `git diff --check` meldete keine Formatfehler; der Produktcode wurde nicht
 geändert.
+
+## Mac-Menüleiste und Alt-Doppeltipp (04.11.2026)
+
+Bedienweg für den anschließenden Nutzertest ergänzt:
+[`Koprotokoll.command`](../../Koprotokoll.command) baut und öffnet eine lokale
+Menüleisten-App; Ablauf und Voraussetzungen stehen in der
+[Aufnahmeanleitung](../hardware-aufnahme.md#mac-per-alt-doppeltipp-aufnehmen).
+Die vorhandenen Aufnahme-Endpunkte übernehmen Start und Stopp. Es werden keine
+neuen Audio- oder Transkriptionswege eingeführt.
+
+Prüfungen unter macOS auf Apple Silicon:
+
+- `.venv/bin/pytest -q -ra`: abschließend **90 bestanden in 109,85 s**, keine übersprungenen Tests.
+  Der neue native Detektortest umfasst neun Fälle einschließlich Alt-Kombination,
+  langem Halten, Zeitüberschreitung und wiederholtem Umschalten.
+- Swift-App tatsächlich gebaut; `codesign --verify --deep --strict` und
+  `zsh -n Koprotokoll.command` erfolgreich.
+- App lokal gestartet, Serverstart und wiederholte Statusabfragen mit HTTP 200
+  beobachtet. Geräteabfrage nach einem anfänglichen Timeout mit längerer
+  Wartezeit wiederholt; die gespeicherte Quelle ist verfügbar.
+- `GET /api/capture` bestätigte den Ruhezustand. Es wurde keine neue echte
+  Aufnahme zur Prüfung dieser Steuerung ausgelöst.
+
+Der globale physische Doppeltipp, macOS-Eingabeüberwachung und der vollständige
+Start-/Stopp-Ablauf über die native App sind noch nicht bestätigt. Der
+UI-Zugriff konnte die erste Fehlermeldung lesen, erreichte danach die reine
+Menüleiste nicht (`noWindowsAvailable` bzw. `timeoutReached`). Die vorhandenen
+Grenzen beim echten Systemton bleiben bestehen. Dies schließt #31 nicht ab.

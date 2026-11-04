@@ -1,6 +1,7 @@
 """Kommandozeile.
 
     python -m koprotokoll [serve] [--host 127.0.0.1] [--port 8000]   Server starten
+    python -m koprotokoll desktop [--port 8000]                     Mac-Menüleiste starten
     python -m koprotokoll create-key NAME                            API-Schlüssel erzeugen
     python -m koprotokoll bot-login                                  Google-Konto für den Bot anmelden
     python -m koprotokoll mcp                                        MCP-Server (stdio) starten
@@ -21,12 +22,18 @@ def main() -> None:
         p.add_argument("--port", type=int, default=8000)
     key = sub.add_parser("create-key", help="API-Schlüssel erzeugen")
     key.add_argument("name")
+    desktop = sub.add_parser("desktop", help="Mac-Menüleiste mit Alt-Doppeltipp starten")
+    desktop.add_argument("--port", type=int, default=8000)
     sub.add_parser("bot-login", help="Browser öffnen, um das Bot-Google-Konto anzumelden")
     sub.add_parser("mcp", help="MCP-Server über stdio starten (nutzt KOPROTOKOLL_URL / KOPROTOKOLL_API_KEY)")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
-    if args.cmd == "create-key":
+    if args.cmd == "desktop":
+        from .desktop import main as desktop_main
+
+        desktop_main(args.port)
+    elif args.cmd == "create-key":
         from .auth import create_key
         from .config import Settings
         from .db import Database
