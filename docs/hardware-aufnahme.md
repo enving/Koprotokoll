@@ -54,6 +54,12 @@ Es ist auch über **Ko → Einstellungen …** erreichbar. Es beginnt noch keine
    **Systemeinstellungen → Datenschutz & Sicherheit → Eingabeüberwachung**
    freigeben. Falls macOS es verlangt, die App neu öffnen. Die App zeigt die
    Freigabe an, erteilt sie aber nicht selbst.
+   Meldet die App trotz eingeschaltetem macOS-Schalter weiterhin eine fehlende
+   Freigabe, kann nach einem lokalen Neubau noch die alte App zugeordnet sein.
+   In der Eingabeüberwachung nur den Koprotokoll-Eintrag entfernen und über **+**
+   die aktuelle `data/desktop/Koprotokoll.app` erneut auswählen. Anschließend
+   **Beenden & erneut öffnen** bestätigen und den Status in Koprotokoll prüfen.
+   Das Mac-Passwort ausschließlich im macOS-Dialog eingeben.
 4. **Die gewählte Taste zweimal kurz drücken und loslassen** startet die Aufnahme.
    In der Menüleiste erscheint **●** mit der Aufnahmedauer. Kombinationen mit
    anderen Tasten und längeres Halten lösen keine Aufnahme aus.

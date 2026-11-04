@@ -714,3 +714,27 @@ dieser Dokumentation war diese Bestätigung noch ausstehend. Der Agent hat
 keine Zugangsdaten eingegeben und keine Berechtigungsprüfung umgangen.
 Die tatsächliche Hotkey-Reparatur und ein Start-/Stopp-Test per Doppeltipp
 sind bis zu dieser Bestätigung nicht nachgewiesen.
+
+
+### Erneut angewendete Eingabefreigabe nach Mac-Neustart
+
+Am 04.11.2026 wurde auf Nutzerwunsch nach dem Mac-Neustart die bestehende
+Eingabefreigabe erneut angewendet. Nach der Bestätigung im macOS-Systemdialog
+wurde der vorhandene Koprotokoll-Schalter eingeschaltet und **Beenden & erneut
+öffnen** gewählt. Der neue App-Prozess meldete weiterhin fehlende Freigabe.
+
+Danach wurde ausschließlich der bestehende Koprotokoll-Eintrag aus der
+Eingabeüberwachung entfernt und dasselbe aktuelle App-Bundle aus
+`data/desktop/Koprotokoll.app` erneut hinzugefügt. Nach **Beenden & erneut
+öffnen** zeigte die App um 13:03 Uhr: **„Eingabeüberwachung freigegeben.
+Tastenkürzel aktiv.“** Der Systemschalter war eingeschaltet, die Aufnahme stand
+auf **„Bereit · Alt / Option (⌥) zweimal“**. Das Bundle wurde dabei weder neu
+gebaut noch neu signiert. Andere App-Freigaben wurden nicht verändert.
+
+Damit ist die Freigabeprüfung für diesen laufenden Build erfolgreich. Ein
+physischer Alt-Doppeltipp mit bestätigtem Aufnahme-Start und -Stopp ist noch
+nicht nachgewiesen. Der Nutzer wurde um diesen kurzen Funktionstest gebeten.
+Die Anleitung beschreibt den gezielten Austausch eines veralteten Eintrags.
+Vor dieser reinen Dokumentationsänderung bestanden am unveränderten Code von
+`0819fcf` **96 Tests in 37,50 s**, am Basisstand `c71326c` **87 Tests in 33,78 s**;
+beide Läufe mit `pytest -q -ra`, ohne übersprungene Tests.
