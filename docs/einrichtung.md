@@ -69,6 +69,22 @@ Beitritt samt Tonaufnahme steht noch aus ([Nachweis](nachweise/issue-13-bbb.md))
 > Hinweis: Aufzeichnungen nur mit Einverständnis der Teilnehmenden. Der Bot tritt sichtbar
 > unter seinem Namen bei.
 
+### Sprechernamen aus Google Meet
+
+Der Meet-Adapter liest alle 500 ms sichtbare Sprechindikatoren und Namen aus der
+Oberfläche. Die Zeitreihe liegt lokal im Meeting unter `meta.speaker_activity`;
+sie enthält Zeiten relativ zum Aufnahmestart. Die Zuordnung nach der
+Sprechererkennung benötigt mindestens zwei Sekunden eindeutiger Beobachtung und
+60 Prozent der gesamten Redezeit dieses Sprecherlabels. Lücken von mehr als einer
+Sekunde und gleichzeitig aktive Namen liefern keine Zuordnung. Manuelle Namen
+werden auch bei erneutem Verarbeiten erhalten.
+
+Diese Erkennung hängt von internen Meet-DOM-Klassen ab. Unbekannte Oberflächen
+lassen die normalen Sprecherlabels bestehen. Die Browser-Brücke und Zuordnung
+sind lokal getestet; die Prüfung in einem echten Meet mit mehreren Personen steht
+noch aus. Andere Plattformen können dieselbe Adapter-Schnittstelle
+`speaker_script` ergänzen. Namen und Zeitreihen werden nicht protokolliert.
+
 ## Google Kalender & Gmail einrichten
 
 1. In der [Google Cloud Console](https://console.cloud.google.com/) ein Projekt anlegen und die

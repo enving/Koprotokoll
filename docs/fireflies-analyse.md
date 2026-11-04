@@ -57,6 +57,7 @@ Aus den Accessibility-Texten der Seite ergibt sich das beworbene Kern-Feature-Se
 | Datei-Upload (MP3, MP4, WAV, M4A …) | ✔ | ffmpeg → 16 kHz Mono |
 | Transkription | ✔ Standard: deutsches **Parakeet primeline**; optional NVIDIA **Parakeet TDT 0.6B v3** (25 Sprachen) | `sherpa-onnx`; v3 über `onnx-asr` + Silero-VAD |
 | Sprechererkennung | ✔ automatisch oder feste Sprecheranzahl, Namen umbenennbar | `sherpa-onnx` (pyannote-Segmentierung + ERes2Net-Embeddings) |
+| Sprechernamen aus der Plattform | Google-Meet-Zeitreihe und konservative Zuordnung implementiert; Live-Prüfung offen | `bot/capture.js`, `speaker_names.py`; manuelle Namen geschützt |
 | AI Summary (Überblick, Stichwörter, Gliederung, Action Items, Entscheidungen, Fragen) | ✔ lokales LLM; Offline-Heuristik mit deutschen Aufgaben, Zuständigkeit und Frist als Fallback | OpenAI-kompatible API (Ollama, llama.cpp, LM Studio) |
 | Suche über alle Meetings | ✔ Volltext mit Präfixsuche und Trefferhervorhebung | SQLite FTS5 |
 | AskFred | ✔ „Frag das Meeting“ | LLM mit Transkript-Kontext; ohne LLM Suchtreffer |

@@ -126,6 +126,35 @@ class Database:
         with self._lock, self._conn:
             self._conn.execute(f"UPDATE meetings SET {cols} WHERE id = ?", (*fields.values(), meeting_id))
 
+    def merge_speaker_names(self, meeting_id: int, names: dict[str, str], *, manual: bool = False,
+                            diarization: dict | None = None) -> dict[str, str]:
+        """Namen und Herkunft atomar zusammenführen; laufende Verarbeitung verliert keine Korrektur."""
+        with self._lock:
+            meeting = self.get_meeting(meeting_id)
+            if meeting is None:
+                return {}
+            meta, speakers = meeting["meta"], dict(meeting["speakers"])
+            protected = set(meta.get("manual_speakers", []))
+            automatic = meta.get("automatic_speakers", {})
+            for label, name in names.items():
+                if manual:
+                    speakers[label] = name
+                    protected.add(label)
+                elif label not in protected:
+                    old = speakers.get(label)
+                    if old is None or old == f"Sprecher {label[1:]}" or old == automatic.get(label):
+                        speakers[label] = name
+            if manual:
+                meta["manual_speakers"] = sorted(protected)
+            else:
+                meta["automatic_speakers"] = {label: name for label, name in names.items()
+                                               if name != f"Sprecher {label[1:]}" and label not in protected
+                                               and speakers.get(label) == name}
+            if diarization is not None:
+                meta["diarization"] = diarization
+            self.update_meeting(meeting_id, speakers=speakers, meta=meta)
+            return speakers
+
     def get_meeting(self, meeting_id: int) -> dict | None:
         with self._lock:
             row = self._conn.execute("SELECT * FROM meetings WHERE id = ?", (meeting_id,)).fetchone()

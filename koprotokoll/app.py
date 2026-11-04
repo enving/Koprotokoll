@@ -404,7 +404,8 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
         if patch.title is not None and patch.title.strip():
             fields["title"] = patch.title.strip()
         if patch.speakers is not None:
-            fields["speakers"] = {**m["speakers"], **{k: v.strip() for k, v in patch.speakers.items() if v.strip()}}
+            db.merge_speaker_names(meeting_id, {k: v.strip() for k, v in patch.speakers.items() if v.strip()},
+                                   manual=True)
         db.update_meeting(meeting_id, **fields)
         return {"ok": True}
 

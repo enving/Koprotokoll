@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import math
 import shutil
 import tempfile
 import threading
@@ -93,6 +94,7 @@ class BotSession:
         self.thread = threading.Thread(target=self.run, name=f"bot-{bot_id}", daemon=True)
         self.audio_path = manager.s.media_dir / f"bot-{bot_id}.webm"
         self.bytes_written = 0
+        self.speaker_activity: list[dict] = []
 
     # Aufrufe aus dem Browser -------------------------------------------------
     def _on_chunk(self, _source, b64: str) -> None:
@@ -103,6 +105,14 @@ class BotSession:
 
     def _on_event(self, _source, payload: str) -> None:
         event = json.loads(payload)
+        if event.get("type") == "speakers":
+            at, names = event.get("time"), event.get("names")
+            if (isinstance(at, (int, float)) and math.isfinite(at) and 0 <= at <= self.m.s.bot_max_minutes * 60
+                    and isinstance(names, list) and len(self.speaker_activity) < 50000):
+                clean = sorted({name.strip() for name in names[:30] if isinstance(name, str)
+                                and name.strip() and len(name) <= 120
+                                and name.strip().casefold() != self.m.s.bot_name.casefold()})
+                self.speaker_activity.append({"time": round(at, 3), "names": clean})
         if event.get("type") == "stopped":
             self.stopped_event.set()
 
@@ -123,6 +133,8 @@ class BotSession:
             return
         meta = {"source": "bot", "bot_id": self.bot_id, "meeting_url": bot["meeting_url"],
                 "platform": bot["platform"], **bot["meta"]}
+        if self.speaker_activity:
+            meta["speaker_activity"] = self.speaker_activity
         meeting_id = self.m.db.create_meeting(bot["title"], None, meta=meta)
         self.m.db.update_meeting(meeting_id, audio_path=str(self.audio_path))
         self.m.pipeline.submit(meeting_id)
@@ -165,6 +177,8 @@ class BotSession:
                     page = ctx.pages[0] if ctx.pages else ctx.new_page()
                     adapter.join(page, bot["meeting_url"], s.bot_name, s.bot_admit_minutes * 60,
                                  lambda st: self.m.set_status(self.bot_id, st))
+                    if adapter.speaker_script:
+                        page.evaluate("() => window.__ntObserveSpeakers(" + adapter.speaker_script + ")")
                     self._capture(page, adapter)
                 finally:
                     ctx.close()
