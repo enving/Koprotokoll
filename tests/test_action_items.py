@@ -47,6 +47,9 @@ CASES = [
     ("Die Deadline war gestern.", False, None, None),
     ("Anna ist bis Freitag abwesend.", False, None, None),
     ("Es gibt dazu keine neue Aufgabe.", False, None, None),
+    ("Ben prüfte gestern die Zahlen.", False, None, None),
+    ("Ich schickte gestern die Unterlagen.", False, None, None),
+    ("Kannst du den Bericht schicken, damit ich ihn prüfen kann?", True, None, None),
 ]
 
 
@@ -68,3 +71,9 @@ def test_numeric_due_date_does_not_split_sentence():
     )["action_items"]
     assert result == [{"owner": "Ben", "task": text.removesuffix(" Danke."),
                        "due": "bis zum 3.11.", "time": "00:00"}]
+
+
+def test_due_date_at_sentence_end_keeps_next_owner():
+    result = heuristic_summary([{"start": 0, "end": 10, "speaker": "S1", "text":
+        "Ben, schick den Bericht bis zum 3.11. Ich prüfe den Vertrag."}], {"S1": "Anna"})["action_items"]
+    assert [(r["owner"], r["due"]) for r in result] == [("Ben", "bis zum 3.11."), ("Anna", None)]

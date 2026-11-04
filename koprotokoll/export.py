@@ -54,7 +54,7 @@ def _markdown(meeting: dict, segments: list[dict], bookmarks: list[dict], name) 
         out += ["## Action Items", ""]
         for a in summary["action_items"]:
             who = f"**{a['owner']}**: " if a.get("owner") else ""
-            due = f" (bis {a['due']})" if a.get("due") else ""
+            due = f" (Frist: {a['due']})" if a.get("due") else ""
             out.append(f"- [ ] {who}{a.get('task', '')}{due}")
         out.append("")
     for key, title in (("decisions", "Entscheidungen"), ("questions", "Offene Fragen")):

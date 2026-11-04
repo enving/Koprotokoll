@@ -21,7 +21,7 @@ def build_recap(meeting: dict, public_url: str) -> tuple[str, str, str]:
         for a in s.get(key) or []:
             if isinstance(a, dict):
                 who = f"{a['owner']}: " if a.get("owner") else ""
-                due = f" (bis {a['due']})" if a.get("due") else ""
+                due = f" (Frist: {a['due']})" if a.get("due") else ""
                 out.append(f"{who}{a.get('task', '')}{due}")
             else:
                 out.append(str(a))

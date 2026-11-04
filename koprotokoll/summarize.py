@@ -156,9 +156,11 @@ of on one or our out really right so some that the their them then there these t
 very was we well were what when where which who will with would yeah yes you your
 """.split())
 
-_ACTION_VERBS = (r"kümmere|kümmern|übernehme|übernehmen|übernimmt|schick\w*|send\w*|"
-                 r"meld\w*|liefer\w*|erstell\w*|prüf\w*|aktualisier\w*|überarbeit\w*|"
-                 r"ergänz\w*|abschließen|fertigstellen|nachfassen|dokumentier\w*")
+_ACTION_VERBS = (r"kümmere|kümmerst|kümmert|kümmern|übernehme|übernehmen|übernimmt|"
+                 r"schick(?:e|st|t|en)?|send(?:e|est|et|en)?|meld(?:e|est|et|en)?|"
+                 r"liefer(?:e|st|t|n)?|erstell(?:e|st|t|en)?|prüf(?:e|st|t|en)?|"
+                 r"aktualisier(?:e|st|t|en)?|überarbeit(?:e|est|et|en)?|"
+                 r"ergänz(?:e|st|t|en)?|abschließen|fertigstellen|nachfassen|dokumentier(?:e|st|t|en)?")
 ACTION_PATTERNS = [
     rf"\b(?:ich|wir)\s+(?:werde|werden|{_ACTION_VERBS})\b",
     r"\b(?:muss|müssen|soll|sollen)\b",
@@ -193,7 +195,9 @@ def _action_item(sentence: dict, names: dict[str, str]) -> dict | None:
             return None
     named = re.match(r"(?:Bitte\s+)?([A-ZÄÖÜ][\wäöüß-]+)(?:,|\s+(?:wird|übernimmt)\b)", text)
     owner = named[1] if named and named[1].lower() not in {"ich", "wir", "bitte"} else None
-    if owner is None and re.search(r"\bich\b", text, re.I):
+    main_clause = re.split(r"[,;]", text, maxsplit=1)[0]
+    if owner is None and re.search(rf"\bich\s+(?:werde|{_ACTION_VERBS})\b|\b(?:werde|{_ACTION_VERBS})\s+ich\b",
+                                   main_clause, re.I):
         owner = names.get(sentence["speaker"], sentence["speaker"])
     return {"owner": owner, "task": text, "due": due[0] if due else None,
             "time": fmt_time(sentence["start"])}
@@ -202,7 +206,9 @@ def _action_item(sentence: dict, names: dict[str, str]) -> dict | None:
 def _sentences(segments: list[dict]) -> list[dict]:
     out = []
     for s in segments:
-        for part in re.split(r"(?<=[!?])\s+|(?<!\d\.)(?<=\.)\s+", s["text"]):
+        boundary = (r"(?<=[!?])\s+|(?<!\d\.)(?<=\.)\s+|(?<=\d\.)\s+(?="
+                    rf"(?:Ich|Wir|Du|Ihr|Sie|Bitte)\b|[A-ZÄÖÜ][\wäöüß-]+(?:,|\s+(?:wird|{_ACTION_VERBS})\b))")
+        for part in re.split(boundary, s["text"]):
             if part.strip():
                 out.append({"text": part.strip(), "start": s["start"], "speaker": s["speaker"]})
     return out

@@ -190,7 +190,7 @@ function renderSummary() {
       h("ul", { class: "list" }, s.action_items.map((a) => h("li", {},
         h("input", { type: "checkbox", style: "width:auto" }),
         h("span", { class: "grow" }, a.owner ? h("b", {}, `${a.owner}: `) : null, a.task,
-          a.due ? h("span", { class: "muted" }, ` (bis ${a.due})`) : null),
+          a.due ? h("span", { class: "muted" }, ` (Frist: ${a.due})`) : null),
         timeOf(a.time) !== null ? tsLink(timeOf(a.time), a.time) : null)))));
   }
   if (s.outline?.length) {
