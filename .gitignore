@@ -7,3 +7,7 @@ data/
 data-livetest*/
 # Lokale Testskripte mit Zugangsdaten
 microsoft-test.ps1
+
+# Lokale Compose-Einstellungen können Zugangsdaten enthalten.
+.env
+.env.*
