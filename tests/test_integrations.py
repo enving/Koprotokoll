@@ -45,6 +45,43 @@ def client(tmp_path):
         yield c
 
 
+# --------------------------------------------------------------------------- Konfiguration
+def test_bot_max_minutes_default(monkeypatch):
+    """Die maximale Bot-Dauer bleibt standardmäßig bei drei Stunden."""
+    monkeypatch.delenv("KOPROTOKOLL_BOT_MAX_MINUTES", raising=False)
+    assert Settings().bot_max_minutes == 180
+
+
+def test_bot_max_minutes_env_override(monkeypatch):
+    """Die maximale Bot-Dauer lässt sich weiterhin per Umgebung anpassen."""
+    monkeypatch.setenv("KOPROTOKOLL_BOT_MAX_MINUTES", "45")
+    assert Settings().bot_max_minutes == 45
+
+
+def test_bot_alone_grace_seconds_default(monkeypatch):
+    """Die Allein-Erkennung-Schonfrist bleibt standardmäßig bei 15 Sekunden."""
+    monkeypatch.delenv("KOPROTOKOLL_BOT_ALONE_SECONDS", raising=False)
+    assert Settings().bot_alone_grace_seconds == 15
+
+
+def test_bot_alone_grace_seconds_env_override(monkeypatch):
+    """Die Allein-Erkennung-Schonfrist lässt sich per Umgebung anpassen."""
+    monkeypatch.setenv("KOPROTOKOLL_BOT_ALONE_SECONDS", "30")
+    assert Settings().bot_alone_grace_seconds == 30
+
+
+def test_bot_silence_minutes_default(monkeypatch):
+    """Die Stille-Erkennung springt standardmäßig nach einer Minute."""
+    monkeypatch.delenv("KOPROTOKOLL_BOT_SILENCE_MINUTES", raising=False)
+    assert Settings().bot_silence_minutes == 1
+
+
+def test_bot_silence_minutes_env_override(monkeypatch):
+    """Die Stille-Erkennung lässt sich per Umgebung anpassen."""
+    monkeypatch.setenv("KOPROTOKOLL_BOT_SILENCE_MINUTES", "10")
+    assert Settings().bot_silence_minutes == 10
+
+
 # --------------------------------------------------------------------------- Plattformen
 def test_detect_platform():
     assert detect_platform("https://meet.google.com/abc-defg-hij") == "google_meet"
