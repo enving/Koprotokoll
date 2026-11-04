@@ -174,6 +174,30 @@ Passwortfeld beim Speichern behält den bisherigen Wert; zum Entfernen die
 eigene Option **Gespeichertes Passwort löschen** nutzen. Die SMTP-Verbindung
 prüft TLS-Zertifikate. Serverfehler geben keine Anmeldedaten aus.
 
+## Zusammenfassung als E-Mail-Entwurf
+
+Im fertig ausgewerteten Meeting öffnet **Als E-Mail öffnen** die verfügbaren Ziele.
+Die **EML-Datei** enthält Betreff, Termin-Teilnehmende sowie Text- und HTML-Teil.
+Du öffnest sie mit deinem Mailprogramm, prüfst den Entwurf und sendest selbst.
+Ob ein Programm die Datei direkt als bearbeitbaren Entwurf öffnet, hängt vom
+Mailprogramm ab; die Datei enthält dafür den Hinweis `X-Unsent: 1`.
+
+Läuft Koprotokoll auf demselben Rechner, werden zusätzlich installiertes
+**Thunderbird** und unter Windows **klassisches Outlook** angeboten.
+Für Outlook zuerst `pip install -r requirements-windows.txt` ausführen.
+Das neue Outlook bietet kein COM und wird so nicht unterstützt.
+Bei Zugriff über ein anderes Gerät oder einen Proxy bleibt die EML-Datei
+verfügbar; die API startet dort keine Programme auf dem Server.
+
+Thunderbird wird mit `-compose` gestartet. Seine lokale HTML-Vorlage bleibt
+unter `<Datenordner>/drafts/`, weil das Mailprogramm sie verzögert liest.
+Argumentwerte werden vor der Übergabe kodiert; Meeting-Titel erzeugen dadurch
+keine zusätzlichen Kommandozeilenfelder. Die Auswertung öffnet keinen Entwurf
+automatisch. Kein Entwurfsziel sendet eine Nachricht.
+
+Mit echtem Thunderbird und Windows-Outlook wurde dieser Weg hier nicht getestet.
+Die automatisierten Tests prüfen Dateiformat und nachgebildete Programmaufrufe.
+
 ## Konfiguration
 
 Die deutsche Spracherkennung verwendet standardmäßig **Parakeet primeline**

@@ -86,3 +86,13 @@ Werkzeuge: `list_meetings`, `search_meetings`, `get_summary`, `get_transcript`, 
 
 Alle drei Endpunkte verwenden die normale API-Authentifizierung. SMTP und Gmail
 verwenden dieselbe Text-/HTML-Vorlage aus `build_recap()`.
+
+## E-Mail-Entwürfe
+
+- `GET /api/integrations/email/drafts`: verfügbare `targets` (`eml`, lokal gegebenenfalls `thunderbird` und `outlook`).
+- `GET /api/meetings/{id}/recap.eml`: fertiges Meeting als MIME-Mail mit Text, HTML und Empfängern aus `meta.attendees`.
+- `POST /api/meetings/{id}/recap/draft?ziel=thunderbird` bzw. `ziel=outlook`: öffnet einen Entwurf, versendet nichts. Nur direkt vom Serverrechner ohne Proxy erlaubt; externer Zugriff erhält 403.
+
+Unfertige Meetings liefern 409. Fehlende Mailprogramme liefern einen deutschen
+Fehler mit Hinweis auf den EML-Ausweichweg. Alle Endpunkte benötigen die normale
+API-Authentifizierung.

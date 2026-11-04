@@ -25,6 +25,7 @@ from .calendar_source import CalendarEvent
 from .capture import HardwareRecorder
 from .config import CALDAV_PRESETS, Settings
 from .db import Database
+from .drafts import draft_targets, open_draft, recap_eml
 from .events import EVENTS, EventBus
 from .export import export
 from .google import GoogleCalendarSource, GoogleClient, GoogleError
@@ -214,7 +215,6 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
     api = APIRouter(dependencies=[Depends(auth.require_auth)])
     public = APIRouter()
 
-    @api.get("/api/integrations/email", tags=["email"])
     @app.exception_handler(RequestValidationError)
     async def validation_error(request: Request, error: RequestValidationError):
         if request.url.path == "/api/integrations/email":
@@ -223,6 +223,7 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
             return JSONResponse(status_code=422, content={"detail": details})
         return await request_validation_exception_handler(request, error)
 
+    @api.get("/api/integrations/email", tags=["email"])
     def email_status():
         return mail.status()
 
@@ -250,6 +251,35 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
         if m is None:
             raise HTTPException(404, "Meeting nicht gefunden")
         return m
+
+    def finished_meeting(meeting_id: int) -> dict:
+        meeting = meeting_or_404(meeting_id)
+        if meeting["status"] != "done":
+            raise HTTPException(409, "Das Meeting muss zuerst fertig ausgewertet sein.")
+        return meeting
+
+    @api.get("/api/integrations/email/drafts", tags=["email"])
+    def email_draft_targets(request: Request):
+        return {"targets": draft_targets(auth.is_local(request))}
+
+    @api.get("/api/meetings/{meeting_id}/recap.eml", tags=["email"])
+    def download_recap_eml(meeting_id: int):
+        try:
+            content = recap_eml(finished_meeting(meeting_id), s.public_url, mail.own_email())
+        except MailError as e:
+            raise HTTPException(400, str(e)) from e
+        return Response(content, media_type="message/rfc822",
+                        headers={"Content-Disposition": f'attachment; filename="meeting-{meeting_id}.eml"'})
+
+    @api.post("/api/meetings/{meeting_id}/recap/draft", tags=["email"])
+    def create_recap_draft(meeting_id: int, request: Request, ziel: str):
+        if not auth.is_local(request):
+            raise HTTPException(403, "Native Mailprogramme können nur direkt am Server geöffnet werden. EML-Datei herunterladen.")
+        try:
+            open_draft(ziel, finished_meeting(meeting_id), s.public_url, s.data_dir)
+        except MailError as e:
+            raise HTTPException(400, str(e)) from e
+        return {"ok": True}
 
     @api.get("/api/status")
     def status():

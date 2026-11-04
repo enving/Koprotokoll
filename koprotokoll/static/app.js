@@ -155,6 +155,8 @@ async function openMeeting(id, { keepTab = false, seekTo = null } = {}) {
   renderSummary();
   renderTranscript();
   renderBookmarks();
+  $("#m-recap").disabled = !done;
+  if (changedMeeting) await renderDraftTargets();
   if (changedMeeting) $("#ask-answer").replaceChildren();
   if (!keepTab) showTab(done ? "summary" : "transcript");
   document.querySelectorAll(".m-item").forEach((el, i) =>
@@ -167,6 +169,30 @@ function seek(sec) {
   const go = () => { p.currentTime = sec; p.play().catch(() => {}); };
   if (p.readyState >= 1) go(); else p.addEventListener("loadedmetadata", go, { once: true });
 }
+
+async function renderDraftTargets() {
+  const select = $("#m-recap");
+  const labels = { eml: "EML-Datei herunterladen", thunderbird: "Entwurf in Thunderbird", outlook: "Entwurf in Outlook" };
+  try {
+    const result = await api("/api/integrations/email/drafts");
+    select.replaceChildren(h("option", { value: "" }, "Als E-Mail öffnen …"),
+      ...result.targets.map((target) => h("option", { value: target }, labels[target] || target)));
+  } catch (err) {
+    select.replaceChildren(h("option", { value: "" }, "Als E-Mail öffnen …"),
+      h("option", { value: "eml" }, labels.eml));
+  }
+}
+
+$("#m-recap").addEventListener("change", async (event) => {
+  const target = event.target.value;
+  if (!target || !state.current) return;
+  const base = `/api/meetings/${state.current.id}`;
+  try {
+    if (target === "eml") window.location = withKey(`${base}/recap.eml`);
+    else await api(`${base}/recap/draft?ziel=${encodeURIComponent(target)}`, { method: "POST" });
+  } catch (err) { alert(err.message); }
+  finally { event.target.value = ""; }
+});
 
 function showTab(name) {
   document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
@@ -650,6 +676,9 @@ async function renderEmail() {
     const updateFields = () => {
       fields.hidden = provider.value !== "smtp";
       host.required = !fields.hidden; port.required = !fields.hidden; sender.required = !fields.hidden;
+      const preferences = config.provider_settings[provider.value];
+      send.checked = preferences.send_recap; attendees.checked = preferences.recap_to_attendees;
+      send.disabled = provider.value === "none"; attendees.disabled = provider.value === "none";
     };
     updateFields();
     provider.addEventListener("change", updateFields);
@@ -676,9 +705,6 @@ async function renderEmail() {
       h("label", { class: "row small" }, attendees, "Zusätzlich an alle Teilnehmenden senden"),
       h("p", { class: "muted small" }, "Passwörter liegen lokal in der Datenbank. Umgebungsvariablen haben Vorrang. Vor einer Test-Mail die Einstellungen speichern."),
       h("div", { class: "row wrap" }, save, test), status);
-      const preferences = config.provider_settings[provider.value];
-      send.checked = preferences.send_recap; attendees.checked = preferences.recap_to_attendees;
-      send.disabled = provider.value === "none"; attendees.disabled = provider.value === "none";
     box.replaceChildren(form);
   } catch (err) {
     box.replaceChildren(h("p", { role: "alert" }, err.message),

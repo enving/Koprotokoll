@@ -1,0 +1,3 @@
+-r requirements.txt
+# Nur klassisches Outlook auf Windows bietet COM.
+pywin32>=306; sys_platform == "win32"

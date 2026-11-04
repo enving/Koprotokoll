@@ -41,6 +41,8 @@ mark { background: var(--hl); color: inherit; border-radius: 3px; }
 .meeting-head h1 { margin: 0; font-size: 24px; outline: none; border-radius: 6px; }
 .meeting-head h1:focus { background: var(--accent-soft); }
 .head-actions { display: flex; gap: 8px; }
+.meeting-head .head-actions { flex-wrap: wrap; max-width: 100%; }
+#m-recap { min-height: 44px; max-width: 100%; }
 .meta { color: var(--muted); font-size: 13px; }
 audio { width: 100%; margin: 16px 0 8px; position: sticky; top: -24px; z-index: 2; }
 .progress { display: flex; align-items: center; gap: 12px; margin: 14px 0; color: var(--muted); font-size: 13px; }
