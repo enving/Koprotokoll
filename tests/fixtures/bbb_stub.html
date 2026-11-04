@@ -21,6 +21,14 @@
 </section>
 <script>
 const mode = new URLSearchParams(location.search).get("mode");
+if (mode === 'de-consent' || mode === 'en-consent') {
+  const de = mode === 'de-consent';
+  document.querySelector('#join button').textContent = de ? 'Konferenz beitreten' : 'Join meeting';
+  const label = document.createElement('label');
+  label.innerHTML = '<input id="consentCheck" type="checkbox" required>';
+  label.append(de ? ' Diese Konferenz kann aufgezeichnet werden.' : ' This meeting may be recorded.');
+  document.querySelector('#join').append(label);
+}
 window.usedListenOnly = window.usedMicrophone = window.endedForOthers = false;
 const audio = document.querySelector('[data-test="audioModal"]');
 document.querySelector('#join').onsubmit = (event) => {

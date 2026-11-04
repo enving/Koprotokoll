@@ -578,9 +578,9 @@ def _visible(locator, timeout_ms: int) -> bool:
 class BigBlueButton(Adapter):
     """Greenlight-Gastbeitritt; Audio ausdrücklich über „Nur zuhören“."""
 
-    JOIN = re.compile(r"^(join(?: meeting)?|beitreten|teilnehmen)$", re.I)
+    JOIN = re.compile(r"^(join(?: meeting)?|konferenz beitreten|beitreten|teilnehmen)$", re.I)
     LEAVE = re.compile(r"^(leave (?:meeting|session|conference)|konferenz verlassen|besprechung verlassen)$", re.I)
-    ENDED = re.compile(r"(?:meeting|conference) (?:has |was )?ended|you (?:have )?left (?:the )?(?:meeting|conference)|konferenz wurde beendet", re.I)
+    ENDED = re.compile(r"(?:meeting|conference|session) (?:has |was )?ended|sitzung beendet|you (?:have )?left (?:the )?(?:meeting|conference)|konferenz wurde beendet", re.I)
     DENIED = re.compile(r"access denied|not authorized|invalid access code|room not found|zugang verweigert|ungültiger zugangscode", re.I)
 
     @staticmethod
@@ -610,7 +610,9 @@ class BigBlueButton(Adapter):
                 if _visible(button, 200):
                     if not name_set:
                         raise BotError("BigBlueButton bietet kein Feld für den sichtbaren Bot-Namen.")
-                    consent = page.get_by_role("checkbox", name=re.compile(r"recording|aufzeichnung", re.I)).first
+                    consent = page.locator("#consentCheck").first
+                    if not _visible(consent, 100):
+                        consent = page.get_by_role("checkbox", name=re.compile(r"recorded|recording|aufgezeichnet|aufzeichnung", re.I)).first
                     if _visible(consent, 100):
                         consent.check()
                     button.click()

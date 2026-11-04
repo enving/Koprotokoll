@@ -29,7 +29,7 @@ def test_bbb_calendar_and_bot_api_use_configured_hosts(tmp_path):
         assert response.status_code == 201 and response.json()["platform"] == "bbb"
 
 
-@pytest.mark.parametrize("mode", ["normal", "denied", "waiting", "no-listen"])
+@pytest.mark.parametrize("mode", ["normal", "de-consent", "en-consent", "denied", "waiting", "no-listen"])
 def test_bbb_join_listen_only_and_safe_leave(mode):
     from playwright.sync_api import sync_playwright
 
@@ -40,7 +40,7 @@ def test_bbb_join_listen_only_and_safe_leave(mode):
         adapter = BigBlueButton()
         statuses = []
         url = "https://bbb.example/rooms/test/join?mode=" + mode
-        if mode == "normal":
+        if mode in ("normal", "de-consent", "en-consent"):
             adapter.join(page, url, "Koprotokoll Test", 5, statuses.append)
             assert page.evaluate("window.botName") == "Koprotokoll Test"
             assert page.evaluate("window.usedListenOnly && !window.usedMicrophone && !window.endedForOthers")
@@ -52,4 +52,17 @@ def test_bbb_join_listen_only_and_safe_leave(mode):
             with pytest.raises(BotError):
                 adapter.join(page, url, "Koprotokoll Test", 2, statuses.append)
             assert not page.evaluate("window.usedMicrophone")
+        browser.close()
+
+
+@pytest.mark.parametrize("message", ["Session ended.", "Sitzung beendet.",
+    "This session has ended, or the link used to join it is no longer valid."])
+def test_bbb_official_end_messages(message):
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(executable_path=_chrome_path(), headless=True)
+        page = browser.new_page()
+        page.set_content("<main></main>")
+        page.locator("main").evaluate("(el, text) => el.textContent = text", message)
+        assert BigBlueButton().ended(page)
         browser.close()
