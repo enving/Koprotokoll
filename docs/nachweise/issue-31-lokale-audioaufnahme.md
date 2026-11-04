@@ -109,3 +109,187 @@ Tests. Davon prüfen 24 Tests das Messwerkzeug; der Ausgangsstand hatte insgesam
 61 bestandene Tests. `git diff --check` meldete keine Formatfehler.
 Diese Ergebnisse gelten für die gemeinsam mit diesem Nachweis committete
 Änderung, nicht für einen echten Modelllauf.
+
+## Synthetisches Testgespräch auf Nutzerauftrag (03.11.2026)
+
+Nachdem kein vollständiger Originalmitschnitt vorlag, wurde auf ausdrücklichen
+Nutzerauftrag ein Testgespräch produziert. `scripts/generate_audio_sample.py`
+enthält den fiktiven Dialog über ein Nachbarschaftsfest und erzeugt ihn lokal
+mit den installierten macOS-Stimmen Anna und Eddy (Deutsch/Deutschland).
+Keine Stimme wurde geklont, kein privates Gespräch verwendet und kein
+externer Sprachdienst aufgerufen. Die Dateien liegen unter dem ignorierten
+Ordner `data-livetest-31/synthetic-20261103/sample/`.
+
+- Dauer der dekodierten WAV: **145,562833 s**, 48 kHz, Mono, PCM 16 Bit.
+- Zwei getrennte Stimmspuren, 14 Sprechabschnitte, kurze Einwürfe und Pausen.
+- Geplante Überlappung: **98,449771–99,749771 s** (1,3 s).
+- Spitzenpegel des erzeugten Mixes: −1,41 dBFS; RMS: −21,22 dBFS;
+  keine übersteuerten Samples. Der dekodierte Mix entspricht der Summe der
+  Einzelspuren bis auf PCM-Quantisierung.
+- SHA-256 des WAV-Originals:
+  `1e586e8d195f2aa307b6c8cdae42d77c181a821fd9debb0d6fd306aa546f7339`.
+
+`testgespraech.mp3` dient zum Anhören; die Pipeline erhält ausschließlich
+`testgespraech.wav`. `referenz.json` und `dialog.txt` entstehen aus Text und
+Kompositionszeiten **vor** der ASR-Auswertung. `herkunft.json` enthält Stimmen,
+Parameter, Pegel und Hash. Die Rohclips und getrennten Stimmspuren bleiben
+erhalten. Diese Kompositionsreferenz ist nicht menschlich hörgeprüft;
+Abschnittsgrenzen enthalten innere Sprechpausen. WER/DER dagegen sind daher
+technische Vergleichswerte dieses künstlichen Samples, kein Qualitätsnachweis
+für reale Gespräche und kein Ersatz für die im Issue geforderte Hörreferenz.
+
+### Reproduzieren
+
+Voraussetzungen: macOS mit den genannten installierten Stimmen, `say`, ffmpeg,
+die Entwicklungsumgebung und bereits vorbereitete Parakeet-/Silero-/Sherpa-Modelle
+(siehe `scripts/download_models.py`). Neue Ausgabeordner verwenden; vorhandene
+Ergebnisse werden nicht überschrieben.
+
+```bash
+python scripts/generate_audio_sample.py data-livetest-31/synthetisch
+HF_HUB_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 python scripts/run_audio_sample.py \
+  data-livetest-31/synthetisch/testgespraech.wav \
+  data-livetest-31/lauf-lokal --models data/models
+```
+
+Der zweite Befehl verwendet den echten Upload-Endpunkt über FastAPI-TestClient
+im selben Prozess und die echte Pipeline, ohne nachgebildete Modelle. Die
+Sprecherzahl bleibt automatisch. Ein LLM ist ausgeschaltet; die Zusammenfassung
+verwendet die lokale Heuristik. Das Skript sichert `ergebnis.json`,
+`messung.json` und `pipeline.log`; der Originalhash wird vor und nach dem Lauf
+verglichen. Die CPU-Werte beziehen sich auf den Python-Prozess, nicht auf die
+gesamte Maschine oder ausgelagerte Apple-Dienste. Modellladezeit ist enthalten;
+Gesamtzeit enthält auch Import, Export und Modellhashes.
+
+Für die Wiederholung unter nachgewiesener macOS-Netzwerksperre:
+
+```bash
+sandbox-exec -p '(version 1)(allow default)(deny network*)(allow network-inbound (local ip "localhost:*"))(allow network-outbound (remote ip "localhost:*"))' \
+  env HF_HUB_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 \
+  python scripts/run_audio_sample.py \
+  data-livetest-31/synthetisch/testgespraech.wav \
+  data-livetest-31/lauf-gesperrt --models data/models --verify-network-block
+python scripts/evaluate_audio_sample.py \
+  data-livetest-31/synthetisch/referenz.json \
+  data-livetest-31/lauf-gesperrt/ergebnis.json > data-livetest-31/vergleich.json
+```
+
+Die Sperrprüfung muss externe TCP-Verbindungen über IPv4 und IPv6 mit
+`EPERM`/`EACCES` ablehnen und eine TCP-Verbindung über Loopback zulassen.
+Timeouts oder fehlende Erreichbarkeit genügen nicht. Ein zunächst zu weit
+gefasstes Profil mit `allow network* (local ip …)` ließ die externe Verbindung
+zu und wurde durch diese Prüfung verworfen. Nur das oben gezeigte, nach Richtung
+getrennte Profil bestand die Prüfung. Die Sperre gilt für den Testprozess und
+seine Kinder, nicht für den ganzen Mac. Das Python-Audit protokolliert dessen
+Socket-Versuche einschließlich der Sperrproben; es ist kein vollständiges
+Netzwerklog nativer Bibliotheken.
+
+Die Produktion und der Dateiimport prüfen keinen Mikrofon-/Systemtonweg.
+Browser-/Mobilvergleich, Aufnahme-CPU, menschliche Hörprüfung und ein
+Bildschirmvideo bleiben gesondert offen. Es wurde nichts öffentlich hochgeladen;
+die Nutzungsbedingungen der verwendeten Systemstimmen wurden nicht für eine
+öffentliche Weiterverteilung geprüft.
+
+### Gemessener Lauf mit den echten Modellen
+
+Getesteter Produktcode: `76eabdc429cc0d546f5112407c2a6184a471e98a` mit den
+in dieser Fortsetzung ergänzten Produktions-/Prüfskripten. Keine Änderung an
+ASR, Diarisierung oder Pipeline. Umgebung: macOS 26.7.2, Apple Silicon;
+onnx-asr 0.12.0, onnxruntime 1.31.1, sherpa-onnx 2.0.1.
+Parakeet TDT 0.6b v3, int8, Cache-Revision
+`8f23f0c03c8761650bdb5b40aaf3e40d2c15f1ce`; Silero-Revision
+`b3e3ee3cce4c11ceb63b1a0b229d916069c1ddf6`. Sherpa verwendet die vorhandene
+pyannote-Segmentierung 3.0 und ERes2Net-Embeddings, Clustering-Schwelle 0,8.
+Die lokalen JSON-Messdateien enthalten die Modellhashes, `modelle.json`
+zusätzlich die Hashes der Parakeet-/Silero-Dateien. ONNX Runtime nutzte den
+automatisch gewählten CoreML-Pfad mit nicht dort unterstützten Graphanteilen.
+
+Der erste Importlauf (`run-local/`) endete mit `done` und explizit
+`meta.diarization.status=completed`. Automatisch erkannte Sprecherzahl: **2**;
+die Rohlabels 0 und 2 wurden für die Auswertung den Kompositionsstimmen A und B
+zugeordnet. Transkription: **101,323 s**, Diarisierung: **83,638 s**;
+Gesamtlauf: **185,637 s**. Prozess-CPU im Mittel: 109,97 % während der
+Transkription, 87,09 % während der Diarisierung (100 % entspricht einem Kern).
+Es lief kein Bildschirmrecorder für diesen Nachweis; andere bereits laufende
+Programme wurden nicht beendet, daher ist dies kein isolierter Leistungsbenchmark.
+
+Gegen die synthetische Kompositionsreferenz: **WER 9,94 %** (312 Referenzwörter,
+1 Einfügung, 9 Löschungen, 21 Ersetzungen), **DER 1,3975 %** mit dem Standardraster
+und der Standardtoleranz. Zahlen als Ziffern gegenüber ausgeschriebenen Wörtern
+zählen bei dieser WER als Unterschiede. Beispiele im tatsächlichen Ergebnis:
+
+- Bei **44,16–44,72 s** fehlt der Einwurf „Stimmt.“ im Transkript;
+  die Diarisierung verwechselt die Stimme im verbleibenden Rasterabschnitt
+  **44,4–44,5 s**.
+- Bei **98,45–100,17 s** fehlt „Das Kabel habe ich schon!“ im Text. Der
+  überlagerte Bereich samt Anschluss enthält stattdessen fehlerhafte Wörter,
+  unter anderem „Don't feel it more deep box.“. Die getrennte DER für die
+  Überlappung ist trotzdem 0: Sie prüft nur die aktiven Sprecher, nicht die
+  Wörter. Nach Ausschluss der Grenztoleranz verbleiben hier lediglich 0,8 s
+  beziehungsweise 1,6 Referenzsprechersekunden. Daraus folgt keine korrekte
+  Transkription gleichzeitigen Sprechens.
+- Der Abschiedsgruß bei **143,47–144,56 s** wird zu „This some stock.“.
+
+Die Ergebnisse bleiben unverändert als `ergebnis.json`, `vergleich.json` und
+lesbares `transkript.txt` erhalten; die fehlerhaften Stellen wurden nicht
+nachträglich korrigiert.
+
+### Abgeschlossene Offline-Wiederholung und Ablage
+
+Der erste Offline-Lauf brach am 03.11.2026 wegen einer vollen internen Platte
+mit `database or disk is full` ab. Dieser Fehlversuch bleibt in `run-offline/`
+erhalten. Danach wurden ausschließlich die 55 neu erzeugten Testdateien nach
+`/Volumes/blaue_platte/Koprotokoll-Nachweise/synthetic-20261103/` kopiert und
+alle Datei-Prüfsummen verglichen. Erst nach identischer Prüfung wurde der
+bisherige lokale Ordner durch einen Symlink auf diese Ablage ersetzt.
+Die externe Platte muss deshalb für die lokalen Links angeschlossen sein.
+
+Die Wiederholung in `run-offline-external/` war erfolgreich. Das WAV hatte
+denselben oben angegebenen SHA-256. Beide externen TCP-Proben wurden mit
+`errno=1` (`EPERM`) abgewiesen; die Loopback-Probe bestand. Das Python-Audit
+enthält nur diese Proben, keine weiteren Socket-Versuche des Python-Codes.
+Die Pipeline endete mit `done`, die Diarisierung mit `completed` und zwei
+automatisch geschätzten Sprechern. Transkription: 36,306 s; Diarisierung:
+64,611 s. Mittlere Prozess-CPU: 235,13 % beziehungsweise 99,38 % eines Kerns.
+Aus den unterschiedlichen Laufzeiten folgt keine Leistungsverbesserung durch
+die Netzwerksperre; Cache- und Systemzustand wurden nicht konstant gehalten.
+
+Der erneute Vergleich mit der Kompositionsreferenz liefert WER 9,94 % und
+DER 1,3975 %. Die Bewertung der Überlappung bleibt bei DER 0 mit den oben
+erklärten Grenzen. `run-offline-external/transkript.txt` enthält den
+unveränderten Text zum Nachlesen.
+
+### Ablauf der ergänzten Prüfskripte
+
+Der Ablauf folgt der [show-me-Originalanleitung](https://github.com/humanlayer/skills/blob/main/plugins/show-me/skills/show-me/SKILL.md).
+Der Skill war lokal nicht installiert; dieses Mermaid-Diagramm verwendet den
+in der Projektanleitung vorgesehenen Ausweichweg. Das Diagramm erklärt die
+Dateien, die tatsächlichen Ergebnisse stehen in den Messdateien.
+
+```mermaid
+flowchart TD
+    A[Eigener fiktiver Dialog] --> B[macOS say: zwei Stimmen]
+    B --> C[WAV mit Pausen und Überlappung]
+    B --> D[Text und Kompositionszeiten vor ASR]
+    C --> E[Import-Endpunkt und echte Pipeline]
+    E --> F[Parakeet: Wörter und Zeiten]
+    F --> G[Sherpa: automatisch geschätzte Sprecher]
+    G --> H[Ergebnis und Messprotokoll]
+    D --> I[WER und DER vergleichen]
+    H --> I
+```
+
+Qualitätsprüfung nach den [anti-slop-Originalquellen](https://github.com/miqdadbadjuber/anti-slop):
+Textprüfung bestanden, da die Messwerte aus den gespeicherten Ergebnissen
+stammen und die Referenz als synthetisch und nicht menschlich geprüft benannt
+ist. Kommentarprüfung bestanden: Der Testkommentar beschreibt den fachlichen
+Zweck der Überlappung statt die einzelnen Rechenschritte. UI-, Layout- und
+Interaktionsprüfungen sind hier nicht anwendbar; die Oberfläche wurde in
+dieser Fortsetzung nicht verändert. Die Regeln wurden an ihrer Quelle gelesen,
+es wurde keine zweite Regeldatei oder Plugin-Konfiguration angelegt.
+
+Abschlussprüfung am 04.11.2026: `.venv/bin/pytest -q -ra` meldete
+**86 bestanden in 34,87 s**, keine übersprungenen Tests. Die fünf neuen
+Prüffälle sichern Überlappung ohne Clipping, Erhalt vorhandener Originale
+und das Zurückweisen unzureichender Offline-Belege ab. `git diff --check`
+meldete keine Formatfehler.
