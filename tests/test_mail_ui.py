@@ -55,6 +55,14 @@ def test_smtp_settings_ui(tmp_path, width, theme, monkeypatch):
         expect(page.get_by_role("status")).to_have_text("E-Mail-Einstellungen gespeichert.")
         assert not client.get("/api/integrations/email").json()["smtp"]["password_set"]
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+        assert page.locator("#mail-form").evaluate("""form => {
+          const controls = [...form.querySelectorAll('input, select, button, p')];
+          return controls.every(el => {
+            const bounds = el.getBoundingClientRect();
+            return bounds.left >= 0 && bounds.right <= innerWidth;
+          });
+        }""")
+        assert page.locator("#main").evaluate("el => el.scrollWidth <= el.clientWidth")
         assert errors == []
         browser.close()
 

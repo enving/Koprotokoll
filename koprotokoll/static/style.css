@@ -59,6 +59,7 @@ audio { width: 100%; margin: 16px 0 8px; position: sticky; top: -24px; z-index: 
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 20px; margin-bottom: 16px; }
 .card h2 { margin: 0 0 8px; font-size: 19px; }
 .grid2 { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+.grid2 > div { min-width: 0; }
 @media (max-width: 1100px) { .grid2 { grid-template-columns: 1fr; } }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip { background: var(--accent-soft); color: var(--accent); padding: 2px 10px; border-radius: 999px; font-size: 13px; }
@@ -108,10 +109,15 @@ dialog menu { display: flex; justify-content: flex-end; gap: 8px; padding: 0; ma
 .nav-link { border: none; background: none; text-align: left; color: var(--muted); padding: 8px 10px; }
 .nav-link:hover, .nav-link.active { background: var(--accent-soft); color: var(--accent); }
 .stack { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+#integrations .row { flex-wrap: wrap; }
+#integrations .row > input:not([type="checkbox"]) { flex: 1 1 160px; min-width: 0; }
+#integrations .row > select { max-width: 100%; }
 #mail-form label:not(.row) { display: flex; flex-direction: column; gap: 4px; }
 #mail-form input, #mail-form select, #mail-form button { min-height: 44px; min-width: 0; }
 #mail-form input[type="checkbox"] { width: auto; min-height: auto; flex: none; cursor: pointer; }
 #mail-form label.row, #mail-form .wrap { flex-wrap: wrap; align-items: center; }
+#mail-form label.row { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; }
+#mail-form label.row input { margin-top: 4px; }
 #mail-form button:disabled { cursor: not-allowed; }
 .small { font-size: 13px; }
 details summary { cursor: pointer; color: var(--muted); }

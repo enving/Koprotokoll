@@ -40,3 +40,10 @@ Fehlervermeidung; keine neuen Effekte oder Bildassets.
 
 Nicht geprüft: Anmeldung und Zustellung bei echten Postfächern, Zertifikatsketten
 konkreter SMTP-Anbieter und Zugriff durch Mobilgeräte außerhalb des Testbrowsers.
+
+Bei der visuellen Abschlussprüfung wurde ein innerer horizontaler Überlauf
+gefunden, den die bisherige Prüfung der Dokumentbreite verdeckte. Grid-Kinder
+können jetzt schrumpfen, Formularzeilen bei Bedarf umbrechen. Der Browsertest
+prüft zusätzlich jede Feld-/Knopfgrenze und die tatsächliche Breite des Hauptbereichs.
+Die SMTP-Karte wurde bei 390 Pixeln dunkel und 1280 Pixeln hell visuell kontrolliert;
+alle vier bestehenden Browservarianten bestehen die verschärften Prüfungen.
