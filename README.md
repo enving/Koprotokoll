@@ -178,7 +178,7 @@ Ohne LLM gibt es eine einfache, rein lokale Auswertung.
 
 | Baustein | Projekt | Lizenz |
 |---|---|---|
-| Spracherkennung | [NVIDIA Parakeet TDT 0.6B v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) über [onnx-asr](https://github.com/istupakov/onnx-asr) | CC-BY-4.0 (Modell), MIT |
+| Spracherkennung | Standard Deutsch: [Parakeet primeline](https://huggingface.co/primeline/parakeet-primeline) von primeline, auf Basis von NVIDIA Parakeet, über sherpa-onnx; optional [Parakeet v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) über onnx-asr | CC-BY-4.0 (Modelle; Namensnennung primeline und NVIDIA), Apache-2.0 / MIT (Laufzeit) |
 | Sprachaktivität | [Silero VAD](https://github.com/snakers4/silero-vad) | MIT |
 | Sprechererkennung | [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) mit pyannote-Segmentierung 3.0 und 3D-Speaker ERes2Net | Apache-2.0 / MIT |
 | Zusammenfassung | beliebiges lokales LLM mit OpenAI-kompatibler API (Ollama, llama.cpp, LM Studio, vLLM) | – |

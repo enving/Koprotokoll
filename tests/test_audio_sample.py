@@ -77,7 +77,7 @@ def test_real_audio_import_keeps_filename_and_original(tmp_path, monkeypatch):
     models = tmp_path / "models"
     models.mkdir()
     output = tmp_path / "run"
-    monkeypatch.setattr(run_audio_sample, "ParakeetTranscriber", TestTranscriber)
+    monkeypatch.setattr(run_audio_sample, "create_transcriber", lambda settings: TestTranscriber())
     monkeypatch.setattr(run_audio_sample, "SherpaDiarizer", TestDiarizer)
     monkeypatch.setattr(run_audio_sample.sys, "addaudithook", lambda hook: None)
     monkeypatch.setattr("sys.argv", ["run_audio_sample.py", str(audio), str(output), "--models", str(models)])

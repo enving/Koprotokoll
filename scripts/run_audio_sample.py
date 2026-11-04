@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from fastapi.testclient import TestClient  # noqa: E402
 from koprotokoll.app import create_app  # noqa: E402
 from koprotokoll.config import Settings  # noqa: E402
-from koprotokoll.speech import ParakeetTranscriber, SherpaDiarizer  # noqa: E402
+from koprotokoll.speech import create_transcriber, SherpaDiarizer  # noqa: E402
 
 
 def verify_network_block() -> dict:
@@ -66,7 +66,9 @@ def main() -> None:
     sys.addaudithook(audit)
     proof = verify_network_block() if args.verify_network_block else {"verified": False}
     s = Settings(data_dir=args.output.resolve(), llm_enabled=False)
-    asr = ParakeetTranscriber(s.asr_model, s.asr_quantization, s.asr_model_path)
+    if s.asr_model == "parakeet-primeline" and not s.asr_model_path:
+        s.asr_model_path = str(args.models.resolve() / "parakeet-primeline-onnx")
+    asr = create_transcriber(s)
     diarizer = SherpaDiarizer(args.models.resolve(), s.diarization_threshold)
     timings = {}
 
