@@ -81,6 +81,7 @@ class MicrosoftClient:
     def __init__(self, settings: Settings, db: Database):
         self.s, self.db = settings, db
         self._token_lock = threading.RLock()
+        self._auth_generation = 0
 
     # -- Konfiguration ---------------------------------------------------------
     def _client(self) -> tuple[str, str]:
@@ -89,8 +90,16 @@ class MicrosoftClient:
                 self.s.microsoft_client_secret or stored.get("client_secret", ""))
 
     def set_client(self, client_id: str, client_secret: str) -> None:
-        self.db.set_kv("microsoft_client", {"client_id": client_id.strip(),
-                                            "client_secret": client_secret.strip()})
+        with self._token_lock:
+            if self._client()[0] != (self.s.microsoft_client_id or client_id.strip()):
+                self.disconnect()
+            self.db.set_kv("microsoft_client", {"client_id": client_id.strip(),
+                                                "client_secret": client_secret.strip()})
+
+    def _cancel_pending_auth(self) -> None:
+        self._auth_generation += 1
+        self.db.set_kv("microsoft_device", None)
+        self.db.set_kv("microsoft_oauth_state", None)
 
     @property
     def redirect_uri(self) -> str:
@@ -126,7 +135,9 @@ class MicrosoftClient:
         if not self._client()[1]:
             raise MicrosoftError("Für die Weiterleitung fehlt ein Client-Secret. Bitte stattdessen mit Gerätecode anmelden.")
         state = secrets.token_urlsafe(24)
-        self.db.set_kv("microsoft_oauth_state", {"state": state, "expires": time.time() + 600})
+        with self._token_lock:
+            self._cancel_pending_auth()
+            self.db.set_kv("microsoft_oauth_state", {"state": state, "expires": time.time() + 600})
         return AUTH_URL + "?" + urllib.parse.urlencode({
             "client_id": client_id, "redirect_uri": self.redirect_uri, "response_type": "code",
             "scope": " ".join(SCOPES), "response_mode": "query", "state": state,
@@ -140,6 +151,9 @@ class MicrosoftClient:
         client_id, _ = self._client()
         if not client_id:
             raise MicrosoftError("Microsoft-Client-ID fehlt. Zuerst die App-Registrierung eintragen.")
+        with self._token_lock:
+            self._cancel_pending_auth()
+            generation = self._auth_generation
         scope = " ".join(SCOPES + (["Tasks.ReadWrite"] if include_tasks else []))
         data = _http("POST", DEVICE_URL, form={"client_id": client_id, "scope": scope})
         uri = urllib.parse.urlsplit(data["verification_uri"])
@@ -147,17 +161,22 @@ class MicrosoftClient:
                                          (uri.hostname or "").endswith((".microsoft.com", ".microsoftonline.com"))):
             raise MicrosoftError("Microsoft lieferte keine gültige Anmeldeseite.")
         interval = max(5, int(data.get("interval", 5)))
-        self.db.set_kv("microsoft_device", {"device_code": data["device_code"],
-                       "expires": time.time() + int(data["expires_in"]), "interval": interval,
-                       "next_poll": time.time() + interval, "scope": scope})
+        with self._token_lock:
+            if generation != self._auth_generation:
+                raise MicrosoftError("Die Anmeldung wurde zwischenzeitlich abgebrochen.")
+            self.db.set_kv("microsoft_device", {"device_code": data["device_code"],
+                           "expires": time.time() + int(data["expires_in"]), "interval": interval,
+                           "next_poll": time.time() + interval, "scope": scope})
         return {"user_code": data["user_code"], "verification_uri": data["verification_uri"],
                 "expires_in": int(data["expires_in"]), "interval": interval}
 
     def poll_device(self) -> dict:
-        pending = self.db.get_kv("microsoft_device", {})
-        if not pending or pending["expires"] <= time.time():
-            self.db.set_kv("microsoft_device", None)
-            raise MicrosoftError("Der Anmeldecode ist abgelaufen. Bitte neu starten.")
+        with self._token_lock:
+            pending = self.db.get_kv("microsoft_device", {})
+            generation = self._auth_generation
+            if not pending or pending["expires"] <= time.time():
+                self.db.set_kv("microsoft_device", None)
+                raise MicrosoftError("Der Anmeldecode ist abgelaufen. Bitte neu starten.")
         interval = pending["interval"]
         if time.time() < pending["next_poll"]:
             return {"status": "pending", "interval": interval}
@@ -168,28 +187,37 @@ class MicrosoftClient:
                 "device_code": pending["device_code"],
             })
         except MicrosoftError as e:
-            if e.code in ("authorization_pending", "slow_down"):
-                if e.code == "slow_down":
-                    interval += 5
-                self.db.set_kv("microsoft_device", {**pending, "interval": interval,
-                                                    "next_poll": time.time() + interval})
-                return {"status": "pending", "interval": interval}
+            with self._token_lock:
+                self._check_pending(generation, pending)
+                if e.code in ("authorization_pending", "slow_down"):
+                    if e.code == "slow_down":
+                        interval += 5
+                    self.db.set_kv("microsoft_device", {**pending, "interval": interval,
+                                                        "next_poll": time.time() + interval})
+                    return {"status": "pending", "interval": interval}
+                self.db.set_kv("microsoft_device", None)
+                if e.code in ("expired_token", "authorization_declined"):
+                    raise MicrosoftError("Anmeldung abgelehnt oder abgelaufen. Bitte bei Bedarf neu starten.") from None
+                raise
+        with self._token_lock:
+            self._check_pending(generation, pending)
+            self._store_tokens({**token, "scope": token.get("scope") or pending["scope"]}, "device")
             self.db.set_kv("microsoft_device", None)
-            if e.code in ("expired_token", "authorization_declined"):
-                raise MicrosoftError("Anmeldung abgelehnt oder abgelaufen. Bitte bei Bedarf neu starten.") from None
-            raise
-        self._store_tokens({**token, "scope": token.get("scope") or pending["scope"]}, "device")
-        self.db.set_kv("microsoft_device", None)
-        return {"status": "connected", **self.status()}
+            return {"status": "connected", **self.status()}
+
+    def _check_pending(self, generation: int, pending: dict) -> None:
+        current = self.db.get_kv("microsoft_device", {})
+        if generation != self._auth_generation or current.get("device_code") != pending["device_code"]:
+            raise MicrosoftError("Die Anmeldung wurde zwischenzeitlich abgebrochen.")
 
     def _store_tokens(self, token: dict, flow: str) -> dict:
         if not token.get("refresh_token") or not token.get("access_token"):
             raise MicrosoftError("Microsoft hat keine vollständige Anmeldung geliefert. Offline-Zugriff erlauben und erneut verbinden.")
         claims = _jwt_payload(token.get("id_token", ""))
-        email = claims.get("email") or claims.get("preferred_username")
-        if not email:
-            profile = _http("GET", GRAPH_BASE + "/me?$select=mail,userPrincipalName", token=token["access_token"])
-            email = profile.get("mail") or profile.get("userPrincipalName")
+        profile = _http("GET", GRAPH_BASE + "/me?$select=mail,userPrincipalName", token=token["access_token"])
+        email = profile.get("mail") or claims.get("email")
+        if not isinstance(email, str) or "@" not in email or any(c in email for c in "\r\n"):
+            email = None
         tokens = {"refresh_token": token["refresh_token"], "access_token": token["access_token"],
                   "expires_at": time.time() + int(token.get("expires_in", 3600)) - 60,
                   "email": email, "scope": token.get("scope"), "auth_flow": flow}
@@ -197,22 +225,27 @@ class MicrosoftClient:
         return tokens
 
     def exchange(self, code: str, state: str) -> dict:
-        expected = self.db.get_kv("microsoft_oauth_state", {})
-        if not expected or not secrets.compare_digest(expected.get("state", ""), state or "") \
-                or expected.get("expires", 0) < time.time():
-            raise MicrosoftError("Ungültiger oder abgelaufener OAuth-Status – bitte erneut verbinden")
-        self.db.set_kv("microsoft_oauth_state", None)
+        with self._token_lock:
+            generation = self._auth_generation
+            expected = self.db.get_kv("microsoft_oauth_state", {})
+            if not expected or not secrets.compare_digest(expected.get("state", ""), state or "") \
+                    or expected.get("expires", 0) < time.time():
+                raise MicrosoftError("Ungültiger oder abgelaufener OAuth-Status; bitte erneut verbinden")
+            self.db.set_kv("microsoft_oauth_state", None)
         client_id, client_secret = self._client()
         tok = _http("POST", TOKEN_URL, form={
             "code": code, "client_id": client_id, "client_secret": client_secret,
             "redirect_uri": self.redirect_uri, "grant_type": "authorization_code",
         })
-        return self._store_tokens(tok, "redirect")
+        with self._token_lock:
+            if generation != self._auth_generation:
+                raise MicrosoftError("Die Anmeldung wurde zwischenzeitlich abgebrochen.")
+            return self._store_tokens(tok, "redirect")
 
     def disconnect(self) -> None:
         with self._token_lock:
             self.db.set_kv("microsoft_tokens", None)
-            self.db.set_kv("microsoft_device", None)
+            self._cancel_pending_auth()
 
     def _access_token(self) -> str:
         with self._token_lock:

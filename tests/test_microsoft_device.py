@@ -38,6 +38,8 @@ class FakeGraph:
         if url == ms.GRAPH_BASE + "/me/sendMail":
             self.sent.append(body)
             return {}
+        if url.startswith(ms.GRAPH_BASE + "/me?$select="):
+            return {"mail": "ich@example.com"}
         if url.startswith(ms.GRAPH_BASE + "/me/calendarview"):
             return {"value": []}
         raise AssertionError((method, url))
@@ -170,3 +172,61 @@ def test_task_permissions_are_requested_only_explicitly(tmp_path, monkeypatch):
         assert "Tasks.ReadWrite" not in fake.calls[-1][2]["scope"]
         client.post("/api/integrations/microsoft/device?tasks=1")
         assert "Tasks.ReadWrite" in fake.calls[-1][2]["scope"]
+
+
+def test_invalid_client_secret_is_not_echoed(tmp_path):
+    with make_client(tmp_path) as client:
+        response = client.put("/api/integrations/microsoft/client", json={
+            "client_id": "test", "client_secret": {"sensitive": "dummy-review-secret"}})
+        assert response.status_code == 422 and "dummy-review-secret" not in response.text
+
+
+@pytest.mark.parametrize("response_state", ["ready", "authorization_pending"])
+def test_disconnect_cancels_inflight_device_response(tmp_path, monkeypatch, response_state):
+    import threading
+    from koprotokoll.config import Settings
+    from koprotokoll.db import Database
+
+    entered, release = threading.Event(), threading.Event()
+    fake = FakeGraph()
+    fake.responses = [response_state]
+
+    def http(method, url, **kwargs):
+        if url == ms.TOKEN_URL:
+            entered.set()
+            assert release.wait(5)
+        return fake(method, url, **kwargs)
+
+    monkeypatch.setattr(ms, "_http", http)
+    client = ms.MicrosoftClient(Settings(data_dir=tmp_path, microsoft_client_id="public-client"), Database(tmp_path / "db.sqlite3"))
+    client.start_device()
+    pending = client.db.get_kv("microsoft_device")
+    client.db.set_kv("microsoft_device", {**pending, "next_poll": 0})
+    errors = []
+
+    def poll():
+        try:
+            client.poll_device()
+        except ms.MicrosoftError as error:
+            errors.append(str(error))
+
+    thread = threading.Thread(target=poll)
+    thread.start()
+    assert entered.wait(5)
+    client.disconnect()
+    release.set()
+    thread.join(5)
+    assert not thread.is_alive() and not client.connected()
+    assert client.db.get_kv("microsoft_device") is None
+    assert errors and "abgebrochen" in errors[0]
+
+
+def test_mail_address_comes_from_graph_mailbox(tmp_path, monkeypatch):
+    from koprotokoll.config import Settings
+    from koprotokoll.db import Database
+
+    claim = base64.urlsafe_b64encode(json.dumps({"preferred_username": "login@tenant.onmicrosoft.com"}).encode()).decode().rstrip("=")
+    monkeypatch.setattr(ms, "_http", lambda *args, **kwargs: {"mail": "ben@example.com"})
+    client = ms.MicrosoftClient(Settings(data_dir=tmp_path), Database(tmp_path / "db.sqlite3"))
+    client._store_tokens({"access_token": "test", "refresh_token": "rt", "id_token": "x." + claim + ".y"}, "device")
+    assert client.status()["email"] == "ben@example.com"

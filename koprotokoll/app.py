@@ -226,7 +226,7 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request: Request, error: RequestValidationError):
-        if request.url.path == "/api/integrations/email":
+        if request.url.path in ("/api/integrations/email", "/api/integrations/microsoft/client", "/api/integrations/google/client"):
             details = [{key: value for key, value in item.items() if key not in ("input", "ctx")}
                        for item in error.errors()]
             return JSONResponse(status_code=422, content={"detail": details})
