@@ -832,13 +832,15 @@ async function renderMicrosoft() {
 }
 
 // ---------------------------------------------------------- Kalender-Quellen
-const KIND_LABEL = { ics: "ICS", caldav: "CalDAV" };
+const KIND_LABEL = { ics: "ICS", caldav: "CalDAV", outlook: "Outlook (lokal)" };
 
 async function renderSources() {
-  const [sources, presets] = await Promise.all([
+  const [sources, presets, capabilities] = await Promise.all([
     api("/api/calendars").catch(() => []),
     api("/api/calendars/presets").catch(() => []),
+    api("/api/calendars/capabilities").catch(() => ({ outlook: false })),
   ]);
+  $("#source-outlook").hidden = !capabilities.outlook || sources.some((s) => s.kind === "outlook");
   const select = $("#src-provider");
   if (select && !select.options.length) {
     select.replaceChildren(...presets.map((p) => h("option", { value: p.id }, p.label)));
@@ -865,6 +867,13 @@ async function renderSources() {
         }
       } }, "✕"))));
 }
+
+$("#source-outlook").addEventListener("click", async (event) => {
+  event.target.disabled = true;
+  try { await api("/api/calendars", jsonOpts("POST", { kind: "outlook" })); await renderSources(); }
+  catch (err) { $("#src-msg").textContent = err.message; }
+  finally { event.target.disabled = false; }
+});
 
 $("#caldav-form").addEventListener("submit", async (e) => {
   e.preventDefault();

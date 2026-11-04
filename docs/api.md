@@ -96,3 +96,11 @@ verwenden dieselbe Text-/HTML-Vorlage aus `build_recap()`.
 Unfertige Meetings liefern 409. Fehlende Mailprogramme liefern einen deutschen
 Fehler mit Hinweis auf den EML-Ausweichweg. Alle Endpunkte benötigen die normale
 API-Authentifizierung.
+
+## Lokaler Outlook-Kalender
+
+`GET /api/calendars/capabilities` meldet mit `outlook`, ob klassisches Outlook
+unter Windows mit COM verfügbar ist. `POST /api/calendars` mit
+`{"kind":"outlook"}` fügt dessen Standardkalender hinzu. Ein zweiter Eintrag
+desselben Standardkalenders liefert 409. Test, Deaktivierung und Entfernen
+verwenden die bestehenden `/api/calendars/{id}`-Endpunkte.
