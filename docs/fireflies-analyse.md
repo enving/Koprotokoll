@@ -51,7 +51,7 @@ Aus den Accessibility-Texten der Seite ergibt sich das beworbene Kern-Feature-Se
 |---|---|---|
 | Fireflies-„Notetaker“ tritt Meetings bei | ✔ Bot tritt Google Meet, Jitsi und Microsoft Teams (Gastbeitritt) als Teilnehmer bei (manuell oder automatisch aus dem Kalender) | Playwright-Chromium, WebRTC-Audiospuren per Init-Skript abgegriffen |
 | Kalender-Anbindung (Auto-Join) | ✔ Google Kalender, Microsoft/Outlook (auch Privatkonten) | OAuth 2.0, Kalender nur lesen; Termine der nächsten 7 Tage auf der Startseite |
-| Recap-E-Mail nach dem Meeting | ✔ über den gewählten Mailweg Gmail oder SMTP an sich selbst, optional an alle Teilnehmer; EML und lokale Mailentwürfe | Gmail API, `smtplib`, Thunderbird oder klassisches Outlook |
+| Recap-E-Mail nach dem Meeting | ✔ über den gewählten Mailweg Gmail, SMTP oder Microsoft Graph an sich selbst, optional an alle Teilnehmer; EML und lokale Mailentwürfe | Gmail API, `smtplib`, Graph `sendMail`, Thunderbird oder klassisches Outlook |
 | API / Webhooks / MCP | ✔ REST mit API-Schlüsseln, OpenAPI, HMAC-signierte Webhooks, MCP-Server | FastAPI, `mcp` |
 | Aufnahme ohne Bot | Browser-Aufnahme: Mikrofon **oder** Mikrofon + Tab-/Bildschirmton | `MediaRecorder` + `getDisplayMedia` |
 | Datei-Upload (MP3, MP4, WAV, M4A …) | ✔ | ffmpeg → 16 kHz Mono |
@@ -65,7 +65,9 @@ Aus den Accessibility-Texten der Seite ergibt sich das beworbene Kern-Feature-Se
 | Player mit synchronem Transkript | ✔ Klick auf Zeitstempel springt, aktuelle Zeile wird hervorgehoben | `<audio>` + `timeupdate` |
 | Redeanteile (Talk-Time) | ✔ | aus Segmentdauern |
 | Download | ✔ Markdown, TXT, SRT, JSON | `/api/meetings/{id}/export` |
+| Aufgaben in eigene Programme | ✔ VTODO-Download; CalDAV, Outlook-COM und Microsoft To Do als explizite Exportziele implementiert, reale Anbieter-/Windows-Prüfung offen | `tasks.py`; stabile Kennungen gegen Dubletten |
 | Bot für Microsoft Teams | ✔ Web-Client, Gastbeitritt (setzt erlaubte anonyme Beitritte voraus) | `bot/platforms.py` |
 | Bot für BigBlueButton | Adapter für Greenlight-Gastlinks und „Nur zuhören“ implementiert; Live-Prüfung offen | [Nachweis und Grenzen](nachweise/issue-13-bbb.md) |
+| Selbst gehosteter Betrieb | ✔ Docker-Image ohne Modelle, Compose mit Ollama und Schlüsselpflicht | [Prüfung mit echtem Upload](nachweise/issue-19-docker.md) |
 | Bot für Zoom | ✘ Links werden erkannt, Beitritt noch nicht umgesetzt | – |
 | CRM/Slack-Integrationen, Team-Freigaben, Sentiment | ✘ nicht Teil der Grundfunktionen (über Webhooks/API anbindbar) | – |

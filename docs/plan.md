@@ -28,9 +28,13 @@ heißt und schon dasselbe Sprachmodell verwendet. Beide gehören zur **Ko-Famili
 
 ## 1. Ausgangslage
 
-**Koprotokoll kann heute:** Upload und Browser-Aufnahme, Transkription mit Parakeet v3,
-Sprechererkennung, Zusammenfassung mit lokalem LLM, Suche, Export, einen Bot für **Google Meet**,
-**Google Kalender** (Auto-Join) und **Gmail** (Recap), REST-API, Webhooks und MCP.
+**Koprotokoll kann heute:** Upload und Browser-Aufnahme, Transkription mit Primeline
+(alternativ Parakeet v3), Sprechererkennung, Zusammenfassung mit lokalem LLM, Suche,
+Export und Bots für **Google Meet, Jitsi und Teams-Web**. Kalender werden über Google,
+Graph, ICS, CalDAV und optional Outlook-COM gelesen; Recaps nutzen Gmail, SMTP oder
+Graph. Mailentwürfe und Aufgabenexport sind implementiert. Prüfgrenzen der nativen
+Programme und Anbieter stehen in [Einrichtung](einrichtung.md). REST-API, Webhooks
+und MCP bleiben verfügbar.
 
 **Kodiktat (heute Dictate / deutsche-transkription) kann heute:** Hotkey halten, sprechen, loslassen – der Text wird dort getippt, wo der
 Cursor steht. Es läuft auf Linux (X11 und Wayland), Windows und macOS, mit Tray-Symbol und
@@ -45,11 +49,11 @@ leer erkannte Stücke in 20-s-Teilen erneut versuchen. Außerdem kann Dictate an
 
 | Lücke | Warum sie wichtig ist |
 |---|---|
-| Kalender außer Google | In Firmen und Behörden laufen Termine fast immer über **Outlook/Exchange**, privat oft über Nextcloud, iCloud oder Thunderbird. |
-| E-Mail außer Gmail | Recaps sollen aus dem eigenen Postfach kommen – oder als **Entwurf** im eigenen Mailprogramm landen, damit man vor dem Senden drüberschauen kann. |
+| Kalender-Sonderfälle | Graph, CalDAV, ICS und Outlook-COM sind implementiert. EWS und EventKit fehlen; echte Windows-/Anbieterprüfungen stehen teilweise aus. |
+| Echte Mailprogramm-/Anbieterprüfungen | SMTP, Graph, EML und native Entwürfe sind implementiert. Thunderbird und klassisches Outlook müssen noch in echten Installationen geprüft werden. |
 | Meetings in Desktop-Apps | Viele nutzen die **Teams- oder Zoom-App**, nicht den Browser. Ein Bot ist dort oft nicht erlaubt oder unerwünscht. |
-| Teams, Zoom, Jitsi, BigBlueButton | Der Bot kann bisher nur Google Meet. In Deutschland sind **Teams**, **Jitsi** und **BigBlueButton** (Schulen, Verwaltung) sehr verbreitet. |
-| Deutsch-Qualität | Parakeet v3 macht bei kurzen deutschen Einwürfen Fehler („Danke“ → „Tá?“). Dictates deutsches Modell ist dafür besser geeignet. |
+| BBB- und Zoom-Bot | BBB hat einen Adapter mit ausstehender Live-Prüfung. Für Zoom ist der Zugangsweg noch zu entscheiden (#15). |
+| Qualitätsmessung echter Meetings | Primeline ist Standard und wurde auf einem synthetischen Dialog mit v3 verglichen. Eine menschlich geprüfte Hörreferenz für echte Meetings fehlt noch (#31). |
 | Zwei getrennte Projekte | Koprotokoll und Kodiktat laden jeweils ihr eigenes Modell und können nichts voneinander nutzen. |
 
 ## 2. Zielbild
@@ -141,7 +145,7 @@ messen), Kodiktat über Koprotokoll diktiert, Tests für den neuen Endpunkt grü
 | **ICS-Abo-Link** | jeden Kalender (Outlook „Kalender veröffentlichen“, Google „geheime iCal-Adresse“, Nextcloud, iCloud) | `icalendar` + `recurring-ical-events` | ✔ nur lesen, in der Oberfläche als **Experten-Option** (Serien-Termine, Zeitzonen, ganztägig) |
 | **CalDAV** | Nextcloud, iCloud, Posteo, mailbox.org, Fastmail, Thunderbird-Kalender auf CalDAV | schlanker `urllib`-Transport (PROPFIND/REPORT) + `icalendar`; Provider-Presets, mehrere Konten parallel | ✔ nur lesen; Benutzername + App-Passwort (Aufgaben/VTODO schreiben → AP3) |
 | **Microsoft 365 / Exchange Online** | neues Outlook, Outlook im Web, Teams-Termine | Microsoft Graph, Anmeldung per OAuth | ✔ Karte „Microsoft Kalender & Outlook“ (App in Entra ID registrieren, Rechte `Calendars.Read`, `Mail.Send`) |
-| **Outlook lokal (Windows)** | klassisches Outlook-Desktop mit Exchange oder PST | COM über `pywin32` (`Outlook.Application`) | (später) – ganz ohne Cloud-Registrierung; das **neue** Outlook für Windows kann kein COM |
+| **Outlook lokal (Windows)** | klassisches Outlook-Desktop mit Exchange oder PST | COM über `pywin32` (`Outlook.Application`) | Implementiert, ohne Cloud-Registrierung; echter Windows-Test offen. Das **neue** Outlook für Windows kann kein COM |
 | **Exchange lokal (On-Premises)** | Firmen mit eigenem Exchange | EWS über `exchangelib` | (später) |
 | **macOS-Kalender** | Apple Kalender (enthält oft alle Konten) | EventKit über `pyobjc` | (später) – gehört in die Begleit-App, nicht auf den Server |
 
@@ -156,13 +160,13 @@ messen), Kodiktat über Koprotokoll diktiert, Tests für den neuen Endpunkt grü
 
 **Fertig, wenn:** ICS und CalDAV mit einem echten Nextcloud-Kalender getestet sind (Tests mit
 nachgebautem Server bzw. ICS-Dateien inkl. Serien und Zeitzonen – ✔ `tests/test_integrations.py`,
-echte Anbieter-Konten stehen noch aus), Outlook-COM auf Windows manuell geprüft ist (später).
+echte Anbieter-Konten stehen noch aus), Outlook-COM auf Windows manuell geprüft ist (Implementierung und Tests mit COM-Nachbildung vorhanden).
 
 ### AP3 – E-Mail und Aufgaben in die eigenen Programme (S–M) ⭐
 
 **Ziel:** Recaps und Aufgaben dort, wo man ohnehin arbeitet – am liebsten als **Entwurf**.
 
-- Gemeinsame Schnittstelle `MailSender.send(...)` bzw. `.draft(...)`.
+- Gemeinsamer Versand über `MailSender.send(...)`; EML und native Entwürfe über `drafts.py` implementiert.
 
 | Weg | Wie | Nutzen |
 |---|---|---|
@@ -176,6 +180,12 @@ echte Anbieter-Konten stehen noch aus), Outlook-COM auf Windows manuell geprüft
 - **Aufgaben exportieren:** Action Items als CalDAV-Aufgaben (Nextcloud, Thunderbird),
   Outlook-Aufgaben (COM/Graph) oder `.ics` mit VTODO. Mit Verweis zurück auf die Stelle im Meeting.
 - Recap-Vorlage einheitlich (HTML + Text), auf Deutsch, mit Link zur Aufnahme.
+
+**Implementiert:** SMTP und Graph-Versand, native Entwürfe und EML-Download,
+VTODO-Download und gezielter Export nach CalDAV, Outlook-COM und Microsoft To Do.
+Die Einrichtung und Prüfgrenzen stehen in [docs/einrichtung.md](einrichtung.md).
+Tests mit lokalen SMTP-/CalDAV-Servern, COM-/Graph-Nachbildungen und Chromium sind vorhanden;
+echte Windows-/Thunderbird-/To-Do-/Nextcloud-Durchläufe stehen noch aus.
 
 **Fertig, wenn:** Recap per SMTP und als Thunderbird-/Outlook-Entwurf kommt, Aufgaben als VTODO
 in Nextcloud erscheinen.
@@ -227,7 +237,8 @@ aus der Oberfläche** der Plattform auslesen, um Sprecher automatisch zu benenne
 
 ### AP7 – Einfache Installation (M)
 
-- **Docker-Image** (Server inkl. ffmpeg und Chromium) und `docker compose` mit Ollama.
+- ✔ **Docker-Image** (Server inkl. ffmpeg und Chromium) und `docker compose` mit Ollama;
+  [Build, echter Upload und Neustart geprüft](nachweise/issue-19-docker.md).
 - **Installer** für Windows/macOS für Kodiktat, Server optional mitinstallierbar.
 - Erststart-Assistent: Modell laden, Sprache wählen, Kalender/E-Mail verbinden.
 
