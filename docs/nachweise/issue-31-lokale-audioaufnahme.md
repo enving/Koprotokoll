@@ -738,3 +738,19 @@ Die Anleitung beschreibt den gezielten Austausch eines veralteten Eintrags.
 Vor dieser reinen Dokumentationsänderung bestanden am unveränderten Code von
 `0819fcf` **96 Tests in 37,50 s**, am Basisstand `c71326c` **87 Tests in 33,78 s**;
 beide Läufe mit `pytest -q -ra`, ohne übersprungene Tests.
+
+
+### Nutzer bestätigt den Alt-Doppeltipp
+
+Am 04.11.2026 meldete der Nutzer nach der erneuerten Eingabefreigabe:
+**„alt doppelklick funktioniert jez“**. Damit ist die Funktion des physischen
+Doppeltipps durch eine Nutzerrückmeldung bestätigt. Die vorangegangene Bitte,
+einen Passwortdialog zu bestätigen, war zu diesem Zeitpunkt überholt.
+
+Die Rückmeldung nennt Start und Stopp nicht getrennt. Ein vom Agenten
+beobachteter vollständiger Start-/Stopp-Ablauf oder eine neue Prüfung der
+resultierenden Aufnahme wird daraus nicht abgeleitet. Für diese Rückmeldung
+wurde das App-Bundle nicht verändert, gebaut oder neu signiert.
+
+Prüfung dieser Dokumentation: `pytest -q -ra` → **96 bestanden in 35,30 s**,
+keine übersprungenen Tests; `git diff --check` ohne Befund.
