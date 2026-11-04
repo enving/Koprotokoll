@@ -327,3 +327,43 @@ Die Prüfung der Änderung mit `.venv/bin/pytest -q -ra` bestand am 04.11.2026
 mit **87 Tests in 84,21 s**, keine übersprungenen Tests. Die Tests liefen
 teilweise parallel zur Modellverarbeitung; deren Laufzeiten sind deshalb
 kein isolierter Leistungsbenchmark. `git diff --check` meldete keine Fehler.
+
+### Ergebnis des privaten Realtests
+
+Getesteter Code: `1e1af11` mit dem zuvor beschriebenen WAV-Ausschnitt.
+Die Wiederholung endete mit `status=done` und
+`meta.diarization.status=completed`: **eine automatisch geschätzte
+Sprechergruppe**, 12 Rohabschnitte der Diarisierung, sieben Textabschnitte
+mit insgesamt 484 durch Leerzeichen getrennten Wörtern. Die erste Textzeit
+liegt bei 0,11 s, die letzte bei 180,00 s. Das Transkript reicht damit zeitlich
+bis zum Ausschnittsende; seine inhaltliche Vollständigkeit ist nicht geprüft.
+Die Sprechererkennung wurde ausgeführt und lieferte keinen Fehler-Rückfall.
+
+Dieses Ergebnis bestätigt keine Mehrsprechertrennung. Der Nutzer beschreibt
+verschiedene Personen in der gesamten Aufnahme; ob sie bereits in diesen
+ersten drei Minuten sprechen, wurde nicht unabhängig am Originalton geprüft.
+Die Zahl der realen Personen darf daher nicht aus der einen Modellgruppe
+abgeleitet werden. Ohne menschliche Wort-/Sprecherreferenz werden für diesen
+Realtest keine WER-/DER-Werte angegeben.
+
+Die Netzwerkprüfung wies externe IPv4- und IPv6-Verbindungen mit `EPERM` ab;
+Loopback blieb erreichbar. Der Ausschnittshash stimmt mit dem Pipeline-Eingang
+überein. Hash und Änderungszeit des MOV-Originals wurden nach dem Lauf erneut
+verglichen und sind unverändert.
+
+Gemessene Laufzeiten: Transkription 301,333 s, Diarisierung 1.034,316 s,
+Gesamtlauf 1.338,424 s. Die Prozess-Stichprobe zeigte aktive ONNX-Inferenz.
+Eine Systemmessung während des Laufs zeigte 0 % CPU-Leerlauf, 127 laufbereite
+Prozesse und eine Last über 300; der Testprozess hatte normale Priorität.
+Andere Anwendungen wurden nicht beendet oder umkonfiguriert. Diese Messung
+belegt hohe konkurrierende Last, nicht deren genauen Anteil an der Laufzeit.
+
+Im lokalen Realtest-Ordner liegen die vollständige extrahierte Tonspur,
+der dreiminütige WAV-/MP3-Ausschnitt und im Unterordner
+`run-000000-000300-wiederholung/` das unveränderte `ergebnis.json`,
+`transkript.txt`, `pruefbericht.json`, `pruefbericht.md`, `messung.json`
+und `pipeline.log`. Es werden keine Gesprächsinhalte ins Repository übernommen.
+
+Die erneute Abschlussprüfung vor dem Dokumentationscommit meldete
+`.venv/bin/pytest -q -ra`: **87 bestanden in 177,90 s**, keine übersprungenen
+Tests. Der Produktcode blieb seit `1e1af11` unverändert.
