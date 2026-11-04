@@ -1,9 +1,10 @@
 # Prüfprotokoll: lokale Hardwareaufnahme und Sprecherzuordnung (#31)
 
-Dieses Protokoll beschreibt den reproduzierbaren Nachweis. Aufnahmen und
-Referenzen bleiben außerhalb des Git-Verlaufs. Es dokumentiert ausschließlich
-freigegebene Testinhalte; reale Gespräche, Namen und Zugangsdaten gehören nicht
-hinein.
+Dieses Protokoll beschreibt den reproduzierbaren Nachweis. Audioaufnahmen und
+Referenzdateien bleiben außerhalb des Git-Verlaufs. Die Screenshotgalerie enthält
+den vom Nutzer am 04.11.2026 ausdrücklich zur Aufnahme in den Repo-Nachweis
+bereitgestellten Transkriptausschnitt. Die Übernahme bezieht sich auf dieses
+Bild; weitere Gesprächsinhalte und Zugangsdaten werden nicht übernommen.
 
 Die [Screenshots der Mac-App und der Freigaben](#screenshots-der-mac-app-und-der-freigaben)
 zeigen die während der Erprobung sichtbaren Einstellungen und macOS-Dialoge.
@@ -608,15 +609,50 @@ Ordner Dokumente und startet dort den lokalen Server. Das Bild zeigt die
 zusätzliche Dateizugriffsabfrage dieser Installation. Es ist kein Nachweis
 einer Mikrofon-, Systemaudio- oder Bildschirmfreigabe.
 
+### Separate Systemaudio-Abfrage
+
+![macOS fragt Koprotokoll nach der Erlaubnis für Systemaudio; der Zwecktext schließt Bildschirminhalte aus](assets/issue-31/systemaudio-freigabe.png)
+
+**Weiterer Nutzeranhang vom 04.11.2026.** Der Dialog fragt ausdrücklich nach
+Systemaudio. Der Zwecktext erklärt, dass Koprotokoll Systemton für das Protokoll
+aufnimmt und keine Bildschirminhalte erfasst. Sichtbar ist die Anfrage vor der
+Entscheidung. Den später eingeschalteten Audioeintrag dokumentiert die oben
+beschriebene Prüfung der Systemeinstellungen.
+
+### Fertige Auswertung der Hardwareaufnahme
+
+![Koprotokoll zeigt das Transkript einer 2 Minuten 13 Sekunden langen Hardwareaufnahme mit vier automatisch geschätzten Sprechergruppen](assets/issue-31/transkript-realaufnahme.png)
+
+**Vom Nutzer zur Aufnahme in den Repo-Nachweis bereitgestellt.** Das Bild zeigt
+die 133-Sekunden-Aufnahme, den Audioplayer und das Rohtranskript mit Zeitmarken
+und vier Sprecherlabels. Die Zusammenfassung verwendet die Heuristik.
+Die lokale API bestätigte bei dieser Ergänzung `status: done`, Fortschritt 1,0
+und vier Sprechergruppen. Die Aufnahme wurde inzwischen vollständig verarbeitet.
+
+Der sichtbare Wortlaut ist ein Modellergebnis und enthält erkennbare Fehler.
+Vier Labels belegen vier Modellgruppen, keine unabhängig bestätigte Zahl realer
+Personen. Das Bild dient als Nachweis des sichtbaren Ergebnisses; eine menschlich
+geprüfte Wort-/Sprecherreferenz und Qualitätsmessung werden daraus nicht abgeleitet.
+Die Originalaufnahme bleibt außerhalb des Git-Verlaufs.
+
+Der gleichzeitig bereitgestellte Zertifikatsdialog stammt laut Nutzer aus einer
+anderen Anwendung. Er wird deshalb nicht als Koprotokoll-Befund übernommen;
+an Zertifikatsprüfung oder Vertrauenseinstellungen wurde nichts geändert.
+
+Prüfung dieser Ergänzung: sechs Bildverweise und PNG-Daten erfolgreich geprüft,
+Text-/EXIF-Metadaten entfernt, Originale unverändert. `.venv/bin/pytest -q -ra`:
+**96 bestanden in 62,08 s**, keine übersprungenen Tests.
+
 ### Herkunft und Bereinigung
 
 Bildpixel, Abmessungen und Farbprofile wurden unverändert übernommen. Entfernt
 wurden ausschließlich PNG-Text-/EXIF-Metadaten. Alle bild- und farbrelevanten
 PNG-Blöcke wurden vor und nach der Übernahme byteweise verglichen; die Originale
-blieben unverändert. Die vier Ansichten wurden auf sichtbare private Inhalte
+blieben unverändert. Die ursprünglichen vier Ansichten wurden auf sichtbare private Inhalte
 geprüft. Doppelte Bilder und eine Ansicht mit einem fremden Fenster am Rand
-wurden nicht übernommen. Gesprächsinhalte, Audiodateien und Zugangsdaten sind
-in diesen Bildern nicht enthalten.
+wurden nicht übernommen. Die beiden ergänzten Nutzeranhänge zeigen den
+Systemaudio-Dialog und den ausdrücklich zur Übernahme beauftragten
+Transkriptausschnitt. Audiodateien und Zugangsdaten sind nicht enthalten.
 
 Prüfung der Ergänzung: vier relative Bildverweise und die internen Zielabschnitte
 vorhanden, PNG-Prüfsummen und dekodierbare Bilddaten geprüft, keine Text-/EXIF-Blöcke.
@@ -629,6 +665,8 @@ vorhanden, PNG-Prüfsummen und dekodierbare Bilddaten geprüft, keine Text-/EXIF
 | `app-tastenauswahl.png` | Nutzeranhang `image.png` mit geöffneter Doppeltipp-Auswahl |
 | `mikrofon-freigabe.png` | Screenshot-Ordner: `Bildschirmfoto 2026-11-04 um 12.01.03.png` |
 | `dokumente-freigabe.png` | Screenshot-Ordner: `Bildschirmfoto 2026-11-04 um 11.49.19.png` |
+| `systemaudio-freigabe.png` | Weiterer Nutzeranhang `image.png` mit Systemaudio-Abfrage |
+| `transkript-realaufnahme.png` | Weiterer Nutzeranhang `image.png` mit Ergebnis der 133-Sekunden-Aufnahme |
 
 <details>
 <summary>SHA-256 der unveränderten Originaldateien</summary>
@@ -638,6 +676,8 @@ f282e1a8527afb1ba98ef3fbaccb773bc52fdde7895cac5652ddd5e5989d0213  app-einstellun
 ed92c079c110a96b3acd8799941c5e5a5e1d99c674249be1bea7e6963b5c2fd8  app-tastenauswahl.png (Original)
 1630214a6021bea78c1ece3676c45adf170e655018900f8269f1f330d59e0312  mikrofon-freigabe.png (Original)
 fd5741a1192b4fee9d9aa36f8f28c8780a599b1c66eb1f37cf0fd6486ed72395  dokumente-freigabe.png (Original)
+b2e61c63c923a5faf90e12e20a482b3c1f568f5fd7001a7eaa18e7cb78db801b  systemaudio-freigabe.png (Original)
+cc753866444a0d3eca8267fe7f9744df4b73ea8e7b63194a14456f21baf10772  transkript-realaufnahme.png (Original)
 ```
 
 </details>
@@ -647,3 +687,26 @@ sind [im Audioweg-Abschnitt](#reiner-systemaudio-zugriff-auf-nutzerwunsch-041120
 dokumentiert. Die hier eingebundenen Dialogbilder ersetzen diesen gesonderten
 Nachweis nicht. Der globale Hotkey und die menschliche Wort-/Sprecherreferenz
 bleiben offen.
+
+## Nachprüfung des weiterhin ausgefallenen Tastenkürzels
+
+Nutzerbefund nach der Aufnahme: Der Alt-Doppeltipp funktioniert weiterhin
+nicht. Am 04.11.2026 zeigte die native macOS-Eingabeüberwachung Koprotokoll
+eingeschaltet, während die App weiterhin „Eingabeüberwachung fehlt“ meldete.
+Damit wird die Abtastung durch die vorhandene Freigabeprüfung nicht gestartet;
+die reinen Detektortests können diesen macOS-Zustand nicht abdecken.
+
+Der laufende Prozess stammte von 11:59:21 Uhr, das App-Binary war zuletzt um
+12:02:19 Uhr gebaut worden. Seine Ad-hoc-Signatur bindet die Identität an den
+Codehash. Als erste Prüfung wurde ausschließlich die Menüleisten-App aus dem
+unveränderten Bundle neu gestartet; der Server blieb bestehen, keine Aufnahme
+lief. Danach meldete auch der neue Prozess noch fehlende Eingabeüberwachung.
+Ein einfacher Neustart hat den Fehler damit nicht behoben.
+
+Die Hypothese einer veralteten, zum aktuellen Build nicht wirksamen Freigabe
+wird durch erneutes Anwenden des vorhandenen Koprotokoll-Eintrags geprüft.
+macOS verlangte dafür eine Authentifizierung im Systemdialog. Zum Zeitpunkt
+dieser Dokumentation war diese Bestätigung noch ausstehend. Der Agent hat
+keine Zugangsdaten eingegeben und keine Berechtigungsprüfung umgangen.
+Die tatsächliche Hotkey-Reparatur und ein Start-/Stopp-Test per Doppeltipp
+sind bis zu dieser Bestätigung nicht nachgewiesen.
