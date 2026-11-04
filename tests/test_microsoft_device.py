@@ -269,3 +269,42 @@ def test_parallel_device_checks_reserve_provider_interval(tmp_path, monkeypatch)
         release.set()
         worker.join(3)
     assert not worker.is_alive() and not errors
+
+
+def test_slow_device_check_cannot_be_overtaken_after_interval(tmp_path, monkeypatch):
+    import threading
+    from koprotokoll.config import Settings
+    from koprotokoll.db import Database
+
+    clock = [100.0]
+    monkeypatch.setattr(ms.time, 'time', lambda: clock[0])
+    db = Database(tmp_path / 'db.sqlite')
+    client = ms.MicrosoftClient(Settings(data_dir=tmp_path, microsoft_client_id='client'), db)
+    db.set_kv('microsoft_device', {'device_code': 'code', 'expires': 1000,
+                                 'interval': 5, 'next_poll': 0, 'scope': 'offline_access'})
+    entered, release, calls, results = threading.Event(), threading.Event(), [], []
+
+    def http(*args, **kwargs):
+        calls.append(clock[0])
+        if len(calls) == 1:
+            entered.set()
+            assert release.wait(3)
+            raise ms.MicrosoftError('Langsamer abfragen', 'slow_down')
+        raise ms.MicrosoftError('Noch nicht bestätigt', 'authorization_pending')
+
+    monkeypatch.setattr(ms, '_http', http)
+    worker = threading.Thread(target=lambda: results.append(client.poll_device()))
+    worker.start()
+    assert entered.wait(2)
+    clock[0] = 106
+    try:
+        assert client.poll_device() == {'status': 'pending', 'interval': 5}
+        assert len(calls) == 1
+    finally:
+        release.set()
+        worker.join(3)
+    assert results == [{'status': 'pending', 'interval': 10}]
+    assert db.get_kv('microsoft_device')['interval'] == 10
+    clock[0] = 117
+    assert client.poll_device() == {'status': 'pending', 'interval': 10}
+    assert db.get_kv('microsoft_device')['next_poll'] == 127

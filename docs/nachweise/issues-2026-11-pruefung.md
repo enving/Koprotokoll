@@ -3,7 +3,10 @@
 Auftrag: alle direkt umsetzbaren offenen Aufgaben abarbeiten. Ausgang:
 `75679f72884d2b63e97e4c2785353f4b12855c37`, Anwendungsstand dieser Prüfung:
 `4525dde` (4. November 2026, Codex / GPT-6.1, GitHub-Konto `enving`).
-Die nachfolgende Doku-Aktualisierung ändert keinen Anwendungscode.
+Nach der ersten Schlussprüfung wurde zusätzlich der Fall einer langsamen
+Microsoft-Codeprüfung abgesichert: Pro Anmeldegeneration läuft höchstens eine
+Provider-Anfrage; auch nach Ablauf des Intervalls kann sie nicht überholt werden.
+Dieser Nachtrag und der Regressionstest gehören zum selben Folgecommit.
 
 ## Umsetzungen und Grenzen
 
@@ -30,7 +33,7 @@ ohne `agent-ready`-Label. Diese Aufgaben wurden nicht als erledigt ausgegeben.
 
 ## Gesamttests und Review
 
-`python -m pytest -q -ra`: **267 bestanden**, keine übersprungenen Tests.
+`python -m pytest -q -ra`: **268 bestanden**, keine übersprungenen Tests.
 Die neuen Oberflächenabläufe wurden in echtem Chromium gegen die lokale API
 geprüft; SMTP bei 1280/390 Pixeln und jeweils hell/dunkel. Der mechanische
 Impeccable-Detektor für die drei Frontend-Dateien lieferte keine Befunde.

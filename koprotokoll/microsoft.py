@@ -82,6 +82,7 @@ class MicrosoftClient:
         self.s, self.db = settings, db
         self._token_lock = threading.RLock()
         self._auth_generation = 0
+        self._device_poll_generation: int | None = None
 
     # -- Konfiguration ---------------------------------------------------------
     def _client(self) -> tuple[str, str]:
@@ -178,34 +179,40 @@ class MicrosoftClient:
                 self.db.set_kv("microsoft_device", None)
                 raise MicrosoftError("Der Anmeldecode ist abgelaufen. Bitte neu starten.")
             interval = pending["interval"]
-            if time.time() < pending["next_poll"]:
+            if self._device_poll_generation == generation or time.time() < pending["next_poll"]:
                 return {"status": "pending", "interval": interval}
-            # Das Intervall reservieren, bevor ein zweiter Browser ebenfalls anfragt.
+            # Auch eine langsame Anfrage darf nicht von einer zweiten überholt werden.
+            self._device_poll_generation = generation
             self.db.set_kv("microsoft_device", {**pending, "next_poll": time.time() + interval})
-        client_id, _ = self._client()
         try:
-            token = _http("POST", TOKEN_URL, form={
-                "client_id": client_id, "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
-                "device_code": pending["device_code"],
-            })
-        except MicrosoftError as e:
+            client_id, _ = self._client()
+            try:
+                token = _http("POST", TOKEN_URL, form={
+                    "client_id": client_id, "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+                    "device_code": pending["device_code"],
+                })
+            except MicrosoftError as e:
+                with self._token_lock:
+                    self._check_pending(generation, pending)
+                    if e.code in ("authorization_pending", "slow_down"):
+                        if e.code == "slow_down":
+                            interval += 5
+                        self.db.set_kv("microsoft_device", {**pending, "interval": interval,
+                                                            "next_poll": time.time() + interval})
+                        return {"status": "pending", "interval": interval}
+                    self.db.set_kv("microsoft_device", None)
+                    if e.code in ("expired_token", "authorization_declined"):
+                        raise MicrosoftError("Anmeldung abgelehnt oder abgelaufen. Bitte bei Bedarf neu starten.") from None
+                    raise
             with self._token_lock:
                 self._check_pending(generation, pending)
-                if e.code in ("authorization_pending", "slow_down"):
-                    if e.code == "slow_down":
-                        interval += 5
-                    self.db.set_kv("microsoft_device", {**pending, "interval": interval,
-                                                        "next_poll": time.time() + interval})
-                    return {"status": "pending", "interval": interval}
+                self._store_tokens({**token, "scope": token.get("scope") or pending["scope"]}, "device")
                 self.db.set_kv("microsoft_device", None)
-                if e.code in ("expired_token", "authorization_declined"):
-                    raise MicrosoftError("Anmeldung abgelehnt oder abgelaufen. Bitte bei Bedarf neu starten.") from None
-                raise
-        with self._token_lock:
-            self._check_pending(generation, pending)
-            self._store_tokens({**token, "scope": token.get("scope") or pending["scope"]}, "device")
-            self.db.set_kv("microsoft_device", None)
-            return {"status": "connected", **self.status()}
+                return {"status": "connected", **self.status()}
+        finally:
+            with self._token_lock:
+                if self._device_poll_generation == generation:
+                    self._device_poll_generation = None
 
     def _check_pending(self, generation: int, pending: dict) -> None:
         current = self.db.get_kv("microsoft_device", {})
