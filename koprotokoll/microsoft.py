@@ -182,8 +182,8 @@ class MicrosoftClient:
             if self._device_poll_generation == generation or time.time() < pending["next_poll"]:
                 return {"status": "pending", "interval": interval}
             # Auch eine langsame Anfrage darf nicht von einer zweiten überholt werden.
-            self._device_poll_generation = generation
             self.db.set_kv("microsoft_device", {**pending, "next_poll": time.time() + interval})
+            self._device_poll_generation = generation
         try:
             client_id, _ = self._client()
             try:

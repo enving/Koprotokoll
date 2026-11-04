@@ -33,7 +33,7 @@ ohne `agent-ready`-Label. Diese Aufgaben wurden nicht als erledigt ausgegeben.
 
 ## Gesamttests und Review
 
-`python -m pytest -q -ra`: **268 bestanden**, keine übersprungenen Tests.
+`python -m pytest -q -ra`: **269 bestanden**, keine übersprungenen Tests.
 Die neuen Oberflächenabläufe wurden in echtem Chromium gegen die lokale API
 geprüft; SMTP bei 1280/390 Pixeln und jeweils hell/dunkel. Der mechanische
 Impeccable-Detektor für die drei Frontend-Dateien lieferte keine Befunde.

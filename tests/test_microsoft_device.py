@@ -308,3 +308,34 @@ def test_slow_device_check_cannot_be_overtaken_after_interval(tmp_path, monkeypa
     clock[0] = 117
     assert client.poll_device() == {'status': 'pending', 'interval': 10}
     assert db.get_kv('microsoft_device')['next_poll'] == 127
+
+
+def test_database_lock_does_not_leave_device_poll_stuck(tmp_path, monkeypatch):
+    import sqlite3
+    import time
+    from koprotokoll.config import Settings
+    from koprotokoll.db import Database
+
+    path = tmp_path / 'db.sqlite'
+    db = Database(path)
+    client = ms.MicrosoftClient(Settings(data_dir=tmp_path, microsoft_client_id='client'), db)
+    db.set_kv('microsoft_device', {'device_code': 'code', 'expires': time.time() + 600,
+                                 'interval': 5, 'next_poll': 0, 'scope': 'offline_access'})
+    # Dieselbe echte Schreibsperre wie bei länger laufender zweiter Verbindung,
+    # nur mit kurzer Test-Wartezeit statt des fünfsekündigen SQLite-Standards.
+    db._conn.execute('PRAGMA busy_timeout=1')
+    writer = sqlite3.connect(path)
+    writer.execute('BEGIN IMMEDIATE')
+    try:
+        with pytest.raises(sqlite3.OperationalError, match='locked'):
+            client.poll_device()
+    finally:
+        writer.rollback()
+        writer.close()
+    calls = []
+    def http(*args, **kwargs):
+        calls.append(True)
+        raise ms.MicrosoftError('Noch nicht bestätigt', 'authorization_pending')
+    monkeypatch.setattr(ms, '_http', http)
+    assert client.poll_device() == {'status': 'pending', 'interval': 5}
+    assert calls == [True]
