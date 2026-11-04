@@ -77,6 +77,7 @@ Kanzleien, Behörden oder einfach vertrauliche Team-Meetings ist das oft ein No-
 - **Meeting-Bot** tritt Google Meet, Jitsi und Microsoft Teams als Teilnehmer bei – per Link oder automatisch aus dem Kalender
 - Aufnahme im Browser: Mikrofon oder Ton eines Tabs (Zoom, Teams, Meet im Browser)
 - Hardware-/Loopback-Aufnahme als WAV, unabhängig von Meeting-App und Browser ([Anleitung](docs/hardware-aufnahme.md))
+- Mac-App mit Einstellungen für Audioquelle und Doppeltipp-Taste; standardmäßig Alt zweimal für Start/Stopp ([Starten](docs/hardware-aufnahme.md#mac-per-alt-doppeltipp-aufnehmen))
 - Upload von MP3, MP4, WAV, M4A, WebM, OGG, FLAC …
 
 **🧠 Verstehen**
@@ -105,6 +106,13 @@ Kanzleien, Behörden oder einfach vertrauliche Team-Meetings ist das oft ein No-
 </table>
 
 ## 🖼️ So sieht's aus
+
+<p align="center">
+  <img src="docs/nachweise/assets/issue-31/transkript-realaufnahme.png" alt="Echte Hardwareaufnahme in Koprotokoll: Audioplayer und Transkript mit Zeitmarken und automatisch geschätzten Sprechergruppen" width="100%">
+</p>
+
+Echte Hardwareaufnahme mit 2:13 Minuten Laufzeit, lokal transkribiert und mit
+Sprechergruppen versehen. [Prüfprotokoll und Grenzen des Nachweises](docs/nachweise/issue-31-lokale-audioaufnahme.md#fertige-auswertung-der-hardwareaufnahme).
 
 <p align="center">
   <img src="docs/assets/screenshot-uebersicht.png" alt="Übersicht eines Meetings mit Zusammenfassung, Action Items und Redeanteilen" width="100%">

@@ -161,6 +161,7 @@ class ActiveCapture:
     ready: threading.Event | None = None
     system_path: Path | None = None
     mic_path: Path | None = None
+    error: str | None = None
 
 
 class HardwareRecorder:
@@ -192,7 +193,7 @@ class HardwareRecorder:
             if active is None:
                 return {"active": False}
             return {"active": active.process.poll() is None, "device": active.device,
-                    "started_at": active.started_at, "level_db": active.level_db}
+                    "started_at": active.started_at, "level_db": active.level_db, "error": active.error}
 
     def start(self, device: str, channels: int = 2, sample_rate: int = 48_000) -> dict:
         with self._lock:
@@ -206,7 +207,7 @@ class HardwareRecorder:
             if is_system_mix:
                 if sys.platform != "darwin":
                     raise ValueError("Systemtonaufnahme ist in dieser Version nur unter macOS verfügbar.")
-                command = [self._system_helper_executable(), str(system_path), str(mic_path)]
+                command = [self._system_helper_executable(), "--capture-audio", str(system_path), str(mic_path)]
             else:
                 command = record_command(device, Path("-"), channels=channels, sample_rate=sample_rate)
             try:
@@ -222,7 +223,7 @@ class HardwareRecorder:
             target = self._read_system_status if is_system_mix else self._write_pcm
             active.reader = threading.Thread(target=target, args=(active,), daemon=True)
             active.reader.start()
-            if not active.ready.wait(timeout=8):
+            if not active.ready.wait(timeout=60 if is_system_mix else 8) or active.error:
                 self._active = None
                 if process.poll() is None:
                     process.send_signal(signal.SIGINT)
@@ -232,21 +233,17 @@ class HardwareRecorder:
                     process.kill()
                     process.wait()
                 active.reader.join(timeout=5)
-                raise RuntimeError("Der Audioeingang lieferte beim Start keine Samples.")
+                raise RuntimeError(active.error or "Der Audioeingang lieferte beim Start keine Samples. Audio-Freigaben und Quelle prüfen.")
             active.started_at = time.time()
             return self.status()
 
     def _system_helper_executable(self) -> str:
-        executable = self.capture_dir / "capture-macos"
-        if not executable.exists() or executable.stat().st_mtime < MACOS_CAPTURE_HELPER.stat().st_mtime:
-            try:
-                proc = subprocess.run(["swiftc", "-parse-as-library", str(MACOS_CAPTURE_HELPER),
-                                       "-o", str(executable)], capture_output=True, text=True, check=False)
-            except FileNotFoundError as exc:
-                raise RuntimeError("Für die macOS-Systemtonaufnahme werden die Swift-Entwicklerwerkzeuge benötigt.") from exc
-            if proc.returncode != 0:
-                raise RuntimeError(f"macOS-Audioweg konnte nicht vorbereitet werden: {proc.stderr.strip()[-500:]}")
-        return str(executable)
+        from .config import Settings
+        from .desktop import build_app
+
+        # Derselbe App-Bundle trägt die Audio-Zwecktexte und die macOS-Identität.
+        app = build_app(Settings(data_dir=self.capture_dir.parent), configure_launcher=False)
+        return str(app / "Contents" / "MacOS" / "Koprotokoll")
 
     @staticmethod
     def _write_pcm(active: ActiveCapture) -> None:
@@ -284,8 +281,16 @@ class HardwareRecorder:
             except (json.JSONDecodeError, UnicodeDecodeError):
                 continue
             active.level_db = float(status.get("level_db", -120.0))
+            if status.get("error"):
+                active.error = str(status["error"])
+                if active.ready is not None:
+                    active.ready.set()
+                continue
             if status.get("ready") and active.ready is not None:
                 active.ready.set()
+        if active.ready is not None and not active.ready.is_set():
+            active.error = active.error or "Systemaudio-Aufnahme wurde vor dem ersten Sample beendet. Audio-Freigaben prüfen."
+            active.ready.set()
 
     def stop(self) -> tuple[Path, float, str]:
         with self._lock:
@@ -304,6 +309,10 @@ class HardwareRecorder:
             active.reader.join(timeout=5)
             if active.reader.is_alive():
                 raise RuntimeError("Die Audioaufnahme konnte nicht sauber abgeschlossen werden.")
+        if active.error:
+            raise RuntimeError(active.error)
+        if active.system_path is not None and active.process.returncode:
+            raise RuntimeError("Die Systemaudio-Aufnahme wurde mit einem Fehler beendet; die Spuren bleiben lokal.")
         if active.system_path is not None and active.mic_path is not None:
             if not active.system_path.is_file() or not active.mic_path.is_file():
                 raise RuntimeError("Systemton oder Standardmikrofon lieferte keine Audiodatei.")

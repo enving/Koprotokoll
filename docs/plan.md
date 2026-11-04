@@ -189,7 +189,7 @@ in Nextcloud erscheinen.
 - **Systemton aufnehmen**, getrennt vom Mikrofon (zwei Spuren → bessere Sprechertrennung):
   - Linux: PipeWire/PulseAudio-„Monitor“-Quelle
   - Windows: WASAPI-Loopback (z. B. `soundcard` oder `PyAudioWPatch`)
-  - macOS: ScreenCaptureKit (ab macOS 13) über `pyobjc`; als Notlösung BlackHole
+  - macOS: Core-Audio-Taps und AVAudioEngine im nativen App-Paket, siehe [Audioaufnahme](hardware-aufnahme.md); alternativ ein vorhandener Loopback-Eingang
 - **Meeting erkennen:** Termin aus dem Kalender-Planer des Servers *oder* lokal: Teams-/Zoom-/Webex-
   Prozess aktiv und Mikrofon in Benutzung → Hinweis *„Meeting erkannt – aufnehmen?“*.
   **Nie automatisch ohne Klick aufnehmen.**

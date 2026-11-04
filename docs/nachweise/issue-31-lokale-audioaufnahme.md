@@ -1,9 +1,13 @@
 # Prüfprotokoll: lokale Hardwareaufnahme und Sprecherzuordnung (#31)
 
-Dieses Protokoll beschreibt den reproduzierbaren Nachweis. Aufnahmen und
-Referenzen bleiben außerhalb des Git-Verlaufs. Es dokumentiert ausschließlich
-freigegebene Testinhalte; reale Gespräche, Namen und Zugangsdaten gehören nicht
-hinein.
+Dieses Protokoll beschreibt den reproduzierbaren Nachweis. Audioaufnahmen und
+Referenzdateien bleiben außerhalb des Git-Verlaufs. Die Screenshotgalerie enthält
+den vom Nutzer am 04.11.2026 ausdrücklich zur Aufnahme in den Repo-Nachweis
+bereitgestellten Transkriptausschnitt. Die Übernahme bezieht sich auf dieses
+Bild; weitere Gesprächsinhalte und Zugangsdaten werden nicht übernommen.
+
+Die [Screenshots der Mac-App und der Freigaben](#screenshots-der-mac-app-und-der-freigaben)
+zeigen die während der Erprobung sichtbaren Einstellungen und macOS-Dialoge.
 
 ## Aufbau
 
@@ -427,3 +431,351 @@ Abschlussprüfung dieser Fortsetzung: `.venv/bin/pytest -q -ra` meldete
 **87 bestanden in 138,79 s**, keine übersprungenen Tests.
 `git diff --check` meldete keine Formatfehler; der Produktcode wurde nicht
 geändert.
+
+## Mac-Menüleiste und Alt-Doppeltipp (04.11.2026)
+
+Bedienweg für den anschließenden Nutzertest ergänzt:
+[`Koprotokoll.command`](../../Koprotokoll.command) baut und öffnet eine lokale
+Menüleisten-App; Ablauf und Voraussetzungen stehen in der
+[Aufnahmeanleitung](../hardware-aufnahme.md#mac-per-alt-doppeltipp-aufnehmen).
+Die vorhandenen Aufnahme-Endpunkte übernehmen Start und Stopp. Es werden keine
+neuen Audio- oder Transkriptionswege eingeführt.
+
+Prüfungen unter macOS auf Apple Silicon:
+
+- `.venv/bin/pytest -q -ra`: abschließend **90 bestanden in 109,85 s**, keine übersprungenen Tests.
+  Der neue native Detektortest umfasst neun Fälle einschließlich Alt-Kombination,
+  langem Halten, Zeitüberschreitung und wiederholtem Umschalten.
+- Swift-App tatsächlich gebaut; `codesign --verify --deep --strict` und
+  `zsh -n Koprotokoll.command` erfolgreich.
+- App lokal gestartet, Serverstart und wiederholte Statusabfragen mit HTTP 200
+  beobachtet. Geräteabfrage nach einem anfänglichen Timeout mit längerer
+  Wartezeit wiederholt; die gespeicherte Quelle ist verfügbar.
+- `GET /api/capture` bestätigte den Ruhezustand. Es wurde keine neue echte
+  Aufnahme zur Prüfung dieser Steuerung ausgelöst.
+
+Der globale physische Doppeltipp, macOS-Eingabeüberwachung und der vollständige
+Start-/Stopp-Ablauf über die native App sind noch nicht bestätigt. Der
+UI-Zugriff konnte die erste Fehlermeldung lesen, erreichte danach die reine
+Menüleiste nicht (`noWindowsAvailable` bzw. `timeoutReached`). Die vorhandenen
+Grenzen beim echten Systemton bleiben bestehen. Dies schließt #31 nicht ab.
+
+### Einstellungen direkt in der Mac-App (04.11.2026)
+
+Auf Nutzerwunsch hat dieselbe native App jetzt ein dauerhaftes
+Einstellungsfenster: Audioquelle, Tastenkürzel ein/aus, Doppeltipp auf Alt,
+Control oder Umschalt, Status der Eingabeüberwachung, Prüfung/Anforderung der
+Freigabe und Einstieg in die macOS-Einstellungen. Start/Stopp und der Zugang
+zu den Meetings sind ebenfalls im Fenster erreichbar. Das Fenster öffnet sich
+beim App-Start und beim erneuten Öffnen; das Ko-Menü enthält „Einstellungen …“.
+Ein Finder-Einstieg verweist auf das erzeugte App-Paket, ohne eine vorhandene
+andere Installation zu überschreiben.
+
+Die vorhandene Audioquellen-Auswahl bleibt erhalten. Alle Einstellungen liegen
+an derselben Stelle in den App-Präferenzen, statt als zusätzliche Server- oder
+Browserkonfiguration. Ändern oder Abschalten des Kürzels verwirft einen
+begonnenen Doppeltipp. Während einer Aufnahme sind die Einstellungen gesperrt.
+
+Prüfung: `.venv/bin/pytest -q -ra` meldete **92 bestanden in 104,58 s**, keine
+übersprungenen Tests. Der native Test umfasst nun 14 Fälle einschließlich
+Präferenz-Persistenz, Übernahme der vorhandenen Audioquelle, ungültigem
+Tastennamen, Tastenwechsel und Abschalten zwischen zwei Tipps. Zwei zusätzliche
+Python-Tests prüfen den Finder-Einstieg und den Erhalt einer vorhandenen App.
+Swift-Build und Codesign-Prüfung bestanden.
+
+Das neue Fenster wurde tatsächlich mit dem nativen UI-Werkzeug gelesen und
+visuell geprüft: alle Bereiche und Schaltflächen sichtbar, gespeicherte
+Audioquelle ausgewählt, Alt als Standard, Eingabeüberwachung als fehlend
+gekennzeichnet. Ausschalten des Kürzels deaktivierte die Tastenwahl sichtbar;
+anschließend wurde der eingeschaltete Alt-Standard wiederhergestellt. Die
+Auswahlliste enthielt die drei vorgesehenen Tasten. Die Umschaltung auf Control
+wurde durch eine Zustandsänderung während der UI-Automation nicht bestätigt;
+der native Präferenztest deckt diese Speicherung separat ab.
+
+Keine macOS-Freigabe wurde automatisch erteilt und keine echte Aufnahme gestartet.
+Der vollständige Aufnahme-/Hotkey-Nachweis und die übrigen Grenzen oben bleiben offen.
+
+### Reiner Systemaudio-Zugriff auf Nutzerwunsch (04.11.2026)
+
+Tristan zeigte die macOS-Einstellungen mit ausgeschaltetem Koprotokoll-Eintrag
+bei Bildschirmaufnahme und leerer Liste unter „Nur Aufnahme von Systemaudio“.
+Sein Auftrag: ausschließlich Audiozugriff. Der bisherige ScreenCaptureKit-Weg
+wurde durch einen privaten Core-Audio-Tap für Systemton und AVAudioEngine für
+das Standardmikrofon ersetzt. Es gibt keine Bildschirm-/Fensterabfrage und
+keinen Videoausgang. Der Tap bleibt ungemutet; Standardgeräte werden nicht
+umgestellt. Das private Audiogerät wird beim Stoppen wieder entfernt.
+
+Der Audio-Unterprozess verwendet denselben signierten App-Bundle wie das
+Einstellungsfenster. Dessen Info.plist enthält nun sowohl
+`NSAudioCaptureUsageDescription` als auch den Mikrofon-Zwecktext. Ein Start
+des Audiowegs überschreibt keine vorhandene Server-/Portkonfiguration.
+Freigabefehler werden aus dem Helfer an die Aufnahme-API gemeldet; ein vorzeitig
+beendeter Helfer wartet nicht die gesamte Startfrist ab. Die verlängerte
+Startfrist lässt Zeit für die erstmaligen macOS-Dialoge.
+
+Native Prüfung ohne Zugriff auf reale Audioquellen: vorbereitete Float-Puffer
+für Stereo-Systemton und zeitversetztes Mono-Mikrofon mit anderer Samplerate
+werden über denselben Writer in ausgerichtete PCM-WAV-Spuren umgewandelt.
+Format, Länge, nichtleere Samples, anfängliche Mikrofonpause und Schutz einer
+vorhandenen Datei werden geprüft. Eine weitere Probe prüft, dass die Zeitachse
+erst mit dem ersten Sample beginnt; die Freigabewartezeit wird nicht als Stille
+vorangestellt. Die Linkerprüfung des Testprogramms und des tatsächlich gebauten
+App-Binaries enthält Core Audio, aber kein ScreenCaptureKit.
+
+Fokussierter Lauf: 23 Tests bestanden in 17,47 s. App und eigener Server wurden
+nach Prüfung auf laufende Aufnahme/Auswertung im Ruhezustand neu gestartet.
+`GET /api/capture` bestätigte anschließend `active:false`. Das echte App-Fenster
+zeigt den neuen Hinweis auf Systemaudio- und Mikrofonfreigabe; die separate
+Eingabeüberwachung für den globalen Hotkey war weiterhin nicht erteilt.
+
+Abschließende Suite: **96 bestanden in 62,35 s**, keine übersprungenen Tests.
+
+Während der Fortsetzung wurde über die Oberfläche eine Aufnahme gestartet
+(`POST /api/capture/start`: HTTP 200), gestoppt (HTTP 201) und als Meeting mit
+Quelle Hardware und Systemaudio-Gerätekennung gespeichert. Beide getrennten
+Spuren: 132,998 s, 48 kHz, zwei Kanäle. Systemton Peak 0,912628 / RMS 0,078603,
+Mikrofon Peak 0,119110 / RMS 0,001363 (lineare PCM-Amplituden, keine Lautheitsmessung).
+Beide enthalten Samples ungleich null; damit sind Tonspuren und Signal belegt,
+noch keine vollständige inhaltliche oder menschliche Sprecherprüfung.
+Diese Aufnahme begann vor dem letzten App-Neubau. Die abschließende Korrektur
+„Zeitachse ab erstem Sample“ wurde danach im nativen Writer-Test geprüft und
+ist nicht durch diesen bereits laufenden Hardware-Mitschnitt belegt.
+
+Die macOS-Seite wurde anschließend mit dem nativen UI-Werkzeug gelesen:
+**Koprotokoll aus** bei „Aufnahme von Bildschirm & Systemaudio“,
+**Koprotokoll an** unter „Nur Aufnahme von Systemaudio“. Es wurden durch den
+Agenten keine Berechtigungsschalter geändert. Ein weiterer Serverneustart wurde
+abgebrochen, weil bereits die Transkription der Aufnahme lief; sie wurde nicht
+unterbrochen. Aufnahme und Inhalte bleiben außerhalb von Git.
+
+Der echte Systemaudio-Aufnahmeweg und der passende macOS-Eintrag sind damit
+belegt. Der globale Alt-Doppeltipp, eine unabhängig geprüfte Wort-/Sprecherreferenz
+und die übrigen #31-Anforderungen bleiben offen. Der alte, ausgeschaltete
+Bildschirmaufnahme-Eintrag bleibt in den Systemeinstellungen sichtbar.
+
+API-Grundlage: [Apples Core-Audio-Tap-Beispiel](https://developer.apple.com/documentation/coreaudio/capturing-system-audio-with-core-audio-taps)
+und [Audio-Zwecktext](https://developer.apple.com/documentation/bundleresources/information-property-list/nsaudiocaptureusagedescription).
+
+## Screenshots der Mac-App und der Freigaben
+
+Auf Nutzerwunsch am 04.11.2026 aus den bereitgestellten Bildern und dem lokalen
+Screenshot-Ordner ergänzt. Die Bilder zeigen historische Zwischenstände.
+Codebezug: `d795e04ed1cc89733c7ecb8655a82d687b60ba2a` für das Einstellungsfenster,
+`75b291c329f3ed9c069b0cc1c6029c4ff69a0bb1` für den späteren reinen Audioweg.
+Eine Build-ID direkt zum jeweiligen Aufnahmezeitpunkt wurde nicht protokolliert;
+die Bilder werden deshalb nicht als Screenshots exakt dieser Commits ausgegeben.
+
+Der show-me-Skill steht in dieser Sitzung nicht zur Verfügung. Die beschrifteten Abbildungen
+verwenden die in den [Nachweisregeln](README.md#änderungen-mit-show-me-erklären)
+vorgesehene Alternative. Der Ablauf ist: Audioquelle und Kürzel in der App
+wählen, nötige macOS-Freigaben bestätigen, Aufnahme starten und stoppen.
+Die Auswertung beginnt anschließend. Die zugehörigen ausgeführten Prüfungen
+und deren Grenzen stehen in den Abschnitten oben.
+
+### Einstellungen der Mac-App
+
+![Koprotokoll-Einstellungen mit Systemton plus Mikrofon, Alt-Doppeltipp und noch fehlender Eingabeüberwachung](assets/issue-31/app-einstellungen.png)
+
+**11:10:00 Uhr laut Originaldateiname.** Sichtbar sind Audioquelle,
+Tastenkürzel-Einstellungen, Freigabehinweis sowie Start- und Meeting-Schaltfläche.
+Die App ist bereit, nimmt aber nicht auf. Das Bild zeigt ausdrücklich noch
+fehlende Eingabeüberwachung und belegt keinen funktionierenden globalen Hotkey.
+Der Hinweis auf die reine Audiofreigabe wurde erst später ergänzt.
+
+### Auswahl der Doppeltipp-Taste
+
+![Geöffnete Tastenauswahl mit Alt, Control und Umschalt; Alt ist ausgewählt](assets/issue-31/app-tastenauswahl.png)
+
+**Vom Nutzer bereitgestellter Screenshot.** Die Liste bietet Alt/Option,
+Control und Umschalt an; ausgewählt ist Alt. Sichtbar ist die Auswahlmöglichkeit,
+kein ausgelöster Doppeltipp und keine laufende Aufnahme. Ein genauer
+Aufnahmezeitpunkt ist für diesen Anhang nicht belegt.
+
+### Mikrofonzugriff
+
+![macOS fragt nach Mikrofonzugriff für Koprotokoll mit den Optionen Nicht erlauben und Erlauben](assets/issue-31/mikrofon-freigabe.png)
+
+**12:01:03 Uhr laut Originaldateiname.** macOS zeigt Koprotokolls
+Mikrofon-Zwecktext. Das Bild dokumentiert die Anfrage vor der Entscheidung;
+es zeigt weder die erteilte Freigabe noch die spätere Audioaufzeichnung.
+Systemaudio und Eingabeüberwachung haben eigene Freigaben.
+
+### Dateizugriff beim Start aus dem Entwicklungsprojekt
+
+![macOS fragt, ob Koprotokoll auf Dateien im Ordner Dokumente zugreifen darf](assets/issue-31/dokumente-freigabe.png)
+
+**11:49:19 Uhr laut Originaldateiname.** Dieser Entwicklungsstand liegt im
+Ordner Dokumente und startet dort den lokalen Server. Das Bild zeigt die
+zusätzliche Dateizugriffsabfrage dieser Installation. Es ist kein Nachweis
+einer Mikrofon-, Systemaudio- oder Bildschirmfreigabe.
+
+### Separate Systemaudio-Abfrage
+
+![macOS fragt Koprotokoll nach der Erlaubnis für Systemaudio; der Zwecktext schließt Bildschirminhalte aus](assets/issue-31/systemaudio-freigabe.png)
+
+**Weiterer Nutzeranhang vom 04.11.2026.** Der Dialog fragt ausdrücklich nach
+Systemaudio. Der Zwecktext erklärt, dass Koprotokoll Systemton für das Protokoll
+aufnimmt und keine Bildschirminhalte erfasst. Sichtbar ist die Anfrage vor der
+Entscheidung. Den später eingeschalteten Audioeintrag dokumentiert die oben
+beschriebene Prüfung der Systemeinstellungen.
+
+### Fertige Auswertung der Hardwareaufnahme
+
+![Koprotokoll zeigt das Transkript einer 2 Minuten 13 Sekunden langen Hardwareaufnahme mit vier automatisch geschätzten Sprechergruppen](assets/issue-31/transkript-realaufnahme.png)
+
+**Vom Nutzer zur Aufnahme in den Repo-Nachweis bereitgestellt.** Das Bild zeigt
+die 133-Sekunden-Aufnahme, den Audioplayer und das Rohtranskript mit Zeitmarken
+und vier Sprecherlabels. Die Zusammenfassung verwendet die Heuristik.
+Die lokale API bestätigte bei dieser Ergänzung `status: done`, Fortschritt 1,0
+und vier Sprechergruppen. Die Aufnahme wurde inzwischen vollständig verarbeitet.
+
+Der Nutzer bestätigte anschließend ausdrücklich, dass der sichtbare Inhalt
+unsensibel ist und dieses Bild auch in die README aufgenommen werden soll.
+Die README verweist auf dieselbe Bilddatei wie dieser Nachweis.
+
+Der sichtbare Wortlaut ist ein Modellergebnis und enthält erkennbare Fehler.
+Vier Labels belegen vier Modellgruppen, keine unabhängig bestätigte Zahl realer
+Personen. Das Bild dient als Nachweis des sichtbaren Ergebnisses; eine menschlich
+geprüfte Wort-/Sprecherreferenz und Qualitätsmessung werden daraus nicht abgeleitet.
+Die Originalaufnahme bleibt außerhalb des Git-Verlaufs.
+
+Der gleichzeitig bereitgestellte Zertifikatsdialog stammt laut Nutzer aus einer
+anderen Anwendung. Er wird deshalb nicht als Koprotokoll-Befund übernommen;
+an Zertifikatsprüfung oder Vertrauenseinstellungen wurde nichts geändert.
+
+Prüfung dieser Ergänzung: sechs Bildverweise und PNG-Daten erfolgreich geprüft,
+Text-/EXIF-Metadaten entfernt, Originale unverändert. `.venv/bin/pytest -q -ra`:
+**96 bestanden in 62,08 s**, keine übersprungenen Tests.
+
+### Herkunft und Bereinigung
+
+Bildpixel, Abmessungen und Farbprofile wurden unverändert übernommen. Entfernt
+wurden ausschließlich PNG-Text-/EXIF-Metadaten. Alle bild- und farbrelevanten
+PNG-Blöcke wurden vor und nach der Übernahme byteweise verglichen; die Originale
+blieben unverändert. Die ursprünglichen vier Ansichten wurden auf sichtbare private Inhalte
+geprüft. Doppelte Bilder und eine Ansicht mit einem fremden Fenster am Rand
+wurden nicht übernommen. Die beiden ergänzten Nutzeranhänge zeigen den
+Systemaudio-Dialog und den ausdrücklich zur Übernahme beauftragten
+Transkriptausschnitt. Audiodateien und Zugangsdaten sind nicht enthalten.
+
+Prüfung der Ergänzung: vier relative Bildverweise und die internen Zielabschnitte
+vorhanden, PNG-Prüfsummen und dekodierbare Bilddaten geprüft, keine Text-/EXIF-Blöcke.
+`.venv/bin/pytest -q -ra`: **96 bestanden in 87,59 s**, keine übersprungenen Tests.
+`git diff --check` meldete keine Formatfehler.
+
+| Eingebundene Datei | Originalquelle |
+| --- | --- |
+| `app-einstellungen.png` | Screenshot-Ordner: `Bildschirmfoto 2026-11-04 um 11.10.00.png` |
+| `app-tastenauswahl.png` | Nutzeranhang `image.png` mit geöffneter Doppeltipp-Auswahl |
+| `mikrofon-freigabe.png` | Screenshot-Ordner: `Bildschirmfoto 2026-11-04 um 12.01.03.png` |
+| `dokumente-freigabe.png` | Screenshot-Ordner: `Bildschirmfoto 2026-11-04 um 11.49.19.png` |
+| `systemaudio-freigabe.png` | Weiterer Nutzeranhang `image.png` mit Systemaudio-Abfrage |
+| `transkript-realaufnahme.png` | Weiterer Nutzeranhang `image.png` mit Ergebnis der 133-Sekunden-Aufnahme |
+| `eingabeueberwachung-freigegeben.png` | Weiterer Nutzeranhang `image.png` mit eingeschalteter Eingabeüberwachung |
+
+<details>
+<summary>SHA-256 der unveränderten Originaldateien</summary>
+
+```text
+f282e1a8527afb1ba98ef3fbaccb773bc52fdde7895cac5652ddd5e5989d0213  app-einstellungen.png (Original)
+ed92c079c110a96b3acd8799941c5e5a5e1d99c674249be1bea7e6963b5c2fd8  app-tastenauswahl.png (Original)
+1630214a6021bea78c1ece3676c45adf170e655018900f8269f1f330d59e0312  mikrofon-freigabe.png (Original)
+fd5741a1192b4fee9d9aa36f8f28c8780a599b1c66eb1f37cf0fd6486ed72395  dokumente-freigabe.png (Original)
+b2e61c63c923a5faf90e12e20a482b3c1f568f5fd7001a7eaa18e7cb78db801b  systemaudio-freigabe.png (Original)
+cc753866444a0d3eca8267fe7f9744df4b73ea8e7b63194a14456f21baf10772  transkript-realaufnahme.png (Original)
+d58e67d8ae1cc1ee60d9139fac1e869e51a7b8b0cb2cc13f32ecfe0d0576000e  eingabeueberwachung-freigegeben.png (Original)
+```
+
+</details>
+
+Die später bestätigte reine Systemaudio-Freigabe und die 133-Sekunden-Aufnahme
+sind [im Audioweg-Abschnitt](#reiner-systemaudio-zugriff-auf-nutzerwunsch-04112026)
+dokumentiert. Die hier eingebundenen Dialogbilder ersetzen diesen gesonderten
+Nachweis nicht. Der globale Hotkey und die menschliche Wort-/Sprecherreferenz
+bleiben offen.
+
+## Nachprüfung des weiterhin ausgefallenen Tastenkürzels
+
+Nutzerbefund nach der Aufnahme: Der Alt-Doppeltipp funktioniert weiterhin
+nicht. Am 04.11.2026 zeigte die native macOS-Eingabeüberwachung Koprotokoll
+eingeschaltet, während die App weiterhin „Eingabeüberwachung fehlt“ meldete.
+Damit wird die Abtastung durch die vorhandene Freigabeprüfung nicht gestartet;
+die reinen Detektortests können diesen macOS-Zustand nicht abdecken.
+
+Der laufende Prozess stammte von 11:59:21 Uhr, das App-Binary war zuletzt um
+12:02:19 Uhr gebaut worden. Seine Ad-hoc-Signatur bindet die Identität an den
+Codehash. Als erste Prüfung wurde ausschließlich die Menüleisten-App aus dem
+unveränderten Bundle neu gestartet; der Server blieb bestehen, keine Aufnahme
+lief. Danach meldete auch der neue Prozess noch fehlende Eingabeüberwachung.
+Ein einfacher Neustart hat den Fehler damit nicht behoben.
+
+Die Hypothese einer veralteten, zum aktuellen Build nicht wirksamen Freigabe
+wird durch erneutes Anwenden des vorhandenen Koprotokoll-Eintrags geprüft.
+macOS verlangte dafür eine Authentifizierung im Systemdialog. Zum Zeitpunkt
+dieser Dokumentation war diese Bestätigung noch ausstehend. Der Agent hat
+keine Zugangsdaten eingegeben und keine Berechtigungsprüfung umgangen.
+Die tatsächliche Hotkey-Reparatur und ein Start-/Stopp-Test per Doppeltipp
+sind bis zu dieser Bestätigung nicht nachgewiesen.
+
+
+### Erneut angewendete Eingabefreigabe nach Mac-Neustart
+
+Am 04.11.2026 wurde auf Nutzerwunsch nach dem Mac-Neustart die bestehende
+Eingabefreigabe erneut angewendet. Nach der Bestätigung im macOS-Systemdialog
+wurde der vorhandene Koprotokoll-Schalter eingeschaltet und **Beenden & erneut
+öffnen** gewählt. Der neue App-Prozess meldete weiterhin fehlende Freigabe.
+
+Danach wurde ausschließlich der bestehende Koprotokoll-Eintrag aus der
+Eingabeüberwachung entfernt und dasselbe aktuelle App-Bundle aus
+`data/desktop/Koprotokoll.app` erneut hinzugefügt. Nach **Beenden & erneut
+öffnen** zeigte die App um 13:03 Uhr: **„Eingabeüberwachung freigegeben.
+Tastenkürzel aktiv.“** Der Systemschalter war eingeschaltet, die Aufnahme stand
+auf **„Bereit · Alt / Option (⌥) zweimal“**. Das Bundle wurde dabei weder neu
+gebaut noch neu signiert. Andere App-Freigaben wurden nicht verändert.
+
+Damit ist die Freigabeprüfung für diesen laufenden Build erfolgreich. Ein
+physischer Alt-Doppeltipp mit bestätigtem Aufnahme-Start und -Stopp ist noch
+nicht nachgewiesen. Der Nutzer wurde um diesen kurzen Funktionstest gebeten.
+Die Anleitung beschreibt den gezielten Austausch eines veralteten Eintrags.
+Vor dieser reinen Dokumentationsänderung bestanden am unveränderten Code von
+`0819fcf` **96 Tests in 37,50 s**, am Basisstand `c71326c` **87 Tests in 33,78 s**;
+beide Läufe mit `pytest -q -ra`, ohne übersprungene Tests.
+
+
+### Nutzer bestätigt den Alt-Doppeltipp
+
+Am 04.11.2026 meldete der Nutzer nach der erneuerten Eingabefreigabe:
+**„alt doppelklick funktioniert jez“**. Damit ist die Funktion des physischen
+Doppeltipps durch eine Nutzerrückmeldung bestätigt. Die vorangegangene Bitte,
+einen Passwortdialog zu bestätigen, war zu diesem Zeitpunkt überholt.
+
+Anschließend beantwortete der Nutzer die ausdrückliche Frage nach sichtbarem
+Aufnahmestart und erneutem Alt-Doppeltipp zum Stoppen mit:
+**„Start und Stopp funktionieren“**. Damit sind beide Aktionen durch den
+physischen Nutzertest bestätigt. Eine neue inhaltliche Prüfung der resultierenden
+Aufnahme wird daraus nicht abgeleitet. Das App-Bundle wurde für diese Prüfung
+nicht verändert, gebaut oder neu signiert.
+
+Prüfung dieser Dokumentation: `pytest -q -ra` → **96 bestanden in 36,87 s**,
+keine übersprungenen Tests; `git diff --check` ohne Befund.
+
+
+### Screenshot der eingeschalteten Eingabeüberwachung
+
+![macOS-Eingabeüberwachung mit eingeschaltetem Koprotokoll-Schalter](assets/issue-31/eingabeueberwachung-freigegeben.png)
+
+**Weiterer Nutzeranhang vom 04.11.2026.** Der Screenshot zeigt den
+Koprotokoll-Schalter in der macOS-Eingabeüberwachung eingeschaltet. Er ergänzt
+die zuvor beobachtete Freigabemeldung der App. Start und Stopp per Alt-Doppeltipp
+hat der Nutzer gesondert bestätigt; der Schalter allein belegt diese Aktionen
+nicht. Der Zertifikatsdialog bleibt ausgeschlossen.
+
+Das Bild wurde mit unveränderten Bild-/Farbblöcken übernommen; ausschließlich
+PNG-Text-/EXIF-Metadaten entfernt. Originaldatei und dekodierte Bilddaten wurden
+gegengeprüft und unverändert belassen. Die Herkunft und Original-Prüfsumme sind
+in der bestehenden Tabelle dokumentiert. Der Nachweis enthält damit sieben
+Nutzerbilder.
+
+Prüfung dieser Ergänzung: sieben Bildverweise und PNG-Blöcke erfolgreich
+geprüft; `pytest -q -ra`: **96 bestanden in 31,72 s**, keine übersprungenen
+Tests. `git diff --check` ohne Befund.

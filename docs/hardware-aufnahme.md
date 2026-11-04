@@ -21,6 +21,63 @@ erforderlich. Während der Aufnahme entstehen nur PCM-Samples, eine lokale WAV
 und ein laufender Spitzenpegel. Parakeet und Sherpa starten erst nach dem
 ausdrücklichen Stopp.
 
+## Mac: per Alt-Doppeltipp aufnehmen
+
+Nach dem [Schnellstart](../README.md#-schnellstart) im Projektordner
+**Koprotokoll.command** doppelt anklicken. Alternativ im aktivierten Python-Environment:
+
+```bash
+python -m koprotokoll desktop
+```
+
+Beim ersten Start baut Koprotokoll eine kleine lokale App unter
+`data/desktop/Koprotokoll.app`. Dafür werden macOS 12+, `ffmpeg` und die
+Apple-Entwicklerwerkzeuge (`swiftc`) benötigt. Die App startet den lokalen
+Server oder verwendet einen bereits laufenden Koprotokoll-Server am gewählten
+Port. Ein Finder-Einstieg unter `~/Applications/Koprotokoll.app` öffnet dieselbe
+App per Doppelklick; eine bereits vorhandene andere Installation wird erhalten.
+Das Einstellungsfenster öffnet sich beim Start und beim erneuten Öffnen der App.
+Es ist auch über **Ko → Einstellungen …** erreichbar. Es beginnt noch keine Aufnahme.
+
+1. Unter **Audioquelle** den gewünschten Eingang wählen. Er lässt sich auch über
+   das Ko-Menü wechseln. Die Quelle wird anhand ihres Namens gespeichert und vor
+   jeder Aufnahme neu zugeordnet. Ist sie nicht mehr eindeutig verfügbar, wird
+   der Start mit einer Fehlermeldung abgebrochen.
+2. Unter **Tastenkürzel** das globale Kürzel ein- oder ausschalten und die
+   Doppeltipp-Taste wählen: **Alt/Option**, **Control** oder **Umschalt**, jeweils
+   links oder rechts. Standard bleibt Alt. Änderungen werden sofort gespeichert
+   und gelten ohne Neustart. Beim Wechsel verwirft die App einen begonnenen
+   Doppeltipp. Während einer Aufnahme sind diese Einstellungen gesperrt.
+3. **Freigabe prüfen** zeigt den aktuellen Zustand der Eingabeüberwachung und
+   fordert sie bei Bedarf an. **macOS-Einstellungen öffnen** führt zur
+   Einstellungs-App. Dort Koprotokoll unter
+   **Systemeinstellungen → Datenschutz & Sicherheit → Eingabeüberwachung**
+   freigeben. Falls macOS es verlangt, die App neu öffnen. Die App zeigt die
+   Freigabe an, erteilt sie aber nicht selbst.
+   Meldet die App trotz eingeschaltetem macOS-Schalter weiterhin eine fehlende
+   Freigabe, kann nach einem lokalen Neubau noch die alte App zugeordnet sein.
+   In der Eingabeüberwachung nur den Koprotokoll-Eintrag entfernen und über **+**
+   die aktuelle `data/desktop/Koprotokoll.app` erneut auswählen. Anschließend
+   **Beenden & erneut öffnen** bestätigen und den Status in Koprotokoll prüfen.
+   Das Mac-Passwort ausschließlich im macOS-Dialog eingeben.
+4. **Die gewählte Taste zweimal kurz drücken und loslassen** startet die Aufnahme.
+   In der Menüleiste erscheint **●** mit der Aufnahmedauer. Kombinationen mit
+   anderen Tasten und längeres Halten lösen keine Aufnahme aus.
+5. **Dieselbe Taste zweimal erneut** stoppt und sichert die Aufnahme. Erst danach beginnt
+   die Auswertung; das Meeting öffnet sich im Standardbrowser.
+
+Start und Stopp sind auch im Einstellungsfenster und im Ko-Menü verfügbar, unabhängig von der
+Tastenkürzel-Freigabe. Audioquelle und Pegel müssen vor dem eigentlichen
+Gespräch wie unten beschrieben geprüft werden. Für Systemton plus Mikrofon
+gelten weiterhin die gesonderten Voraussetzungen; die Menüleistensteuerung
+belegt nicht, dass beide Gesprächsseiten aufgenommen werden.
+
+Das Tastenkürzel speichert keine Tastendrücke oder Texte. Es steht zur Verfügung, solange die Menüleisten-App
+läuft; ein automatischer Start bei der Anmeldung wird nicht eingerichtet.
+**Tastenkürzel beenden** schließt die Menüleiste nach dem Stopp einer Aufnahme.
+Der lokale Server bleibt für die Auswertung und Oberfläche geöffnet. Sein
+Startprotokoll liegt unter `data/desktop/server.log`.
+
 ## Geeigneten Eingang wählen
 
 1. Vor dem Gespräch alle Beteiligten über die Aufnahme informieren und die
@@ -68,8 +125,15 @@ Für ein Raumgespräch reicht ein Mikrofon, sofern beide Stimmen verständlich
 ankommen. Für ein Online-Gespräch müssen die Stimmen der Freunde zusätzlich als
 Signalquelle sichtbar sein: etwa über einen vom Betriebssystem oder
   Audiointerface angebotenen Loopback-Eingang. Unter macOS 15+ kann die
-  Systemtonfunktion die aktuelle Audioausgabe plus Standardmikrofon erfassen;
-  beim ersten Einsatz kann macOS die Bildschirmaufnahmeberechtigung verlangen.
+  Systemtonfunktion die aktuelle Audioausgabe plus Standardmikrofon erfassen.
+  Sie verwendet einen privaten **Core-Audio-Tap** für den Systemton und
+  AVAudioEngine für das Mikrofon. Beim ersten Start benötigt Koprotokoll die
+  Freigaben **Nur Aufnahme von Systemaudio** und **Mikrofon** unter
+  **Datenschutz & Sicherheit**. Eine Bildschirmaufnahmefreigabe wird für diesen
+  Weg nicht benötigt; Bildschirme und Fenster werden nicht abgefragt.
+  Der Audioprozess läuft aus demselben Koprotokoll-App-Paket, dessen Zwecktexte
+  macOS bei der Freigabe anzeigt. Eine alte, ausgeschaltete Bildschirmfreigabe
+  kann in den macOS-Einstellungen weiterhin aufgeführt sein.
   Für diesen nativen Weg braucht der lokale Entwicklungsrechner `swiftc` aus den
   Apple-Entwicklerwerkzeugen; ohne Compiler wird die Option nicht angeboten.
   Die App wählt keinen Treiber und ändert weder Standard-Ein- noch
@@ -143,7 +207,7 @@ oder doppelte Stimmen müssen zusätzlich am Originalton geprüft werden.
 | Weg | Voraussetzung | Ausweichweg |
 | --- | --- | --- |
 | Direkter Hardwareeingang | Betriebssystem sieht Mikrofon/Interface/Loopback | WAV auf einem anderen Gerät aufnehmen und importieren |
-| Systemton | macOS 15+ mit Bildschirmaufnahmeberechtigung; andernorts Monitor-/Loopback-Eingang | Freigegebene lokale Aufnahmedatei importieren |
+| Systemton | macOS 15+ mit Systemaudio- und Mikrofonfreigabe; andernorts Monitor-/Loopback-Eingang | Freigegebene lokale Aufnahmedatei importieren |
 | Browseraufnahme | Sichere Seite, Browser-Berechtigung, passende Audiofreigabe | Hardware-WAV importieren |
 | Mobiles Gerät | Lokale Aufnahme-App oder geeigneter Eingang | Datei in das lokale Netz übertragen und importieren |
 

@@ -1,4 +1,11 @@
 from pathlib import Path
+import json
+import shutil
+import subprocess
+import sys
+import wave
+from array import array
+from types import SimpleNamespace
 
 import pytest
 
@@ -84,3 +91,63 @@ def test_validate_stem_durations_accepts_aligned_tracks(monkeypatch, tmp_path):
     ))
 
     assert capture._validate_stem_durations(tmp_path / "system.wav", tmp_path / "mikrofon.wav") == (30.0, 29.92)
+
+
+@pytest.mark.skipif(sys.platform != "darwin" or shutil.which("swiftc") is None,
+                    reason="Native Audio-Prüfung benötigt macOS und Swift.")
+def test_native_audio_writer_aligns_system_and_resampled_microphone(tmp_path):
+    root = Path(__file__).resolve().parents[1]
+    binary = tmp_path / "audio-writer-test"
+    subprocess.run(["swiftc", str(root / "koprotokoll/capture_macos.swift"),
+                    str(root / "tests/fixtures/audio_writer_macos_test.swift"), "-o", str(binary)], check=True)
+    subprocess.run([str(binary), str(tmp_path)], check=True, capture_output=True)
+    for name in ("system.wav", "microphone.wav"):
+        with wave.open(str(tmp_path / name), "rb") as audio:
+            assert (audio.getframerate(), audio.getnchannels(), audio.getsampwidth()) == (48_000, 2, 2)
+            assert abs(audio.getnframes() - 14_400) <= 1
+            samples = array("h", audio.readframes(audio.getnframes()))
+        assert max(abs(value) for value in samples) > 5_000
+        if name == "microphone.wav":
+            assert not any(samples[:4_798])
+    linked = subprocess.check_output(["otool", "-L", str(binary)], text=True)
+    assert "ScreenCaptureKit" not in linked
+    for name in ("first-system.wav", "first-microphone.wav"):
+        with wave.open(str(tmp_path / name), "rb") as audio:
+            assert abs(audio.getnframes() - 9_600) <= 1
+
+
+def test_system_helper_uses_app_identity_without_changing_launcher(tmp_path, monkeypatch):
+    from koprotokoll.capture import HardwareRecorder
+    import koprotokoll.desktop as desktop
+
+    app = tmp_path / "desktop/Koprotokoll.app"
+    calls = []
+
+    def build(settings, **kwargs):
+        calls.append((settings.data_dir, kwargs))
+        return app
+
+    monkeypatch.setattr(desktop, "build_app", build)
+    recorder = HardwareRecorder(tmp_path / "captures")
+    assert recorder._system_helper_executable() == str(app / "Contents/MacOS/Koprotokoll")
+    assert calls == [(tmp_path, {"configure_launcher": False})]
+
+
+@pytest.mark.parametrize("lines", [[], [json.dumps({"error": "Mikrofonfreigabe fehlt"}).encode()]])
+def test_system_helper_errors_end_startup_without_waiting_a_minute(tmp_path, monkeypatch, lines):
+    import koprotokoll.capture as capture
+
+    commands = []
+
+    def process(command, **kwargs):
+        commands.append(command)
+        return SimpleNamespace(stdout=lines, poll=lambda: 1, wait=lambda **_: 1)
+
+    monkeypatch.setattr(capture.sys, "platform", "darwin")
+    monkeypatch.setattr(capture.subprocess, "Popen", process)
+    recorder = capture.HardwareRecorder(tmp_path)
+    monkeypatch.setattr(recorder, "_system_helper_executable", lambda: "/test/Koprotokoll")
+    with pytest.raises(RuntimeError, match="Freigaben|freigabe"):
+        recorder.start(capture.SYSTEM_AUDIO_DEVICE)
+    assert commands[0][:2] == ["/test/Koprotokoll", "--capture-audio"]
+    assert recorder.status() == {"active": False}
