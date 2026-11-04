@@ -1,0 +1,162 @@
+"""Microsoft-Gerätecode und Graph-Mail mit nachgebildeten Endpunkten."""
+
+import base64
+import io
+import json
+from types import SimpleNamespace
+from urllib.error import HTTPError
+
+import pytest
+
+import koprotokoll.microsoft as ms
+from test_integrations import make_client
+
+
+class FakeGraph:
+    def __init__(self):
+        self.responses = ["authorization_pending", "slow_down", "ready"]
+        self.calls, self.sent, self.refresh_tokens = [], [], []
+
+    def __call__(self, method, url, *, form=None, body=None, token=None):
+        self.calls.append((method, url, form))
+        if url == ms.DEVICE_URL:
+            assert "User.Read" in form["scope"]
+            assert "client_secret" not in form
+            return {"device_code": "privater-code", "user_code": "TEST-CODE", "expires_in": 900,
+                    "verification_uri": "https://microsoft.com/devicelogin", "interval": 5}
+        if url == ms.TOKEN_URL:
+            assert "client_secret" not in form
+            if form["grant_type"] == "refresh_token":
+                self.refresh_tokens.append(form["refresh_token"])
+                return {"access_token": "neu", "refresh_token": "rt-neu", "expires_in": 3600}
+            state = self.responses.pop(0)
+            if state != "ready":
+                raise ms.MicrosoftError("Erwarteter Testzustand", state)
+            claim = base64.urlsafe_b64encode(json.dumps({"email": "ich@example.com"}).encode()).decode().rstrip("=")
+            return {"access_token": "access-geheim", "refresh_token": "rt-alt", "expires_in": 3600,
+                    "id_token": "x." + claim + ".y", "scope": "User.Read Calendars.Read Mail.Send offline_access"}
+        if url == ms.GRAPH_BASE + "/me/sendMail":
+            self.sent.append(body)
+            return {}
+        if url.startswith(ms.GRAPH_BASE + "/me/calendarview"):
+            return {"value": []}
+        raise AssertionError((method, url))
+
+
+def test_device_pending_slowdown_refresh_and_graph_recap(tmp_path, monkeypatch):
+    fake = FakeGraph()
+    clock = [1000.0]
+    monkeypatch.setattr(ms, "_http", fake)
+    monkeypatch.setattr(ms, "time", SimpleNamespace(time=lambda: clock[0]))
+    with make_client(tmp_path, microsoft_client_id="public-client") as client:
+        prefix = "/api/integrations/microsoft"
+        assert client.get(prefix).json()["configured"]
+        response = client.post(prefix + "/device")
+        assert response.status_code == 200 and response.json()["user_code"] == "TEST-CODE"
+        assert "privater-code" not in response.text
+        assert client.post(prefix + "/device/poll").json()["status"] == "pending"
+        assert len(fake.calls) == 1
+        for interval in (5, 5):
+            clock[0] += interval
+            assert client.post(prefix + "/device/poll").json()["status"] == "pending"
+        clock[0] += 10
+        response = client.post(prefix + "/device/poll")
+        assert response.json()["status"] == "connected"
+        assert "access-geheim" not in response.text and "rt-alt" not in response.text
+        assert client.app.state.db.get_kv("microsoft_device") is None
+        assert client.put("/api/integrations/email", json={"provider": "microsoft", "send_recap": True}).status_code == 200
+        assert client.post("/api/integrations/email/test").status_code == 200
+        assert fake.sent[-1]["message"]["toRecipients"] == [{"emailAddress": {"address": "ich@example.com"}}]
+        assert fake.sent[-1]["message"]["body"]["contentType"] == "HTML"
+        client.app.state.events.emit("meeting.completed", {"id": 1, "title": "Test", "summary": {}, "meta": {"source": "bot"}})
+        client.app.state.events.join()
+        assert len(fake.sent) == 2
+        tokens = client.app.state.db.get_kv("microsoft_tokens")
+        client.app.state.db.set_kv("microsoft_tokens", {**tokens, "expires_at": 0})
+        assert client.post("/api/integrations/email/test").status_code == 200
+        assert fake.refresh_tokens == ["rt-alt"]
+        assert client.app.state.db.get_kv("microsoft_tokens")["refresh_token"] == "rt-neu"
+
+
+@pytest.mark.parametrize("terminal", ["expired_token", "authorization_declined", "local-expiry"])
+def test_device_expired_or_declined_is_clear(tmp_path, monkeypatch, terminal):
+    fake = FakeGraph()
+    fake.responses = [terminal]
+    monkeypatch.setattr(ms, "_http", fake)
+    clock = [1000.0]
+    monkeypatch.setattr(ms, "time", SimpleNamespace(time=lambda: clock[0]))
+    with make_client(tmp_path, microsoft_client_id="public-client") as client:
+        client.post("/api/integrations/microsoft/device")
+        clock[0] += 1000 if terminal == "local-expiry" else 5
+        response = client.post("/api/integrations/microsoft/device/poll")
+        assert response.status_code == 400 and "abgelaufen" in response.text
+        assert client.app.state.db.get_kv("microsoft_device") is None
+
+
+def test_http_auth_error_keeps_code_without_echoing_server_body(monkeypatch):
+    def fail(*args, **kwargs):
+        raise HTTPError(ms.TOKEN_URL, 400, "Fehler", {}, io.BytesIO(
+            b'{"error":"authorization_pending","error_description":"dummy-passwort"}'))
+    monkeypatch.setattr(ms.urllib.request, "urlopen", fail)
+    with pytest.raises(ms.MicrosoftError) as error:
+        ms._http("POST", ms.TOKEN_URL, form={})
+    assert error.value.code == "authorization_pending" and "dummy-passwort" not in str(error.value)
+
+
+def test_graph_pagination_and_foreign_next_link(tmp_path, monkeypatch):
+    from koprotokoll.config import Settings
+    from koprotokoll.db import Database
+
+    client = ms.MicrosoftClient(Settings(data_dir=tmp_path), Database(tmp_path / "db.sqlite3"))
+    client.db.set_kv("microsoft_tokens", {"access_token": "test-token", "refresh_token": "rt", "expires_at": float("inf")})
+    calls = []
+    next_link = [ms.GRAPH_BASE + "/page2"]
+
+    def http(method, url, **kwargs):
+        calls.append(url)
+        if url.endswith("page2"):
+            return {"value": [{"id": "zweiter"}]}
+        return {"value": [{"id": "erster"}], "@odata.nextLink": next_link[0]}
+
+    monkeypatch.setattr(ms, "_http", http)
+    assert [e["id"] for e in client.events(0, 10)] == ["erster", "zweiter"]
+    next_link[0] = "https://example.com/token-falle"
+    with pytest.raises(ms.MicrosoftError, match="Folgeseite"):
+        client.events(0, 10)
+    assert not any("example.com" in url for url in calls)
+
+
+def test_device_login_in_real_browser_with_fake_provider(tmp_path, monkeypatch):
+    from urllib.parse import urlsplit
+    from playwright.sync_api import expect, sync_playwright
+    from test_integrations import _chrome_path
+
+    fake = FakeGraph()
+    fake.responses = ["ready"]
+    clock = [1000.0]
+    monkeypatch.setattr(ms, "_http", fake)
+    monkeypatch.setattr(ms, "time", SimpleNamespace(time=lambda: clock[0]))
+    with make_client(tmp_path, microsoft_client_id="public-client") as client, sync_playwright() as pw:
+        browser = pw.chromium.launch(executable_path=_chrome_path(), headless=True)
+        page = browser.new_page(viewport={"width": 390, "height": 900})
+        errors = []
+        page.on("pageerror", lambda error: errors.append(str(error)))
+
+        def serve(route):
+            req = route.request
+            url = urlsplit(req.url)
+            response = client.request(req.method, url.path, content=req.post_data_buffer)
+            route.fulfill(status=response.status_code, headers=dict(response.headers), body=response.content)
+
+        page.route("**/*", serve)
+        page.goto("http://127.0.0.1/#integrations")
+        page.get_by_role("button", name="Mit Microsoft per Code anmelden", exact=True).click()
+        expect(page.get_by_text("TEST-CODE", exact=True)).to_be_visible()
+        expect(page.get_by_role("link", name="Microsoft-Anmeldeseite öffnen", exact=True)).to_have_attribute("href", "https://microsoft.com/devicelogin")
+        clock[0] += 5
+        page.get_by_role("button", name="Anmeldung prüfen", exact=True).click()
+        expect(page.locator("#microsoft-box")).to_contain_text("Verbunden als ich@example.com")
+        assert "access-geheim" not in page.content() and "privater-code" not in page.content()
+        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+        assert errors == []
+        browser.close()

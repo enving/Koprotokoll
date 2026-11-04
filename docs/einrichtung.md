@@ -107,6 +107,28 @@ Kurz vor Terminbeginn (~15 Minuten) legt Koprotokoll den Bot automatisch an.
 > **Für Organisationen:** Die App-Registrierung ist einmalig pro Mandant – am besten durch
 > die IT erstellen lassen. Privatnutzende registrieren ihre eigene App (Schritte oben).
 
+### Microsoft-Anmeldung mit Gerätecode
+
+Die Anmeldung mit Code benötigt eine Entra-App-Registrierung mit delegierten
+Rechten `User.Read`, `Calendars.Read`, `Mail.Send` und Offline-Zugriff.
+Unter **Authentifizierung → Erweiterte Einstellungen** öffentliche Clientflows
+erlauben. Für diesen Weg sind weder Client-Secret noch Weiterleitungs-URI nötig.
+In Koprotokoll nur die Client-ID speichern, **Mit Microsoft per Code anmelden**
+wählen, den angezeigten Code auf der verlinkten Microsoft-Seite bestätigen und
+anschließend **Anmeldung prüfen** wählen. Warteintervall und Ablauf werden angezeigt.
+
+Die bisherige Anmeldung mit Weiterleitung und Secret bleibt verfügbar.
+Nach der Anmeldung erscheinen Kalendertermine wie bisher. Für Recaps unter
+**E-Mail** den Versandweg **Microsoft 365 / Outlook.com** wählen und den Versand
+einschalten. Er bleibt für neu eingerichtete Microsoft-Verbindungen zunächst aus.
+Microsoft- und SMTP-Optionen werden getrennt gespeichert; es sendet nur der
+gewählte Weg. Token werden lokal gespeichert und bei Bedarf einschließlich
+eines erneuerten Refresh-Tokens ersetzt. Tokens und private Gerätecodes werden
+nicht in Statusantworten angezeigt.
+
+Die Gerätecode- und Mailwege sind mit nachgebildeten Microsoft-Endpunkten
+geprüft. Ein echtes Konto wurde dabei nicht angemeldet, keine Mail extern versendet.
+
 ## Weitere Kalender-Quellen: CalDAV & ICS
 
 ### Klassisches Outlook unter Windows
@@ -124,6 +146,12 @@ geprüft sind COM-Aufrufreihenfolge, Windows-Datumsformat, Serien-IDs,
 Teilnehmer und API-Verwaltung mit Nachbildungen. Outlook-Profil, lokale
 Zugriffsabfragen und Zeitzonen auf einem echten Windows-System sind dadurch
 nicht bestätigt.
+
+Nach unabhängigem Review werden Termine über Outlooks `StartUTC`/`EndUTC`
+gelesen. Die Windows-Formatierung erhält die lokalen Uhrfelder ausdrücklich;
+der Jet-Filter liest ganze lokale Tage, danach begrenzt Python exakt auf das
+angefragte UTC-Fenster. Regressionen bilden die pywin32-Konvertierung und eine
+angebrochene letzte Minute nach. Der echte Windows-Test bleibt weiterhin offen.
 
 ### CalDAV und ICS
 
@@ -146,12 +174,6 @@ Kalender-Kollektion aus den Kalender-Einstellungen).
 iCalendar-Abo eintragen (Outlook „Kalender veröffentlichen“, Google „geheime iCal-Adresse“,
 Nextcloud, iCloud …) – inklusive Serien-Terminen und Zeitzonen, ebenfalls nur lesend.
 Lokale `.ics`-Dateien müssen im Datenordner (`KOPROTOKOLL_DATA`, Standard `./data`) liegen.
-
-Nach unabhängigem Review werden Termine über Outlooks `StartUTC`/`EndUTC`
-gelesen. Die Windows-Formatierung erhält die lokalen Uhrfelder ausdrücklich;
-der Jet-Filter liest ganze lokale Tage, danach begrenzt Python exakt auf das
-angefragte UTC-Fenster. Regressionen bilden die pywin32-Konvertierung und eine
-angebrochene letzte Minute nach. Der echte Windows-Test bleibt weiterhin offen.
 
 > **Sicherheit:** Das CalDAV-Passwort wird **im Klartext** in der lokalen Datenbank
 > (`koprotokoll.sqlite3` im Datenordner) gespeichert. Legt deshalb unbedingt ein

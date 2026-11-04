@@ -126,7 +126,7 @@ class GoogleSettingsIn(BaseModel):
 
 class MicrosoftClientIn(BaseModel):
     client_id: str
-    client_secret: str
+    client_secret: str = ""
 
 
 class MicrosoftSettingsIn(BaseModel):
@@ -164,7 +164,7 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
     capture = HardwareRecorder(s.data_dir / "captures")
     google = google or GoogleClient(s, db)
     microsoft = MicrosoftClient(s, db)
-    mail = MailService(s, db, google)
+    mail = MailService(s, db, google, microsoft)
     events.subscribe(RecapMailer(mail, s.public_url))
     from .bot.runner import BotManager
 
@@ -245,7 +245,7 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
                 raise MailError("Eigene E-Mail-Adresse fehlt. Bitte den Mailweg einrichten.")
             mail.send([own], "Koprotokoll: Test-Mail", "Der Mailversand funktioniert.",
                       "<p>Der Mailversand funktioniert.</p>")
-        except (MailError, GoogleError, OSError) as e:
+        except (MailError, GoogleError, MicrosoftError, OSError) as e:
             raise HTTPException(400, str(e)) from e
         return {"ok": True}
 
@@ -598,6 +598,20 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
         try:
             return RedirectResponse(microsoft.auth_url())
         except MicrosoftError as e:
+            raise HTTPException(400, str(e)) from e
+
+    @api.post("/api/integrations/microsoft/device", tags=["microsoft"])
+    def microsoft_device_start():
+        try:
+            return microsoft.start_device()
+        except (MicrosoftError, OSError) as e:
+            raise HTTPException(400, str(e)) from e
+
+    @api.post("/api/integrations/microsoft/device/poll", tags=["microsoft"])
+    def microsoft_device_poll():
+        try:
+            return microsoft.poll_device()
+        except (MicrosoftError, OSError) as e:
             raise HTTPException(400, str(e)) from e
 
     @public.get("/api/integrations/microsoft/callback", include_in_schema=False)
