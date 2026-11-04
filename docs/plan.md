@@ -189,7 +189,7 @@ in Nextcloud erscheinen.
 - **Systemton aufnehmen**, getrennt vom Mikrofon (zwei Spuren → bessere Sprechertrennung):
   - Linux: PipeWire/PulseAudio-„Monitor“-Quelle
   - Windows: WASAPI-Loopback (z. B. `soundcard` oder `PyAudioWPatch`)
-  - macOS: ScreenCaptureKit (ab macOS 13) über `pyobjc`; als Notlösung BlackHole
+  - macOS: Core-Audio-Taps und AVAudioEngine im nativen App-Paket, siehe [Audioaufnahme](hardware-aufnahme.md); alternativ ein vorhandener Loopback-Eingang
 - **Meeting erkennen:** Termin aus dem Kalender-Planer des Servers *oder* lokal: Teams-/Zoom-/Webex-
   Prozess aktiv und Mikrofon in Benutzung → Hinweis *„Meeting erkannt – aufnehmen?“*.
   **Nie automatisch ohne Klick aufnehmen.**
@@ -208,8 +208,8 @@ Reihenfolge nach Verbreitung und Machbarkeit:
 1. **Jitsi** – ✔ erledigt: Beitritt ohne Konto, eigene Instanzen per Einstellung
    (`KOPROTOKOLL_JITSI_HOSTS`). Audio-Aufnahme über `HTMLMediaElement`-Hooks in `capture.js`.
 2. **BigBlueButton** – offen, „Nur zuhören“ beim Beitritt wählen.
-3. **Microsoft Teams (Web)** – Gastbeitritt „Im Browser fortfahren“, Name setzen, Lobby abwarten.
-   Klappt nur, wenn die Organisation anonymen Beitritt erlaubt; sonst Begleit-App.
+3. **Microsoft Teams (Web)** – ✔ erledigt: Gastbeitritt „Im Browser fortfahren“, Name setzen,
+   Lobby abwarten. Klappt nur, wenn die Organisation anonymen Beitritt erlaubt; sonst Begleit-App.
 4. **Zoom (Web)** – „Über Browser beitreten“. Offiziell verlangt Zoom für Bots das Meeting-SDK mit
    eigener App-Freigabe; der Browser-Weg kann gesperrt sein → Begleit-App als Rückfallebene.
 5. **Webex** – später.

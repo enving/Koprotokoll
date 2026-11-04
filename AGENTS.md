@@ -27,8 +27,6 @@ Bezahlfunktionen von Fireflies umgehen; keine Inhalte hinter einem Login abgreif
 
 Dieser Ablauf gilt für Agenten, die selbstständig arbeiten (z. B. Claude Code im Web, Codex,
 Copilot Coding Agent, Jules), genauso wie für Menschen mit Agent im Terminal.
-Pull Requests, Reviews und Freigaben übernehmen Agenten; eine menschliche Prüfung oder
-Freigabe ist dafür nicht erforderlich.
 
 1. **Aufgabe wählen.** Offene Issues mit dem Label
    [`agent-ready`](https://github.com/enving/Koprotokoll/issues?q=is%3Aissue+is%3Aopen+label%3Aagent-ready)
@@ -148,7 +146,7 @@ CSS-Variablen in `:root` (heller und dunkler Modus). Prüfen auf Desktop- und Ha
 Der Gesamtplan mit Arbeitspaketen, Reihenfolge und „Fertig, wenn“-Kriterien steht in
 [docs/plan.md](docs/plan.md). Kleinere Einstiege:
 
-- Bot-Adapter für **Microsoft Teams** (Web-Client, Gastzugang)
+- Bot-Adapter für **BigBlueButton** (Web-Client, „Nur zuhören“)
 - **CalDAV/ICS**-Kalender als Alternative zu Google (`scheduler.py` verallgemeinern)
 - **Live-Transkript** während der Bot-Aufnahme (Stücke aus `runner.py` laufend transkribieren)
 - **Dockerfile** inkl. ffmpeg und Chromium
@@ -164,14 +162,20 @@ Der Gesamtplan mit Arbeitspaketen, Reihenfolge und „Fertig, wenn“-Kriterien 
 
 ## Beiträge und überprüfbare Nachweise
 
-Agenten übernehmen PR-Erstellung, Review und Freigabe nach dem Ablauf oben und nennen
-Modell sowie verwendeten GitHub-Account. Vor einem PR die Änderungen und den aktuellen
+Für PR-Erstellung, Review und Freigabe gilt der [Ablauf oben](#mitmachen-als-agent-issue--fork--pull-request).
+Vor einem PR die Änderungen und den aktuellen
 Zielzweig prüfen, passende Tests ausführen und im PR Befehl, Ergebnis, übersprungene
 Tests und nicht geprüfte Fälle nennen. Abhängige PRs und die getesteten Commit-IDs
-angeben. Ein anderer Agent prüft den aktuellen Stand und gibt ihn frei; eine menschliche
-Freigabe ist nicht erforderlich. Nach dieser Freigabe und grüner CI dürfen Agenten mergen.
+angeben.
 
 Für visuelle oder manuelle Prüfungen dient [docs/nachweise/README.md](docs/nachweise/README.md).
 Im PR den dauerhaft erreichbaren Nachweis verlinken und erklären, was er tatsächlich
 zeigt und welche Schritte außerhalb der Aufnahme geschahen. Videos und Zugangsdaten
 gehören nicht in den Git-Verlauf; kleine Skripte und Beschreibungen dürfen ins Repo.
+
+
+Agenten zeigen und erklären ihre Änderungen in PRs und bei Bedarf in Issues nach
+[show-me](docs/nachweise/README.md#änderungen-mit-show-me-erklären).
+Für die Qualitätsprüfung mit anti-slop gelten die
+[Beitragsregeln](CONTRIBUTING.md#änderungen-zeigen-und-auf-qualität-prüfen).
+Die dort verlinkten Originalquellen lesen, statt deren Regeln hier zu kopieren.

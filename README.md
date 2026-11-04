@@ -3,6 +3,7 @@
 </p>
 
 <p align="center">
+  <a href="https://pinokio.co/apps/github-com-bogotrax-koprotokoll-pinokio"><img alt="Mit Pinokio installieren – 1-Klick" src="https://img.shields.io/badge/%E2%9A%A1_Mit_Pinokio_installieren-1--Klick-FF6C37?labelColor=1a1a1a"></a>
   <a href="LICENSE"><img alt="Lizenz: MIT" src="https://img.shields.io/badge/Lizenz-MIT-6c3ce1"></a>
   <img alt="Python 3.11+" src="https://img.shields.io/badge/Python-3.11%2B-3776ab">
   <img alt="Spracherkennung: NVIDIA Parakeet" src="https://img.shields.io/badge/ASR-NVIDIA%20Parakeet-76b900">
@@ -73,8 +74,10 @@ Kanzleien, Behörden oder einfach vertrauliche Team-Meetings ist das oft ein No-
 <td width="50%" valign="top">
 
 **🎙️ Aufnehmen**
-- **Meeting-Bot** tritt Google Meet und Jitsi als Teilnehmer bei – per Link oder automatisch aus dem Kalender
+- **Meeting-Bot** tritt Google Meet, Jitsi und Microsoft Teams als Teilnehmer bei – per Link oder automatisch aus dem Kalender
 - Aufnahme im Browser: Mikrofon oder Ton eines Tabs (Zoom, Teams, Meet im Browser)
+- Hardware-/Loopback-Aufnahme als WAV, unabhängig von Meeting-App und Browser ([Anleitung](docs/hardware-aufnahme.md))
+- Mac-App mit Einstellungen für Audioquelle und Doppeltipp-Taste; standardmäßig Alt zweimal für Start/Stopp ([Starten](docs/hardware-aufnahme.md#mac-per-alt-doppeltipp-aufnehmen))
 - Upload von MP3, MP4, WAV, M4A, WebM, OGG, FLAC …
 
 **🧠 Verstehen**
@@ -93,7 +96,7 @@ Kanzleien, Behörden oder einfach vertrauliche Team-Meetings ist das oft ein No-
 - Export als Markdown, TXT, SRT-Untertitel oder JSON
 
 **🔌 Anbinden**
-- **Google Kalender** (Auto-Join) und **Gmail** (Zusammenfassung per Mail)
+- **Google Kalender** und **Microsoft/Outlook** (Auto-Join), **Gmail** (Zusammenfassung per Mail)
 - **REST-API** mit API-Schlüsseln und OpenAPI-Doku
 - **Webhooks** (HMAC-signiert) für n8n, Zapier, Make & Co.
 - **MCP-Server** für Claude, Cursor und andere KI-Assistenten
@@ -103,6 +106,13 @@ Kanzleien, Behörden oder einfach vertrauliche Team-Meetings ist das oft ein No-
 </table>
 
 ## 🖼️ So sieht's aus
+
+<p align="center">
+  <img src="docs/nachweise/assets/issue-31/transkript-realaufnahme.png" alt="Echte Hardwareaufnahme in Koprotokoll: Audioplayer und Transkript mit Zeitmarken und automatisch geschätzten Sprechergruppen" width="100%">
+</p>
+
+Echte Hardwareaufnahme mit 2:13 Minuten Laufzeit, lokal transkribiert und mit
+Sprechergruppen versehen. [Prüfprotokoll und Grenzen des Nachweises](docs/nachweise/issue-31-lokale-audioaufnahme.md#fertige-auswertung-der-hardwareaufnahme).
 
 <p align="center">
   <img src="docs/assets/screenshot-uebersicht.png" alt="Übersicht eines Meetings mit Zusammenfassung, Action Items und Redeanteilen" width="100%">
@@ -129,7 +139,21 @@ Mehr dazu in der [Architektur-Übersicht](docs/architektur.md).
 
 ## 🚀 Schnellstart
 
-Voraussetzungen: **Python 3.11+** und **ffmpeg**. Eine Grafikkarte ist nicht nötig.
+**Variante 1 – mit [Pinokio](https://desktop.pinokio.co/) (Community-Installer):**
+
+<p align="center">
+  <a href="https://pinokio.co/apps/github-com-bogotrax-koprotokoll-pinokio"><img alt="⚡ Mit Pinokio installieren – 1-Klick" src="https://img.shields.io/badge/%E2%9A%A1_Mit_Pinokio_installieren-1--Klick-FF6C37?style=for-the-badge&labelColor=1a1a1a" height="50"></a>
+</p>
+
+1. [Pinokio installieren](https://desktop.pinokio.co/download.html) (Windows, macOS, Linux) und öffnen.
+2. [Koprotokoll in Pinokio öffnen](https://pinokio.co/apps/github-com-bogotrax-koprotokoll-pinokio) und **Installieren** klicken – Pinokio klont den Code, richtet die Python-Umgebung ein und installiert den Browser für den Meeting-Bot.
+3. **Starten** klicken und über **Oberfläche öffnen** die Weboberfläche aufrufen (Standard: `http://127.0.0.1:8000`).
+
+Pinokio läuft bereits? Dann [Koprotokoll direkt installieren](http://localhost:42000/pinokio/download?uri=https%3A%2F%2Fgithub.com%2FBogotrax%2Fkoprotokoll-pinokio&path=api).
+Der Community-Installer lädt den [Fork von Bogotrax](https://github.com/Bogotrax/Koprotokoll).
+Menü und Details: [koprotokoll-pinokio](https://github.com/Bogotrax/koprotokoll-pinokio).
+
+**Variante 2 – manuell.** Voraussetzungen: **Python 3.11+** und **ffmpeg**. Eine Grafikkarte ist nicht nötig.
 
 ```bash
 git clone https://github.com/enving/Koprotokoll.git
@@ -174,7 +198,8 @@ Die Analyse des Vorbilds Fireflies.ai mit [REA](https://github.com/morluto/rea) 
 - [x] **CalDAV** (Nextcloud, iCloud, Posteo, mailbox.org …) und **ICS-Abos** als weitere Kalenderquellen (nur lesen)
 - [ ] Recap per **SMTP** oder als **Entwurf** in Outlook/Thunderbird, Aufgaben-Export
 - [ ] **Kodiktat** als Begleit-App für Teams-/Zoom-Apps und Telefonate
-- [ ] Meeting-Bot für **BigBlueButton**, **Microsoft Teams** und **Zoom**
+- [x] Meeting-Bot für **Microsoft Teams** (Web-Client, Gastbeitritt)
+- [ ] Meeting-Bot für **BigBlueButton** und **Zoom**
 - [ ] **Live-Transkript** während des Meetings
 - [ ] Sprecher **wiedererkennen** über Meetings hinweg (Stimmprofile)
 - [ ] **Docker**-Image und Installer für Windows/macOS

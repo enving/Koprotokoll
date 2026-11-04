@@ -60,7 +60,10 @@ class Pipeline:
         if meeting is None:
             return
         src = Path(meeting["audio_path"])
-        wav = self.media_dir / f"{meeting_id}.wav"
+        # Originale WAV-Dateien können 44,1/48 kHz haben. Ein eigener Name
+        # verhindert, dass sie fälschlich als schon normalisierte 16-kHz-Datei
+        # behandelt werden.
+        wav = self.media_dir / f"{meeting_id}.normalized.wav"
 
         self._step(meeting_id, "converting")
         if not wav.exists():
@@ -71,12 +74,39 @@ class Pipeline:
         words = self.transcriber.transcribe(audio, self._step(meeting_id, "transcribing"))
 
         turns = []
+        diarization: dict = {"status": "disabled" if self.diarizer is None else "skipped"}
+        if self.diarizer is not None and not words:
+            diarization["reason"] = "Keine Wörter erkannt; Sprechererkennung nicht ausgeführt."
         if self.diarizer is not None and words:
             progress = self._step(meeting_id, "diarizing")
             try:
                 turns = self.diarizer.diarize(audio, meeting.get("num_speakers"), progress)
+                detected = len({turn.speaker for turn in turns})
+                diarization = {
+                    "status": "completed" if turns else "empty",
+                    "turn_count": len(turns),
+                    "speaker_count": detected,
+                    # Rohzeiten erlauben eine getrennte, reproduzierbare DER-Messung.
+                    "turns": [{"start": float(turn.start), "end": float(turn.end), "speaker": int(turn.speaker)}
+                              for turn in turns],
+                }
+                requested = meeting.get("num_speakers")
+                if requested is not None:
+                    diarization["requested_speakers"] = requested
+                    if detected != requested:
+                        diarization["warning"] = (
+                            f"{detected} statt der angeforderten {requested} Sprecher erkannt."
+                        )
+                if not turns:
+                    diarization["reason"] = "Keine Sprecherzeiten erkannt; Transkript enthält nur ein Ersatzlabel."
             except Exception as e:  # noqa: BLE001 – ohne Sprecher ist das Transkript trotzdem nützlich
                 log.warning("Sprechererkennung fehlgeschlagen: %s", e)
+                diarization = {"status": "failed", "error": str(e)[:500]}
+
+        # Ein fertiges Transkript mit nur S1 beweist keine erfolgreiche Diarisierung.
+        # Der Status bleibt deshalb am Meeting sichtbar und überschreibt keine Quell-Metadaten.
+        meta = {**meeting.get("meta", {}), "diarization": diarization}
+        self.db.update_meeting(meeting_id, meta=meta)
 
         segments = build_utterances(words, turns)
         self.db.replace_segments(meeting_id, segments)

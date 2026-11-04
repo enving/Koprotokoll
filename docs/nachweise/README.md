@@ -17,3 +17,23 @@ Ein Nachweis nennt:
 
 Im PR auf den Nachweis verweisen und offene Punkte ausdrücklich stehen lassen.
 Nach Änderungen am PR-Kopf die Aussagekraft erneut prüfen und nötigenfalls erneuern.
+
+## Änderungen mit show-me erklären
+
+Agenten sollen ihre gebauten Änderungen in PRs und bei Bedarf in Issues mit
+[show-me von HumanLayer](https://github.com/humanlayer/skills#show-me) verständlich
+zeigen und erklären. Der Skill erstellt kompakte Diagramme, Codeskizzen und
+HTML-Erklärungen. Installation nach der Originalanleitung:
+
+```bash
+npx skills add humanlayer/skills --skill show-me
+```
+
+Den installierten Skill mit `/show-me` auf die konkrete Änderung anwenden: Welches
+Problem löst sie, wie läuft sie ab, und was sieht oder tut der Nutzer danach?
+Das Ergebnis im PR oder Issue einbetten oder dauerhaft verlinken; bei HTML eine
+kurze Erklärung direkt im GitHub-Text ergänzen. Eine erzeugte Illustration ist
+kein Beleg für einen ausgeführten Test. Für tatsächliche Prüfungen gelten die
+Nachweisanforderungen oben. Ist der Skill nicht verfügbar, dieselbe Erklärung
+mit einem Markdown-/Mermaid-Diagramm oder einer beschrifteten Abbildung liefern
+und die Einschränkung nennen.

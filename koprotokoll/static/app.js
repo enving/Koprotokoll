@@ -127,14 +127,25 @@ async function openMeeting(id, { keepTab = false, seekTo = null } = {}) {
   if (location.hash !== `#meeting=${id}`) history.replaceState(null, "", `#meeting=${id}`);
   $("#m-title").textContent = m.title;
   const created = new Date(m.created_at * 1000).toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" });
+  const diarization = m.meta?.diarization;
+  let diarizationText = null;
+  if (diarization?.status === "completed") {
+    diarizationText = `Sprechererkennung: ${diarization.speaker_count} Sprecher`;
+    if (diarization.warning) diarizationText += ` (${diarization.warning})`;
+  } else if (diarization?.status === "failed" || diarization?.status === "empty") {
+    diarizationText = "Sprechererkennung fehlgeschlagen – Transkript ohne Sprecherzuordnung.";
+  } else if (diarization?.status === "disabled") {
+    diarizationText = "Sprechererkennung deaktiviert.";
+  }
   $("#m-meta").textContent = [created, m.duration ? fmt(m.duration) : null,
     Object.keys(m.speakers).length ? `${Object.keys(m.speakers).length} Sprecher` : null,
+    diarizationText,
     m.summary?.engine ? `Zusammenfassung: ${m.summary.engine}` : null].filter(Boolean).join(" · ");
 
   const done = m.status === "done";
   $("#m-progress").hidden = done;
   if (!done) {
-    $("#m-progress-bar").style.width = `${Math.round(m.progress * 100)}%`;
+    $("#m-progress-bar").style.transform = `scaleX(${Math.max(0, Math.min(1, m.progress))})`;
     $("#m-progress-label").textContent = m.status === "error"
       ? `Fehler: ${m.error}` : `${STATUS[m.status] || m.status} … ${Math.round(m.progress * 100)} %`;
   }
@@ -363,9 +374,84 @@ $("#upload-form").addEventListener("submit", async (e) => {
 });
 
 // ---------------------------------------------------------- Aufnahme
-const rec = { recorder: null, streams: [], chunks: [], start: 0, timer: null, ctx: null, raf: null };
+const rec = { recorder: null, streams: [], chunks: [], start: 0, timer: null, ctx: null, raf: null, hardware: false };
+
+function drawCaptureLevel(levelDb) {
+  const c = $("#rec-level"), g = c.getContext("2d");
+  const level = Math.max(0, Math.min(1, (Number(levelDb) + 60) / 60));
+  g.clearRect(0, 0, c.width, c.height);
+  g.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--accent");
+  g.fillRect(0, 6, c.width * level, 12);
+}
+
+async function pollCaptureLevel() {
+  if (!rec.hardware) return;
+  try {
+    const status = await api("/api/capture");
+    drawCaptureLevel(status.level_db ?? -120);
+  } catch { /* Aufnahme läuft unabhängig von der Pegelanzeige weiter. */ }
+  if (rec.hardware) rec.raf = setTimeout(pollCaptureLevel, 250);
+}
+
+function selectRecordingMethod() {
+  const hardware = $("#rec-method").value === "hardware";
+  $("#rec-device-wrap").hidden = !hardware;
+  $("#rec-device-help").hidden = !hardware;
+  $("#rec-source-wrap").hidden = hardware;
+}
+
+async function loadCaptureDevices() {
+  const select = $("#rec-device");
+  try {
+    const result = await api("/api/capture/devices");
+    select.replaceChildren(...result.devices.map((device) =>
+      h("option", { value: device.id }, device.name)));
+    if (!result.devices.length) {
+      select.append(h("option", { value: "" }, "Kein Audioeingang verfügbar"));
+      $("#rec-device-help").textContent = "Das Betriebssystem meldet keinen Audioeingang. Nutze eine lokale Audiodatei über Hochladen.";
+    } else {
+      updateCaptureHelp();
+    }
+  } catch (err) {
+    select.replaceChildren(h("option", { value: "" }, "Audioeingänge nicht verfügbar"));
+    $("#rec-device-help").textContent = `Audioeingänge konnten nicht geladen werden: ${err.message}`;
+  }
+}
+
+function updateCaptureHelp() {
+  const device = $("#rec-device").selectedOptions[0]?.textContent || "";
+  $("#rec-device-help").textContent = device.startsWith("Systemton + Standardmikrofon")
+    ? "Nimmt den hörbaren Systemton und das Standardmikrofon des Rechners als getrennte lokale Spuren auf."
+    : "Für Gesprächspartner aus einem Online-Meeting müssen sie über diesen Eingang hörbar sein.";
+}
+
+$("#rec-method").addEventListener("change", selectRecordingMethod);
+$("#rec-device").addEventListener("change", updateCaptureHelp);
 
 async function startRecording() {
+  if ($("#rec-method").value === "hardware") {
+    const device = $("#rec-device").value;
+    if (!device) throw new Error("Bitte einen Audioeingang auswählen.");
+    await api("/api/capture/start", jsonOpts("POST", {
+      device,
+      title: $("#rec-title").value,
+      num_speakers: Number($("#rec-speakers").value) || null,
+      channels: 2,
+      sample_rate: 48000,
+    }));
+    rec.hardware = true;
+    rec.start = Date.now();
+    rec.timer = setInterval(() => { $("#rec-time").textContent = fmt((Date.now() - rec.start) / 1000); }, 500);
+    $("#rec-dot").classList.add("on");
+    $("#rec-start").hidden = true;
+    $("#rec-stop").hidden = false;
+    $("#rec-cancel").hidden = true;
+    $("#rec-method").disabled = true;
+    $("#rec-device").disabled = true;
+    $("#rec-stop").textContent = "Stopp & auswerten";
+    pollCaptureLevel();
+    return;
+  }
   const mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
   rec.streams = [mic];
   rec.ctx = new AudioContext();
@@ -390,6 +476,8 @@ async function startRecording() {
   $("#rec-start").hidden = true;
   $("#rec-stop").hidden = false;
   $("#rec-source").disabled = true;
+  $("#rec-cancel").hidden = true;
+  $("#rec-stop").textContent = "Stopp & auswerten";
   drawLevel(analyser);
 }
 
@@ -408,23 +496,47 @@ function drawLevel(analyser) {
 
 function cleanupRecording() {
   clearInterval(rec.timer);
+  clearTimeout(rec.raf);
   cancelAnimationFrame(rec.raf);
   rec.streams.forEach((s) => s.getTracks().forEach((t) => t.stop()));
   rec.ctx?.close();
   rec.recorder = null;
+  rec.hardware = false;
   $("#rec-dot").classList.remove("on");
   $("#rec-start").hidden = false;
   $("#rec-stop").hidden = true;
+  $("#rec-cancel").hidden = false;
+  $("#rec-method").disabled = false;
+  $("#rec-device").disabled = false;
   $("#rec-source").disabled = false;
   $("#rec-time").textContent = "00:00";
 }
 
-$("#btn-record").addEventListener("click", () => $("#dlg-record").showModal());
+$("#btn-record").addEventListener("click", async () => {
+  selectRecordingMethod();
+  $("#dlg-record").showModal();
+  await loadCaptureDevices();
+});
 $("#rec-start").addEventListener("click", () => startRecording().catch((err) => {
   cleanupRecording();
   alert(`Aufnahme nicht möglich: ${err.message}`);
 }));
 $("#rec-stop").addEventListener("click", () => {
+  if (rec.hardware) {
+    $("#rec-stop").disabled = true;
+    clearInterval(rec.timer);
+    rec.timer = null;
+    api("/api/capture/stop", { method: "POST" }).then(async (meeting) => {
+      cleanupRecording();
+      $("#dlg-record").close();
+      await loadMeetings();
+      await openMeeting(meeting.id);
+    }).catch((err) => {
+      cleanupRecording();
+      alert(`Aufnahme konnte nicht ausgewertet werden: ${err.message}`);
+    }).finally(() => { $("#rec-stop").disabled = false; });
+    return;
+  }
   const r = rec.recorder;
   if (!r) return;
   r.onstop = async () => {
@@ -437,6 +549,7 @@ $("#rec-stop").addEventListener("click", () => {
   r.stop();
 });
 $("#dlg-record").addEventListener("close", () => { if (rec.recorder) { rec.recorder.onstop = null; rec.recorder.stop(); cleanupRecording(); } });
+$("#dlg-record").addEventListener("cancel", (e) => { if (rec.hardware || rec.recorder) e.preventDefault(); });
 
 // ---------------------------------------------------------- Ansichten
 function showView(name) {
@@ -494,12 +607,24 @@ $("#bot-form").addEventListener("submit", async (e) => {
 // ---------------------------------------------------------- Integrationen
 async function openIntegrations() {
   showView("integrations");
-  if (location.hash.split("?")[0] !== "#integrations") history.replaceState(null, "", "#integrations");
+  // pushState statt replaceState: Die Zurück-Taste des Browsers führt zurück (route() bei hashchange).
+  if (location.hash.split("?")[0] !== "#integrations") history.pushState(null, "", "#integrations");
   const params = new URLSearchParams(location.hash.split("?")[1] || "");
   const err = params.get("google_error") || params.get("microsoft_error");
   if (err) alert(`Anmeldung abgebrochen: ${err}`);
   renderBots();
   await Promise.all([renderGoogle(), renderMicrosoft(), renderSources(), renderKeys(), renderHooks()]);
+}
+
+// Integrationen schließen: zurück zum zuletzt geöffneten Meeting, sonst zur Übersicht.
+async function closeIntegrations() {
+  if (state.current) {
+    await openMeeting(state.current.id, { keepTab: true }).catch(() => showView("meeting"));
+    return;
+  }
+  showView("empty");
+  history.replaceState(null, "", "#");
+  await renderUpcoming();
 }
 
 async function renderGoogle() {
@@ -736,7 +861,12 @@ $("#hook-form").addEventListener("submit", async (e) => {
   } catch (err) { alert(err.message); }
 });
 
-$("#btn-integrations").addEventListener("click", openIntegrations);
+$("#btn-integrations").addEventListener("click", () => {
+  if ($("#integrations").hidden) openIntegrations();
+  else closeIntegrations();
+});
+
+$("#btn-close-integrations").addEventListener("click", () => closeIntegrations());
 
 async function route() {
   const hash = location.hash;
@@ -745,7 +875,7 @@ async function route() {
   else if (hash.startsWith("#integrations")) await openIntegrations();
   else { showView("empty"); await renderUpcoming(); }
 }
-window.addEventListener("hashchange", route);
+window.addEventListener("hashchange", () => route());
 
 // ---------------------------------------------------------- Start
 (async () => {
