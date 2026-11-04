@@ -177,9 +177,11 @@ class MicrosoftClient:
             if not pending or pending["expires"] <= time.time():
                 self.db.set_kv("microsoft_device", None)
                 raise MicrosoftError("Der Anmeldecode ist abgelaufen. Bitte neu starten.")
-        interval = pending["interval"]
-        if time.time() < pending["next_poll"]:
-            return {"status": "pending", "interval": interval}
+            interval = pending["interval"]
+            if time.time() < pending["next_poll"]:
+                return {"status": "pending", "interval": interval}
+            # Das Intervall reservieren, bevor ein zweiter Browser ebenfalls anfragt.
+            self.db.set_kv("microsoft_device", {**pending, "next_poll": time.time() + interval})
         client_id, _ = self._client()
         try:
             token = _http("POST", TOKEN_URL, form={

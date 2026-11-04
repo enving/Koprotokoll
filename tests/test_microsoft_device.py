@@ -230,3 +230,42 @@ def test_mail_address_comes_from_graph_mailbox(tmp_path, monkeypatch):
     client = ms.MicrosoftClient(Settings(data_dir=tmp_path), Database(tmp_path / "db.sqlite3"))
     client._store_tokens({"access_token": "test", "refresh_token": "rt", "id_token": "x." + claim + ".y"}, "device")
     assert client.status()["email"] == "ben@example.com"
+
+
+def test_parallel_device_checks_reserve_provider_interval(tmp_path, monkeypatch):
+    import threading
+    from koprotokoll.config import Settings
+    from koprotokoll.db import Database
+    from koprotokoll.microsoft import MicrosoftClient, MicrosoftError, TOKEN_URL
+    import time
+    import koprotokoll.microsoft as module
+
+    db = Database(tmp_path / 'db.sqlite')
+    microsoft = MicrosoftClient(Settings(data_dir=tmp_path, microsoft_client_id='client'), db)
+    db.set_kv('microsoft_device', {'device_code': 'code', 'expires': time.time() + 600,
+                                 'interval': 5, 'next_poll': 0, 'scope': 'offline_access'})
+    started, release, calls, errors = threading.Event(), threading.Event(), [], []
+
+    def token_request(method, url, **kwargs):
+        assert url == TOKEN_URL
+        calls.append(url)
+        started.set()
+        assert release.wait(3)
+        raise MicrosoftError('Noch nicht bestätigt', 'authorization_pending')
+
+    monkeypatch.setattr(module, '_http', token_request)
+    def first():
+        try:
+            microsoft.poll_device()
+        except Exception as error:
+            errors.append(error)
+    worker = threading.Thread(target=first)
+    worker.start()
+    assert started.wait(2)
+    try:
+        assert microsoft.poll_device()['status'] == 'pending'
+        assert len(calls) == 1
+    finally:
+        release.set()
+        worker.join(3)
+    assert not worker.is_alive() and not errors
