@@ -490,3 +490,64 @@ der native Präferenztest deckt diese Speicherung separat ab.
 
 Keine macOS-Freigabe wurde automatisch erteilt und keine echte Aufnahme gestartet.
 Der vollständige Aufnahme-/Hotkey-Nachweis und die übrigen Grenzen oben bleiben offen.
+
+### Reiner Systemaudio-Zugriff auf Nutzerwunsch (04.11.2026)
+
+Tristan zeigte die macOS-Einstellungen mit ausgeschaltetem Koprotokoll-Eintrag
+bei Bildschirmaufnahme und leerer Liste unter „Nur Aufnahme von Systemaudio“.
+Sein Auftrag: ausschließlich Audiozugriff. Der bisherige ScreenCaptureKit-Weg
+wurde durch einen privaten Core-Audio-Tap für Systemton und AVAudioEngine für
+das Standardmikrofon ersetzt. Es gibt keine Bildschirm-/Fensterabfrage und
+keinen Videoausgang. Der Tap bleibt ungemutet; Standardgeräte werden nicht
+umgestellt. Das private Audiogerät wird beim Stoppen wieder entfernt.
+
+Der Audio-Unterprozess verwendet denselben signierten App-Bundle wie das
+Einstellungsfenster. Dessen Info.plist enthält nun sowohl
+`NSAudioCaptureUsageDescription` als auch den Mikrofon-Zwecktext. Ein Start
+des Audiowegs überschreibt keine vorhandene Server-/Portkonfiguration.
+Freigabefehler werden aus dem Helfer an die Aufnahme-API gemeldet; ein vorzeitig
+beendeter Helfer wartet nicht die gesamte Startfrist ab. Die verlängerte
+Startfrist lässt Zeit für die erstmaligen macOS-Dialoge.
+
+Native Prüfung ohne Zugriff auf reale Audioquellen: vorbereitete Float-Puffer
+für Stereo-Systemton und zeitversetztes Mono-Mikrofon mit anderer Samplerate
+werden über denselben Writer in ausgerichtete PCM-WAV-Spuren umgewandelt.
+Format, Länge, nichtleere Samples, anfängliche Mikrofonpause und Schutz einer
+vorhandenen Datei werden geprüft. Eine weitere Probe prüft, dass die Zeitachse
+erst mit dem ersten Sample beginnt; die Freigabewartezeit wird nicht als Stille
+vorangestellt. Die Linkerprüfung des Testprogramms und des tatsächlich gebauten
+App-Binaries enthält Core Audio, aber kein ScreenCaptureKit.
+
+Fokussierter Lauf: 23 Tests bestanden in 17,47 s. App und eigener Server wurden
+nach Prüfung auf laufende Aufnahme/Auswertung im Ruhezustand neu gestartet.
+`GET /api/capture` bestätigte anschließend `active:false`. Das echte App-Fenster
+zeigt den neuen Hinweis auf Systemaudio- und Mikrofonfreigabe; die separate
+Eingabeüberwachung für den globalen Hotkey war weiterhin nicht erteilt.
+
+Abschließende Suite: **96 bestanden in 62,35 s**, keine übersprungenen Tests.
+
+Während der Fortsetzung wurde über die Oberfläche eine Aufnahme gestartet
+(`POST /api/capture/start`: HTTP 200), gestoppt (HTTP 201) und als Meeting mit
+Quelle Hardware und Systemaudio-Gerätekennung gespeichert. Beide getrennten
+Spuren: 132,998 s, 48 kHz, zwei Kanäle. Systemton Peak 0,912628 / RMS 0,078603,
+Mikrofon Peak 0,119110 / RMS 0,001363 (lineare PCM-Amplituden, keine Lautheitsmessung).
+Beide enthalten Samples ungleich null; damit sind Tonspuren und Signal belegt,
+noch keine vollständige inhaltliche oder menschliche Sprecherprüfung.
+Diese Aufnahme begann vor dem letzten App-Neubau. Die abschließende Korrektur
+„Zeitachse ab erstem Sample“ wurde danach im nativen Writer-Test geprüft und
+ist nicht durch diesen bereits laufenden Hardware-Mitschnitt belegt.
+
+Die macOS-Seite wurde anschließend mit dem nativen UI-Werkzeug gelesen:
+**Koprotokoll aus** bei „Aufnahme von Bildschirm & Systemaudio“,
+**Koprotokoll an** unter „Nur Aufnahme von Systemaudio“. Es wurden durch den
+Agenten keine Berechtigungsschalter geändert. Ein weiterer Serverneustart wurde
+abgebrochen, weil bereits die Transkription der Aufnahme lief; sie wurde nicht
+unterbrochen. Aufnahme und Inhalte bleiben außerhalb von Git.
+
+Der echte Systemaudio-Aufnahmeweg und der passende macOS-Eintrag sind damit
+belegt. Der globale Alt-Doppeltipp, eine unabhängig geprüfte Wort-/Sprecherreferenz
+und die übrigen #31-Anforderungen bleiben offen. Der alte, ausgeschaltete
+Bildschirmaufnahme-Eintrag bleibt in den Systemeinstellungen sichtbar.
+
+API-Grundlage: [Apples Core-Audio-Tap-Beispiel](https://developer.apple.com/documentation/coreaudio/capturing-system-audio-with-core-audio-taps)
+und [Audio-Zwecktext](https://developer.apple.com/documentation/bundleresources/information-property-list/nsaudiocaptureusagedescription).

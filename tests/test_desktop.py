@@ -44,11 +44,16 @@ def test_app_bundle_points_to_local_backend_without_extra_python_packages(tmp_pa
     config = json.loads((app / "Contents/Resources/launcher.json").read_text())
     assert info["LSUIElement"] is True
     assert info["CFBundleExecutable"] == "Koprotokoll"
+    assert "NSAudioCaptureUsageDescription" in info
+    assert "NSMicrophoneUsageDescription" in info
     assert config["port"] == 8123
     assert config["data"] == str(tmp_path)
     assert config["python"] == sys.executable
     assert any(command[0] == "codesign" for command in calls)
     assert (app / "Contents/MacOS/Koprotokoll").is_file()
+    before = (app / "Contents/Resources/launcher.json").read_bytes()
+    build_app(Settings(data_dir=tmp_path), configure_launcher=False)
+    assert (app / "Contents/Resources/launcher.json").read_bytes() == before
 
 
 def test_desktop_rejects_unsupported_platform_before_writing(tmp_path, monkeypatch):

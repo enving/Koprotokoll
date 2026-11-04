@@ -165,6 +165,7 @@ final class DesktopApp: NSObject, NSApplicationDelegate {
         button(refreshButton, action: #selector(refreshSourcesAction))
         stack.addArrangedSubview(refreshButton)
         label("Für ein Raumgespräch ein Mikrofon wählen. Für ein Online-Meeting müssen Systemton und Mikrofon enthalten sein.")
+        label("Systemton benötigt unter macOS ‚Nur Aufnahme von Systemaudio‘ und die Mikrofonfreigabe. Bildschirminhalte werden nicht aufgenommen.")
         label("Tastenkürzel", heading: true)
         shortcutToggle.target = self
         shortcutToggle.action = #selector(changeShortcut)
@@ -389,6 +390,10 @@ final class DesktopApp: NSObject, NSApplicationDelegate {
                 toggleItem.title = "Aufnahme starten"
             }
             for entry in sourcesMenu.items { entry.isEnabled = !active }
+            if let error = state["error"] as? String {
+                stateItem.title = "Aufnahmefehler: \(error)"
+                item.button?.title = "Ko !"
+            }
         } catch {
             stateItem.title = "Server nicht erreichbar; Aufnahmezustand unbekannt"
             item.button?.title = "Ko !"
@@ -479,6 +484,10 @@ final class DesktopApp: NSObject, NSApplicationDelegate {
 @main
 struct DesktopMain {
     static func main() {
+        if CommandLine.arguments.count == 4, CommandLine.arguments[1] == "--capture-audio" {
+            SystemAudioCapture.run(systemPath: CommandLine.arguments[2], microphonePath: CommandLine.arguments[3])
+            return
+        }
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)
         let delegate = DesktopApp()

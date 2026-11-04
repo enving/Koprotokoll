@@ -14,7 +14,7 @@ from pathlib import Path
 from .config import Settings
 
 
-def build_app(settings: Settings, port: int = 8000) -> Path:
+def build_app(settings: Settings, port: int = 8000, *, configure_launcher: bool = True) -> Path:
     """Die lokale App aus den mitgelieferten Swift-Quellen bauen, ohne Zusatzpakete."""
     if sys.platform != "darwin":
         raise RuntimeError("Die Menüleistensteuerung ist derzeit nur für macOS verfügbar.")
@@ -23,7 +23,8 @@ def build_app(settings: Settings, port: int = 8000) -> Path:
         raise RuntimeError("Die Apple-Entwicklerwerkzeuge fehlen. Einmalig `xcode-select --install` ausführen.")
     if not shutil.which("ffmpeg"):
         raise RuntimeError("ffmpeg wurde nicht gefunden; siehe Installationsanleitung.")
-    sources = [Path(__file__).with_name(name) for name in ("macos_hotkey.swift", "desktop_macos.swift")]
+    sources = [Path(__file__).with_name(name) for name in
+               ("macos_hotkey.swift", "capture_macos.swift", "desktop_macos.swift")]
     app = settings.data_dir / "desktop" / "Koprotokoll.app"
     contents = app / "Contents"
     binary = contents / "MacOS" / "Koprotokoll"
@@ -48,6 +49,7 @@ def build_app(settings: Settings, port: int = 8000) -> Path:
         "CFBundlePackageType": "APPL", "CFBundleVersion": "1",
         "LSUIElement": True, "LSMinimumSystemVersion": "12.0",
         "NSMicrophoneUsageDescription": "Koprotokoll nimmt nach deinem Start die gewählte Audioquelle auf.",
+        "NSAudioCaptureUsageDescription": "Koprotokoll nimmt für dein Protokoll den Systemton auf. Es werden keine Bildschirminhalte aufgenommen.",
     }
     info_data = plistlib.dumps(info)
     config_data = json.dumps({
@@ -57,7 +59,10 @@ def build_app(settings: Settings, port: int = 8000) -> Path:
         "port": port,
         "path": os.environ.get("PATH", "/usr/bin:/bin:/usr/sbin:/sbin"),
     }, ensure_ascii=False).encode()
-    for target, content in [(contents / "Info.plist", info_data), (resources / "launcher.json", config_data)]:
+    targets = [(contents / "Info.plist", info_data)]
+    if configure_launcher:
+        targets.append((resources / "launcher.json", config_data))
+    for target, content in targets:
         if not target.exists() or target.read_bytes() != content:
             target.write_bytes(content)
             changed = True

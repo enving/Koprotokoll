@@ -119,8 +119,15 @@ Für ein Raumgespräch reicht ein Mikrofon, sofern beide Stimmen verständlich
 ankommen. Für ein Online-Gespräch müssen die Stimmen der Freunde zusätzlich als
 Signalquelle sichtbar sein: etwa über einen vom Betriebssystem oder
   Audiointerface angebotenen Loopback-Eingang. Unter macOS 15+ kann die
-  Systemtonfunktion die aktuelle Audioausgabe plus Standardmikrofon erfassen;
-  beim ersten Einsatz kann macOS die Bildschirmaufnahmeberechtigung verlangen.
+  Systemtonfunktion die aktuelle Audioausgabe plus Standardmikrofon erfassen.
+  Sie verwendet einen privaten **Core-Audio-Tap** für den Systemton und
+  AVAudioEngine für das Mikrofon. Beim ersten Start benötigt Koprotokoll die
+  Freigaben **Nur Aufnahme von Systemaudio** und **Mikrofon** unter
+  **Datenschutz & Sicherheit**. Eine Bildschirmaufnahmefreigabe wird für diesen
+  Weg nicht benötigt; Bildschirme und Fenster werden nicht abgefragt.
+  Der Audioprozess läuft aus demselben Koprotokoll-App-Paket, dessen Zwecktexte
+  macOS bei der Freigabe anzeigt. Eine alte, ausgeschaltete Bildschirmfreigabe
+  kann in den macOS-Einstellungen weiterhin aufgeführt sein.
   Für diesen nativen Weg braucht der lokale Entwicklungsrechner `swiftc` aus den
   Apple-Entwicklerwerkzeugen; ohne Compiler wird die Option nicht angeboten.
   Die App wählt keinen Treiber und ändert weder Standard-Ein- noch
@@ -194,7 +201,7 @@ oder doppelte Stimmen müssen zusätzlich am Originalton geprüft werden.
 | Weg | Voraussetzung | Ausweichweg |
 | --- | --- | --- |
 | Direkter Hardwareeingang | Betriebssystem sieht Mikrofon/Interface/Loopback | WAV auf einem anderen Gerät aufnehmen und importieren |
-| Systemton | macOS 15+ mit Bildschirmaufnahmeberechtigung; andernorts Monitor-/Loopback-Eingang | Freigegebene lokale Aufnahmedatei importieren |
+| Systemton | macOS 15+ mit Systemaudio- und Mikrofonfreigabe; andernorts Monitor-/Loopback-Eingang | Freigegebene lokale Aufnahmedatei importieren |
 | Browseraufnahme | Sichere Seite, Browser-Berechtigung, passende Audiofreigabe | Hardware-WAV importieren |
 | Mobiles Gerät | Lokale Aufnahme-App oder geeigneter Eingang | Datei in das lokale Netz übertragen und importieren |
 
