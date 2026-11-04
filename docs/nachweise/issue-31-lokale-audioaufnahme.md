@@ -293,3 +293,37 @@ Abschlussprüfung am 04.11.2026: `.venv/bin/pytest -q -ra` meldete
 Prüffälle sichern Überlappung ohne Clipping, Erhalt vorhandener Originale
 und das Zurückweisen unzureichender Offline-Belege ab. `git diff --check`
 meldete keine Formatfehler.
+
+## Privater Realtest mit einer vom Nutzer benannten MOV-Datei (04.11.2026)
+
+Die Datei enthält eine AAC-Stereo-Tonspur mit 48 kHz und einer Containerdauer
+von 19.735,102 s, also rund 5 Stunden 29 Minuten. Die vollständige Audiospur
+wurde ohne Neukodierung als M4A gesichert. Für den ersten Test wurden
+ausschließlich die ersten **180 Sekunden (00:00 bis 03:00)** als PCM-WAV
+extrahiert. Die ganze Aufnahme wurde nicht transkribiert. Original, Tonspur,
+Ausschnitt und Ergebnisse bleiben lokal außerhalb des Git-Verlaufs; es liegt
+keine Freigabe zur Veröffentlichung dieser Gesprächsinhalte vor.
+
+Der dekodierte Ausschnitt hat 48 kHz, zwei Kanäle und 180,000 s Länge.
+RMS pro Kanal: −35,61 dBFS; Spitzenpegel: −12,80 dBFS; keine Samples erreichen
+Vollaussteuerung. Die Kanäle sind nahezu identisch (Korrelation 0,99999985).
+Die Stereo-Datei enthält damit keine praktisch getrennten Sprecherkanäle;
+Koprotokoll wertet wie üblich den Mono-Mix aus. Diese Pegelprüfung beweist
+weder die Verständlichkeit noch die Vollständigkeit aller Stimmen.
+
+Der erste Modelllauf wurde durch eine Sitzungsunterbrechung beendet und bleibt
+als unvollständiger Versuch erhalten. Die Wiederholung verwendet dieselbe
+WAV-Datei und dieselbe praktisch geprüfte externe Netzwerksperre wie oben.
+Quellpfad, Original- und Ausschnittshashes sowie Spurdaten stehen nur in der
+lokalen Datei `herkunft.json` im Realtest-Ordner auf der blauen Platte.
+
+Beim Wiederverwenden des Prüfskripts fiel dessen fester Titel
+„Synthetischer Zwei-Stimmen-Test“ auf. Das Skript verwendet jetzt den Dateistamm,
+damit reale Aufnahmen diesen irreführenden Titel nicht erhalten. Ein Test mit
+echtem Upload-/Pipelineweg und nachgebildeten Modellen prüft Titel,
+abgeschlossene Diarisierung und den unveränderten Originalhash.
+
+Die Prüfung der Änderung mit `.venv/bin/pytest -q -ra` bestand am 04.11.2026
+mit **87 Tests in 84,21 s**, keine übersprungenen Tests. Die Tests liefen
+teilweise parallel zur Modellverarbeitung; deren Laufzeiten sind deshalb
+kein isolierter Leistungsbenchmark. `git diff --check` meldete keine Fehler.

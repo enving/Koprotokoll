@@ -92,7 +92,7 @@ def main() -> None:
     with TestClient(create_app(s, transcriber=asr, diarizer=diarizer, background=False)) as client:
         with args.audio.open("rb") as source:
             response = client.post("/api/meetings", files={"file": (args.audio.name, source, "audio/wav")},
-                                   data={"title": "Synthetischer Zwei-Stimmen-Test"})
+                                   data={"title": args.audio.stem})
         response.raise_for_status()
         meeting_id = response.json()["id"]
         client.app.state.pipeline.join()

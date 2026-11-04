@@ -1,4 +1,4 @@
-"""Künstliche Testdaten müssen reproduzierbar, übersteuerungsfrei und getrennt bleiben."""
+"""Audio-Prüfskripte müssen Originale erhalten und Offline-Belege korrekt prüfen."""
 
 import numpy as np
 import pytest
@@ -48,3 +48,41 @@ def test_offline_proof_rejects_allowed_connections_and_unspecific_errors(monkeyp
     monkeypatch.setattr("socket.socket", lambda *args: ProbeSocket())
     with pytest.raises(RuntimeError):
         verify_network_block()
+
+
+def test_real_audio_import_keeps_filename_and_original(tmp_path, monkeypatch):
+    import hashlib
+    import json
+    import soundfile as sf
+    from scripts import run_audio_sample
+    from koprotokoll.speech import Turn, Word
+
+    class TestTranscriber:
+        def __init__(self, *args):
+            pass
+
+        def transcribe(self, audio, progress):
+            return [Word(0, 0.5, "Hallo.")]
+
+    class TestDiarizer:
+        def __init__(self, *args):
+            pass
+
+        def diarize(self, audio, num_speakers, progress):
+            return [Turn(0, 0.5, 0)]
+
+    audio = tmp_path / "echte-aufnahme.wav"
+    sf.write(audio, np.zeros(16_000, dtype=np.float32), 16_000)
+    digest = hashlib.sha256(audio.read_bytes()).hexdigest()
+    models = tmp_path / "models"
+    models.mkdir()
+    output = tmp_path / "run"
+    monkeypatch.setattr(run_audio_sample, "ParakeetTranscriber", TestTranscriber)
+    monkeypatch.setattr(run_audio_sample, "SherpaDiarizer", TestDiarizer)
+    monkeypatch.setattr(run_audio_sample.sys, "addaudithook", lambda hook: None)
+    monkeypatch.setattr("sys.argv", ["run_audio_sample.py", str(audio), str(output), "--models", str(models)])
+    run_audio_sample.main()
+    result = json.loads((output / "ergebnis.json").read_text())
+    assert result["title"] == audio.stem
+    assert result["meta"]["diarization"]["status"] == "completed"
+    assert hashlib.sha256(audio.read_bytes()).hexdigest() == digest
