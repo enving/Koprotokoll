@@ -613,7 +613,74 @@ async function openIntegrations() {
   const err = params.get("google_error") || params.get("microsoft_error");
   if (err) alert(`Anmeldung abgebrochen: ${err}`);
   renderBots();
-  await Promise.all([renderGoogle(), renderMicrosoft(), renderSources(), renderKeys(), renderHooks()]);
+  await Promise.all([renderGoogle(), renderMicrosoft(), renderEmail(), renderSources(), renderKeys(), renderHooks()]);
+}
+
+async function renderEmail() {
+  const box = $("#email-box");
+  box.replaceChildren(h("p", { class: "muted" }, "E-Mail-Einstellungen werden geladen …"));
+  try {
+    const config = await api("/api/integrations/email");
+    const smtp = config.smtp;
+    const provider = h("select", { id: "mail-provider" },
+      ...[["gmail", "Gmail"], ["smtp", "SMTP"], ["none", "Kein Versand"]].map(([value, label]) =>
+        h("option", { value, selected: config.provider === value }, label)));
+    const field = (id, value, type = "text") => h("input", { id, type, value });
+    const host = field("mail-host", smtp.host);
+    const port = field("mail-port", smtp.port, "number");
+    port.min = "1"; port.max = "65535";
+    const user = field("mail-user", smtp.user);
+    const sender = field("mail-sender", smtp.sender, "email");
+    const password = field("mail-password", "", "password");
+    password.autocomplete = "new-password";
+    password.placeholder = smtp.password_set ? "Gespeichert; leer lassen zum Beibehalten" : "App-Passwort";
+    const clear = h("input", { type: "checkbox" });
+    const tls = h("select", { id: "mail-tls" },
+      ...[["starttls", "STARTTLS"], ["ssl", "SSL/TLS"], ["none", "Ohne TLS (nur lokaler Server)"]].map(([value, label]) =>
+        h("option", { value, selected: smtp.tls === value }, label)));
+    const send = h("input", { type: "checkbox" }); send.checked = config.send_recap;
+    const attendees = h("input", { type: "checkbox" }); attendees.checked = config.recap_to_attendees;
+    const status = h("p", { role: "status", class: "muted small" });
+    const fields = h("div", { class: "stack" },
+      h("label", {}, "SMTP-Server", host), h("label", {}, "Port", port),
+      h("label", { for: "mail-tls" }, "Verschlüsselung"), tls, h("label", {}, "Benutzername", user),
+      h("label", {}, "App-Passwort", password),
+      h("label", { class: "row small" }, clear, "Gespeichertes Passwort löschen"),
+      h("label", {}, "Eigene Absenderadresse", sender));
+    const updateFields = () => {
+      fields.hidden = provider.value !== "smtp";
+      host.required = !fields.hidden; port.required = !fields.hidden; sender.required = !fields.hidden;
+    };
+    updateFields();
+    provider.addEventListener("change", updateFields);
+    const save = h("button", { class: "primary", type: "submit" }, "E-Mail-Einstellungen speichern");
+    const test = h("button", { type: "button", onclick: async () => {
+      test.disabled = true; status.textContent = "Test-Mail wird gesendet …";
+      try { await api("/api/integrations/email/test", { method: "POST" }); status.textContent = "Test-Mail an die gespeicherte eigene Adresse gesendet."; }
+      catch (err) { status.textContent = err.message; }
+      finally { test.disabled = false; }
+    } }, "Test-Mail an mich");
+    const form = h("form", { id: "mail-form", class: "stack", onsubmit: async (event) => {
+      event.preventDefault(); save.disabled = true; status.textContent = "Einstellungen werden gespeichert …";
+      const values = { provider: provider.value, send_recap: send.checked, recap_to_attendees: attendees.checked };
+      if (provider.value === "smtp") Object.assign(values, {
+        host: host.value.trim(), port: Number(port.value), user: user.value.trim(),
+        sender: sender.value.trim(), tls: tls.value,
+        ...(password.value || clear.checked ? { password: clear.checked ? "" : password.value } : {}),
+      });
+      try { await api("/api/integrations/email", jsonOpts("PUT", values)); password.value = ""; clear.checked = false; status.textContent = "E-Mail-Einstellungen gespeichert."; }
+      catch (err) { status.textContent = err.message; }
+      finally { save.disabled = false; }
+    } }, h("label", { for: "mail-provider" }, "Versandweg"), provider, fields,
+      h("label", { class: "row small" }, send, "Zusammenfassung nach Bot-Meetings an mich senden"),
+      h("label", { class: "row small" }, attendees, "Zusätzlich an alle Teilnehmenden senden"),
+      h("p", { class: "muted small" }, "Passwörter liegen lokal in der Datenbank. Umgebungsvariablen haben Vorrang. Vor einer Test-Mail die Einstellungen speichern."),
+      h("div", { class: "row wrap" }, save, test), status);
+    box.replaceChildren(form);
+  } catch (err) {
+    box.replaceChildren(h("p", { role: "alert" }, err.message),
+      h("button", { onclick: renderEmail }, "Erneut laden"));
+  }
 }
 
 // Integrationen schließen: zurück zum zuletzt geöffneten Meeting, sonst zur Übersicht.

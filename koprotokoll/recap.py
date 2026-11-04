@@ -5,7 +5,8 @@ from __future__ import annotations
 import html
 import logging
 
-from .google import GoogleClient, GoogleError
+from .google import GoogleError
+from .mail import MailError, MailService
 from .summarize import fmt_time
 
 log = logging.getLogger(__name__)
@@ -53,16 +54,16 @@ def build_recap(meeting: dict, public_url: str) -> tuple[str, str, str]:
 class RecapMailer:
     """Abonniert meeting.completed und verschickt die Zusammenfassung für Bot-Aufnahmen."""
 
-    def __init__(self, google: GoogleClient, public_url: str):
-        self.google, self.public_url = google, public_url
+    def __init__(self, mail: MailService, public_url: str):
+        self.mail, self.public_url = mail, public_url
 
     def __call__(self, event: str, meeting: dict) -> None:
         if event != "meeting.completed" or (meeting.get("meta") or {}).get("source") != "bot":
             return
-        settings = self.google.settings()
-        if not (self.google.connected() and settings["send_recap"]):
+        settings = self.mail.preferences()
+        if not (self.mail.connected() and settings["send_recap"]):
             return
-        own = self.google.status().get("email")
+        own = self.mail.own_email()
         to = [own] if own else []
         if settings["recap_to_attendees"]:
             to += [a for a in meeting["meta"].get("attendees", []) if a != own]
@@ -70,7 +71,7 @@ class RecapMailer:
             return
         subject, text, html_body = build_recap(meeting, self.public_url)
         try:
-            self.google.send_mail(to, subject, text, html_body)
-            log.info("Recap für Meeting %s an %s verschickt", meeting["id"], ", ".join(to))
-        except (GoogleError, OSError) as e:
+            self.mail.send(list(dict.fromkeys(to)), subject, text, html_body)
+            log.info("Recap für Meeting %s verschickt", meeting["id"])
+        except (MailError, GoogleError, OSError) as e:
             log.warning("Recap-Versand fehlgeschlagen: %s", e)

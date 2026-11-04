@@ -28,6 +28,7 @@ from .export import export
 from .google import GoogleCalendarSource, GoogleClient, GoogleError
 from .ics_source import IcsCalendarSource, IcsError
 from .microsoft import MicrosoftCalendarSource, MicrosoftClient, MicrosoftError
+from .mail import MailError, MailService
 from .pipeline import Pipeline
 from .recap import RecapMailer
 from .scheduler import CalendarScheduler
@@ -130,6 +131,18 @@ class MicrosoftSettingsIn(BaseModel):
     recap_to_attendees: bool | None = None
 
 
+class EmailSettingsIn(BaseModel):
+    provider: str | None = None
+    host: str | None = None
+    port: int | None = None
+    user: str | None = None
+    password: str | None = None
+    sender: str | None = None
+    tls: str | None = None
+    send_recap: bool | None = None
+    recap_to_attendees: bool | None = None
+
+
 def create_app(settings: Settings | None = None, transcriber: Transcriber | None = None,
                diarizer: Diarizer | None = None, llm: LLM | None = None,
                google: GoogleClient | None = None, background: bool = True) -> FastAPI:
@@ -147,7 +160,8 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
     capture = HardwareRecorder(s.data_dir / "captures")
     google = google or GoogleClient(s, db)
     microsoft = MicrosoftClient(s, db)
-    events.subscribe(RecapMailer(google, s.public_url))
+    mail = MailService(s, db, google)
+    events.subscribe(RecapMailer(mail, s.public_url))
     from .bot.runner import BotManager
 
     bots = BotManager(s, db, pipeline, events, tick_seconds=5.0 if background else 3600)
@@ -197,6 +211,29 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
     app.state.events, app.state.bots, app.state.google, app.state.calendar = events, bots, google, calendar
     api = APIRouter(dependencies=[Depends(auth.require_auth)])
     public = APIRouter()
+
+    @api.get("/api/integrations/email", tags=["email"])
+    def email_status():
+        return mail.status()
+
+    @api.put("/api/integrations/email", tags=["email"])
+    def email_settings(body: EmailSettingsIn):
+        try:
+            return mail.update(body.model_dump(exclude_none=True))
+        except MailError as e:
+            raise HTTPException(400, str(e)) from e
+
+    @api.post("/api/integrations/email/test", tags=["email"])
+    def email_test():
+        try:
+            own = mail.own_email()
+            if not own:
+                raise MailError("Eigene E-Mail-Adresse fehlt. Bitte den Mailweg einrichten.")
+            mail.send([own], "Koprotokoll: Test-Mail", "Der Mailversand funktioniert.",
+                      "<p>Der Mailversand funktioniert.</p>")
+        except (MailError, GoogleError, OSError) as e:
+            raise HTTPException(400, str(e)) from e
+        return {"ok": True}
 
     def meeting_or_404(meeting_id: int) -> dict:
         m = db.get_meeting(meeting_id)

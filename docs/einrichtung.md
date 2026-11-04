@@ -142,6 +142,38 @@ Bot-Einplanung an. Quellen lassen sich einzeln aktivieren/deaktivieren und wiede
 > und nur teilweise gegen die Anbieter-Dokumentation geprüft. Weicht ein Anbieter ab, genügt
 > der Eintrag der Server- oder Kalender-URL unter „Erweiterte Einstellungen“.
 
+## E-Mail über SMTP
+
+Unter **Integrationen & API → E-Mail** den Versandweg **SMTP** wählen,
+Server, Port, Verschlüsselung, Benutzername und eigene Absenderadresse eintragen.
+Falls der Anbieter es unterstützt, ein App-Passwort verwenden.
+Speichern und mit **Test-Mail an mich** prüfen. Automatische Recaps sind für SMTP
+zunächst aus; sie lassen sich für Bot-Meetings an die eigene Adresse und zusätzlich
+an die Termin-Teilnehmenden aktivieren. Es wird jeweils nur der gewählte Mailweg benutzt.
+
+Beispielwerte, geprüft anhand der verlinkten Quellen am 04.11.2026, ohne Anmeldung
+bei einem Anbieter:
+
+| Anbieter | Server | Port | Verschlüsselung | Quelle / Voraussetzung |
+|---|---|---:|---|---|
+| GMX | `mail.gmx.net` | 587 | STARTTLS | [GMX-Hilfe](https://hilfe.gmx.net/pop-imap/imap/imap-serverdaten.html), Zugriff für Mailprogramme aktivieren |
+| WEB.DE | `smtp.web.de` | 587 | STARTTLS | [WEB.DE-Hilfe](https://hilfe.web.de/pop-imap/imap/imap-serverdaten.html), Zugriff für Mailprogramme aktivieren |
+| Posteo | `posteo.de` | 587 | STARTTLS | [Thunderbird-Anbieterkonfiguration](https://autoconfig.thunderbird.net/v1.1/posteo.de); alternativ Port 465 mit SSL |
+| Outlook.com | `smtp-mail.outlook.com` | 587 | STARTTLS | [Microsoft-Hilfe](https://support.microsoft.com/de-de/outlook/pop-imap-and-smtp-settings-for-outlook-com): verlangt OAuth2; der SMTP-Passwortweg von Koprotokoll unterstützt diese Anmeldung nicht. Dafür den Microsoft-Anschluss verwenden. |
+
+Umgebungsvariablen haben Vorrang vor gespeicherten Einstellungen:
+`KOPROTOKOLL_SMTP_HOST`, `KOPROTOKOLL_SMTP_PORT` (Standard 587),
+`KOPROTOKOLL_SMTP_USER`, `KOPROTOKOLL_SMTP_PASSWORD`, `KOPROTOKOLL_SMTP_FROM`
+und `KOPROTOKOLL_SMTP_TLS` (`starttls`, `ssl`; `none` nur für Loopback-Testserver).
+Bei gesetztem `SMTP_HOST` wird SMTP vorausgewählt; der automatische Versand
+bleibt ausgeschaltet, bis er in der Oberfläche aktiviert wird.
+
+Passwörter aus der Oberfläche liegen im Klartext in der lokalen Datenbank.
+Die API liefert nur `password_set`, kein gespeichertes Passwort. Ein leeres
+Passwortfeld beim Speichern behält den bisherigen Wert; zum Entfernen die
+eigene Option **Gespeichertes Passwort löschen** nutzen. Die SMTP-Verbindung
+prüft TLS-Zertifikate. Serverfehler geben keine Anmeldedaten aus.
+
 ## Konfiguration
 
 Die deutsche Spracherkennung verwendet standardmäßig **Parakeet primeline**

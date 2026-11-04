@@ -102,6 +102,11 @@ dialog menu { display: flex; justify-content: flex-end; gap: 8px; padding: 0; ma
 .nav-link { border: none; background: none; text-align: left; color: var(--muted); padding: 8px 10px; }
 .nav-link:hover, .nav-link.active { background: var(--accent-soft); color: var(--accent); }
 .stack { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+#mail-form label:not(.row) { display: flex; flex-direction: column; gap: 4px; }
+#mail-form input, #mail-form select, #mail-form button { min-height: 44px; min-width: 0; }
+#mail-form input[type="checkbox"] { width: auto; min-height: auto; flex: none; cursor: pointer; }
+#mail-form label.row, #mail-form .wrap { flex-wrap: wrap; align-items: center; }
+#mail-form button:disabled { cursor: not-allowed; }
 .small { font-size: 13px; }
 details summary { cursor: pointer; color: var(--muted); }
 details[open] summary { margin-bottom: 8px; }

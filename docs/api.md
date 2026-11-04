@@ -77,3 +77,12 @@ claude mcp add koprotokoll -- python -m koprotokoll mcp
 ```
 
 Werkzeuge: `list_meetings`, `search_meetings`, `get_summary`, `get_transcript`, `ask_meeting`, `send_bot`.
+
+## E-Mail-Einstellungen
+
+- `GET /api/integrations/email`: gewählter Versandweg, Recap-Optionen und SMTP-Konfiguration. Enthält nur `smtp.password_set`, niemals das gespeicherte Passwort.
+- `PUT /api/integrations/email`: `provider` (`gmail`, `smtp`, `none`), `host`, `port`, `tls`, `user`, `password`, `sender`, `send_recap`, `recap_to_attendees`. Fehlende Felder bleiben erhalten; `password: ""` löscht das Passwort. Umgebungsvariablen haben Vorrang.
+- `POST /api/integrations/email/test`: Test-Mail an die eigene gespeicherte Adresse. Kein beliebiger Empfänger im Request.
+
+Alle drei Endpunkte verwenden die normale API-Authentifizierung. SMTP und Gmail
+verwenden dieselbe Text-/HTML-Vorlage aus `build_recap()`.
