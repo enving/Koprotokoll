@@ -50,6 +50,8 @@ CASES = [
     ("Ben prüfte gestern die Zahlen.", False, None, None),
     ("Ich schickte gestern die Unterlagen.", False, None, None),
     ("Kannst du den Bericht schicken, damit ich ihn prüfen kann?", True, None, None),
+    ("Ben prüft den Vertrag.", True, "Ben", None),
+    ("Ben schickt den Bericht.", True, "Ben", None),
 ]
 
 

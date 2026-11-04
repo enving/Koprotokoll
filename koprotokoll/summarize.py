@@ -193,8 +193,9 @@ def _action_item(sentence: dict, names: dict[str, str]) -> dict | None:
         if not (due and re.search(r"\bsollten?\b", text, re.I)
                 and re.search(rf"\b(?:{_ACTION_VERBS})\b", text, re.I)):
             return None
-    named = re.match(r"(?:Bitte\s+)?([A-ZÄÖÜ][\wäöüß-]+)(?:,|\s+(?:wird|übernimmt)\b)", text)
-    owner = named[1] if named and named[1].lower() not in {"ich", "wir", "bitte"} else None
+    named = re.match(rf"(?:Bitte\s+)?([A-ZÄÖÜ][\wäöüß-]+)(?:,|\s+(?:wird|{_ACTION_VERBS})\b)", text)
+    pronouns = {"ich", "wir", "du", "ihr", "sie", "bitte", "heute", "morgen", "danach", "vorher", "dann", "dafür"}
+    owner = named[1] if named and named[1].lower() not in pronouns else None
     main_clause = re.split(r"[,;]", text, maxsplit=1)[0]
     if owner is None and re.search(rf"\bich\s+(?:werde|{_ACTION_VERBS})\b|\b(?:werde|{_ACTION_VERBS})\s+ich\b",
                                    main_clause, re.I):
