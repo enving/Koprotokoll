@@ -52,6 +52,13 @@ CASES = [
     ("Kannst du den Bericht schicken, damit ich ihn prüfen kann?", True, None, None),
     ("Ben prüft den Vertrag.", True, "Ben", None),
     ("Ben schickt den Bericht.", True, "Ben", None),
+    ("Das muss ein Irrtum sein.", False, None, None),
+    ("Was soll das denn bedeuten?", False, None, None),
+    ("Das wird eine spannende Woche.", False, None, None),
+    ("Ich werde nächste Woche krank sein.", False, None, None),
+    ("Ben muss den Bericht bis Freitag schicken.", True, "Ben", "bis Freitag"),
+    ("Anna soll den Vertrag prüfen.", True, "Anna", None),
+    ("Ich muss den Bericht schicken.", True, "Anna", None),
 ]
 
 
@@ -79,3 +86,11 @@ def test_due_date_at_sentence_end_keeps_next_owner():
     result = heuristic_summary([{"start": 0, "end": 10, "speaker": "S1", "text":
         "Ben, schick den Bericht bis zum 3.11. Ich prüfe den Vertrag."}], {"S1": "Anna"})["action_items"]
     assert [(r["owner"], r["due"]) for r in result] == [("Ben", "bis zum 3.11."), ("Anna", None)]
+
+
+@pytest.mark.parametrize("date", ["3.11.", "03.11.2026."])
+@pytest.mark.parametrize("followup", ["Das ist nicht dringend.", "Danach bin ich nicht da.", "Danke, das ist nicht dringend."])
+def test_due_date_separates_unrelated_followup(date, followup):
+    task = "Ich schicke den Bericht bis zum " + date
+    result = heuristic_summary([{"start": 0, "end": 10, "speaker": "S1", "text": task + " " + followup}], {"S1": "Anna"})["action_items"]
+    assert len(result) == 1 and result[0]["task"] == task and result[0]["owner"] == "Anna"

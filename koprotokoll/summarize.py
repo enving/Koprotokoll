@@ -162,13 +162,13 @@ _ACTION_VERBS = (r"kümmere|kümmerst|kümmert|kümmern|übernehme|übernehmen|�
                  r"aktualisier(?:e|st|t|en)?|überarbeit(?:e|est|et|en)?|"
                  r"ergänz(?:e|st|t|en)?|abschließen|fertigstellen|nachfassen|dokumentier(?:e|st|t|en)?")
 ACTION_PATTERNS = [
-    rf"\b(?:ich|wir)\s+(?:werde|werden|{_ACTION_VERBS})\b",
-    r"\b(?:muss|müssen|soll|sollen)\b",
+    rf"\b(?:ich|wir)\s+(?:(?:werde|werden)\b.*\b(?:{_ACTION_VERBS})|(?:{_ACTION_VERBS}))\b",
+    rf"\b(?:muss|müssen|soll|sollen)\b.*\b(?:{_ACTION_VERBS})\b",
     rf"\b(?:kannst|könnt|könnten)\s+(?:du|ihr|Sie)\b.*\b(?:{_ACTION_VERBS})\b",
     rf"\bbitte\b.*\b(?:{_ACTION_VERBS})\b",
     rf"^[A-ZÄÖÜ][\wäöüß-]+,\s+.*\b(?:{_ACTION_VERBS})\b",
     r"\b(?:to-?do|aufgabe|action item)\s*:",
-    rf"^[A-ZÄÖÜ][\wäöüß-]+\s+(?:wird|{_ACTION_VERBS})\b",
+    rf"^[A-ZÄÖÜ][\wäöüß-]+\s+(?:wird\b.*\b(?:{_ACTION_VERBS})|(?:{_ACTION_VERBS}))\b",
     r"\b(i|we)('ll| will| need to| have to| should)\b",
     r"\b(let's|lets|make sure|deadline\s*:|by (monday|tuesday|wednesday|thursday|friday|tomorrow|next))\b",
 ]
@@ -193,11 +193,11 @@ def _action_item(sentence: dict, names: dict[str, str]) -> dict | None:
         if not (due and re.search(r"\bsollten?\b", text, re.I)
                 and re.search(rf"\b(?:{_ACTION_VERBS})\b", text, re.I)):
             return None
-    named = re.match(rf"(?:Bitte\s+)?([A-ZÄÖÜ][\wäöüß-]+)(?:,|\s+(?:wird|{_ACTION_VERBS})\b)", text)
-    pronouns = {"ich", "wir", "du", "ihr", "sie", "bitte", "heute", "morgen", "danach", "vorher", "dann", "dafür"}
+    named = re.match(rf"(?:Bitte\s+)?([A-ZÄÖÜ][\wäöüß-]+)(?:,|\s+(?:wird|muss|soll|{_ACTION_VERBS})\b)", text)
+    pronouns = {"ich", "wir", "du", "ihr", "sie", "bitte", "heute", "morgen", "danach", "vorher", "dann", "dafür", "das", "dies", "dieses", "was", "wer", "es"}
     owner = named[1] if named and named[1].lower() not in pronouns else None
     main_clause = re.split(r"[,;]", text, maxsplit=1)[0]
-    if owner is None and re.search(rf"\bich\s+(?:werde|{_ACTION_VERBS})\b|\b(?:werde|{_ACTION_VERBS})\s+ich\b",
+    if owner is None and re.search(rf"\bich\s+(?:werde|muss|soll|{_ACTION_VERBS})\b|\b(?:werde|muss|soll|{_ACTION_VERBS})\s+ich\b",
                                    main_clause, re.I):
         owner = names.get(sentence["speaker"], sentence["speaker"])
     return {"owner": owner, "task": text, "due": due[0] if due else None,
@@ -207,8 +207,8 @@ def _action_item(sentence: dict, names: dict[str, str]) -> dict | None:
 def _sentences(segments: list[dict]) -> list[dict]:
     out = []
     for s in segments:
-        boundary = (r"(?<=[!?])\s+|(?<!\d\.)(?<=\.)\s+|(?<=\d\.)\s+(?="
-                    rf"(?:Ich|Wir|Du|Ihr|Sie|Bitte)\b|[A-ZÄÖÜ][\wäöüß-]+(?:,|\s+(?:wird|{_ACTION_VERBS})\b))")
+        # Nach Datumszahlen nur vor einem groß geschriebenen Satzanfang trennen.
+        boundary = r"(?<=[!?])\s+|(?<=\.)\s+(?=[A-ZÄÖÜ])|(?<!\d\.)(?<=\.)\s+"
         for part in re.split(boundary, s["text"]):
             if part.strip():
                 out.append({"text": part.strip(), "start": s["start"], "speaker": s["speaker"]})
