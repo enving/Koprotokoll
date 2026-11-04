@@ -9,7 +9,7 @@ from koprotokoll.audio import SAMPLE_RATE
 from koprotokoll.config import Settings
 from koprotokoll.speech import (PRIMELINE_FILES, PRIMELINE_REVISION, ParakeetTranscriber,
                                SherpaParakeetTranscriber, create_transcriber,
-                               ensure_primeline_model, split_audio)
+                               ensure_primeline_model, split_audio, Turn, speaker_for)
 
 
 def test_chunks_preserve_samples_and_choose_pause():
@@ -83,3 +83,18 @@ def test_empty_input_never_loads_model(tmp_path):
     assert asr.transcribe(np.array([], dtype=np.float32), progress.append) == []
     assert progress == [1]
     assert asr._recognizer is None
+
+
+def test_last_word_ends_before_silence_and_next_speaker(tmp_path):
+    class Recognizer:
+        def create_stream(self):
+            return SimpleNamespace(accept_waveform=lambda sr, audio: None)
+
+        def decode_stream(self, stream):
+            stream.result = SimpleNamespace(tokens=["▁Hallo"], timestamps=[0.1], durations=[0.3], text="Hallo")
+
+    asr = SherpaParakeetTranscriber(tmp_path)
+    asr._recognizer = Recognizer()
+    words = asr.transcribe(np.full(90 * SAMPLE_RATE, 0.1, dtype=np.float32), lambda _: None)
+    assert words[0].end == pytest.approx(0.4)
+    assert speaker_for(words[0], [Turn(0, 1, 0), Turn(60, 90, 1)]) == 0

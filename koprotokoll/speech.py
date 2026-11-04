@@ -143,7 +143,9 @@ class SherpaParakeetTranscriber:
         result = stream.result
         start, end = offset / SAMPLE_RATE, (offset + len(audio)) / SAMPLE_RATE
         stamps = [min(max(float(t), 0), len(audio) / SAMPLE_RATE) for t in result.timestamps]
-        return tokens_to_words(list(result.tokens), stamps, start, end, result.text)
+        durations = list(getattr(result, "durations", []))
+        return tokens_to_words(list(result.tokens), stamps, start, end, result.text,
+                               durations=durations)
 
     def transcribe(self, audio: np.ndarray, progress: ProgressFn) -> list[Word]:
         words: list[Word] = []
@@ -167,24 +169,26 @@ def create_transcriber(settings) -> Transcriber:
 
 
 def tokens_to_words(tokens: list[str], stamps: list[float], seg_start: float, seg_end: float,
-                    fallback_text: str = "") -> list[Word]:
+                    fallback_text: str = "", durations: list[float] | None = None) -> list[Word]:
     """Subword-Tokens (Leerzeichen = Wortanfang) mit relativen Zeitstempeln zu Wörtern zusammensetzen."""
     if not tokens or len(tokens) != len(stamps):
         text = fallback_text.strip()
         return [Word(seg_start, seg_end, text)] if text else []
     words: list[Word] = []
-    cur_text, cur_start = "", None
+    timed_ends = durations is not None and len(durations) == len(tokens)
+    cur_text, cur_start, cur_end = "", None, None
     for i, (tok, ts) in enumerate(zip(tokens, stamps)):
         tok = tok.replace("▁", " ")
         t = seg_start + ts
         if cur_start is None or tok.startswith(" "):
             if cur_text.strip():
-                words.append(Word(cur_start, t, cur_text.strip()))
+                words.append(Word(cur_start, cur_end if timed_ends else t, cur_text.strip()))
             cur_text, cur_start = tok, t
         else:
             cur_text += tok
+        cur_end = min(seg_end, max(t, t + max(0, durations[i]))) if timed_ends else None
     if cur_text.strip():
-        words.append(Word(cur_start, max(seg_end, cur_start), cur_text.strip()))
+        words.append(Word(cur_start, cur_end if timed_ends else max(seg_end, cur_start), cur_text.strip()))
     return words
 
 

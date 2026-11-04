@@ -54,3 +54,9 @@ globale Wortzeiten. Diese Tests laden keine Modelle und sind kein Qualitätsmaß
 
 Abschlussprüfung: `.venv/bin/python -m pytest -q -ra`, **158 bestanden in
 53,43 s**, keine übersprungenen Tests. `git diff --check` ohne Befund.
+
+Das unabhängige Review fand anschließend ein zu langes Wortende am Ende eines
+Primeline-Abschnitts. Die Korrektur nutzt `result.durations`. Mit den ersten acht
+Sekunden desselben synthetischen Samples plus zwölf Sekunden Stille endet
+„Nachbarschaft.“ nun bei 8,56 s statt 20 s. Ein Regressionstest prüft auch,
+dass der spätere Sprecher dadurch nicht dem frühen Wort zugeordnet wird.
