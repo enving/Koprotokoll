@@ -168,3 +168,10 @@ Für visuelle oder manuelle Prüfungen dient [docs/nachweise/README.md](docs/nac
 Im PR den dauerhaft erreichbaren Nachweis verlinken und erklären, was er tatsächlich
 zeigt und welche Schritte außerhalb der Aufnahme geschahen. Videos und Zugangsdaten
 gehören nicht in den Git-Verlauf; kleine Skripte und Beschreibungen dürfen ins Repo.
+
+
+Agenten zeigen und erklären ihre Änderungen in PRs und bei Bedarf in Issues nach
+[show-me](docs/nachweise/README.md#änderungen-mit-show-me-erklären).
+Für die Qualitätsprüfung mit anti-slop gelten die
+[Beitragsregeln](CONTRIBUTING.md#änderungen-zeigen-und-auf-qualität-prüfen).
+Die dort verlinkten Originalquellen lesen, statt deren Regeln hier zu kopieren.
