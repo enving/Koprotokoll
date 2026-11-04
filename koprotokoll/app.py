@@ -11,9 +11,11 @@ import urllib.parse
 from dataclasses import asdict
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, FastAPI, File, Form, HTTPException, UploadFile, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
+from fastapi.exceptions import RequestValidationError
+from fastapi.exception_handlers import request_validation_exception_handler
 from pydantic import BaseModel
 
 from . import auth
@@ -213,6 +215,14 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
     public = APIRouter()
 
     @api.get("/api/integrations/email", tags=["email"])
+    @app.exception_handler(RequestValidationError)
+    async def validation_error(request: Request, error: RequestValidationError):
+        if request.url.path == "/api/integrations/email":
+            details = [{key: value for key, value in item.items() if key not in ("input", "ctx")}
+                       for item in error.errors()]
+            return JSONResponse(status_code=422, content={"detail": details})
+        return await request_validation_exception_handler(request, error)
+
     def email_status():
         return mail.status()
 

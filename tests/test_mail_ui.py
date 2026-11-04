@@ -32,6 +32,8 @@ def test_smtp_settings_ui(tmp_path, width, theme, monkeypatch):
         page.goto("http://127.0.0.1/#integrations")
         page.wait_for_load_state("networkidle")
         page.get_by_label("Versandweg", exact=True).select_option("smtp")
+        expect(page.get_by_label("Zusammenfassung nach Bot-Meetings an mich senden", exact=True)).not_to_be_checked()
+        expect(page.get_by_label("Zusätzlich an alle Teilnehmenden senden", exact=True)).not_to_be_checked()
         page.get_by_role("button", name="E-Mail-Einstellungen speichern", exact=True).click()
         assert page.get_by_label("SMTP-Server", exact=True).evaluate("el => el.validity.valueMissing")
         page.get_by_label("SMTP-Server", exact=True).fill("mail.example.com")

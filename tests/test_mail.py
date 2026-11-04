@@ -130,3 +130,24 @@ def test_email_api_requires_key_and_rejects_insecure_smtp(tmp_path):
         assert client.get("/api/integrations/email", headers={"X-Forwarded-For": "198.51.100.1"}).status_code == 401
         assert client.put("/api/integrations/email", json={"provider": "smtp", **config(host="mail.example.com")}).status_code == 400
         assert client.post("/api/integrations/email/test").status_code == 400
+
+
+def test_provider_change_preserves_separate_recap_preferences(tmp_path):
+    with make_client(tmp_path) as client:
+        client.patch("/api/integrations/google/settings", json={"send_recap": True, "recap_to_attendees": True})
+        r = client.put("/api/integrations/email", json={"provider": "smtp", **config()}).json()
+        assert not r["send_recap"] and not r["recap_to_attendees"]
+        client.put("/api/integrations/email", json={"send_recap": True})
+        client.put("/api/integrations/email", json={"provider": "gmail", "send_recap": False})
+        r = client.put("/api/integrations/email", json={"provider": "smtp"}).json()
+        assert r["send_recap"] and not r["recap_to_attendees"]
+
+
+def test_validation_error_never_echoes_password_input(tmp_path):
+    with make_client(tmp_path) as client:
+        for body in ({"password": {"sensitive": "dummy-review-password"}},
+                     {"password": "dummy-review-password", "port": "kein-port"}):
+            response = client.put("/api/integrations/email", json=body)
+            assert response.status_code == 422
+            assert "dummy-review-password" not in response.text
+            assert all("input" not in item for item in response.json()["detail"])

@@ -676,6 +676,9 @@ async function renderEmail() {
       h("label", { class: "row small" }, attendees, "Zusätzlich an alle Teilnehmenden senden"),
       h("p", { class: "muted small" }, "Passwörter liegen lokal in der Datenbank. Umgebungsvariablen haben Vorrang. Vor einer Test-Mail die Einstellungen speichern."),
       h("div", { class: "row wrap" }, save, test), status);
+      const preferences = config.provider_settings[provider.value];
+      send.checked = preferences.send_recap; attendees.checked = preferences.recap_to_attendees;
+      send.disabled = provider.value === "none"; attendees.disabled = provider.value === "none";
     box.replaceChildren(form);
   } catch (err) {
     box.replaceChildren(h("p", { role: "alert" }, err.message),

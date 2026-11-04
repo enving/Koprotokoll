@@ -93,14 +93,15 @@ class MailService:
                 config[key] = value
         return config
 
-    def preferences(self) -> dict:
+    def preferences(self, provider: str | None = None) -> dict:
         defaults = {"provider": "smtp" if self.s.smtp_host else "gmail",
                     "send_recap": False, "recap_to_attendees": False}
         stored = self.db.get_kv("mail_settings", {})
-        provider = stored.get("provider", defaults["provider"])
+        provider = provider or stored.get("provider", defaults["provider"])
         if provider == "gmail":
             return {"provider": provider, **self.google.settings()}
-        return {**defaults, **stored}
+        preferences = self.db.get_kv("smtp_recap_settings", {}) if provider == "smtp" else {}
+        return {**defaults, **preferences, "provider": provider}
 
     def own_email(self) -> str:
         if self.preferences()["provider"] == "gmail":
@@ -114,7 +115,9 @@ class MailService:
     def status(self) -> dict:
         config = self.smtp_config()
         password_set = bool(config.pop("password"))
-        return {**self.preferences(), "smtp": {**config, "password_set": password_set},
+        options = {provider: {key: self.preferences(provider)[key] for key in ("send_recap", "recap_to_attendees")}
+                   for provider in ("gmail", "smtp", "none")}
+        return {**self.preferences(), "provider_settings": options, "smtp": {**config, "password_set": password_set},
                 "connected": self.connected(), "own_email": self.own_email()}
 
     def update(self, values: dict) -> dict:
@@ -128,11 +131,12 @@ class MailService:
         stored_smtp = self.db.get_kv("smtp_config", {})
         stored_smtp.update({key: values[key] for key in smtp if key in values})
         self.db.set_kv("smtp_config", stored_smtp)
-        preferences = {**self.db.get_kv("mail_settings", {}), "provider": provider}
-        preferences.update({key: values[key] for key in ("send_recap", "recap_to_attendees") if key in values})
-        self.db.set_kv("mail_settings", preferences)
+        self.db.set_kv("mail_settings", {"provider": provider})
+        preferences = {key: values[key] for key in ("send_recap", "recap_to_attendees") if key in values}
         if provider == "gmail":
-            self.google.update_settings(**{k: values[k] for k in ("send_recap", "recap_to_attendees") if k in values})
+            self.google.update_settings(**preferences)
+        elif provider == "smtp":
+            self.db.set_kv("smtp_recap_settings", {**self.db.get_kv("smtp_recap_settings", {}), **preferences})
         return self.status()
 
     def send(self, to: list[str], subject: str, text: str, html: str) -> None:
