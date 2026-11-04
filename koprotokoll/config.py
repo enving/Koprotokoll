@@ -41,7 +41,7 @@ class Settings:
     public_url: str = field(default_factory=lambda: _env("KOPROTOKOLL_PUBLIC_URL", "http://localhost:8000").rstrip("/"))
 
     # Parakeet (NVIDIA NeMo) über onnx-asr – läuft auf CPU, GPU optional.
-    asr_model: str = field(default_factory=lambda: _env("KOPROTOKOLL_ASR_MODEL", "nemo-parakeet-tdt-0.6b-v3"))
+    asr_model: str = field(default_factory=lambda: _env("KOPROTOKOLL_ASR_MODEL", "parakeet-primeline"))
     asr_quantization: str | None = field(default_factory=lambda: _env("KOPROTOKOLL_ASR_QUANT", "int8") or None)
     asr_model_path: str | None = field(default_factory=lambda: os.environ.get("KOPROTOKOLL_ASR_PATH"))
 

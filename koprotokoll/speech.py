@@ -73,6 +73,99 @@ class ParakeetTranscriber:
         return words
 
 
+PRIMELINE_REPO = "flozen1981/parakeet-primeline-onnx"
+PRIMELINE_REVISION = "d548e25b9bfe559aa274f361892dc4ed5d64743a"
+PRIMELINE_FILES = ("encoder.int8.onnx", "encoder.int8.onnx.data", "decoder.int8.onnx",
+                   "joiner.int8.onnx", "tokens.txt")
+
+
+def ensure_primeline_model(path: Path) -> Path:
+    if not all((path / name).is_file() for name in PRIMELINE_FILES):
+        from huggingface_hub import snapshot_download
+
+        snapshot_download(PRIMELINE_REPO, revision=PRIMELINE_REVISION,
+                          allow_patterns=list(PRIMELINE_FILES), local_dir=str(path))
+    if not all((path / name).is_file() for name in PRIMELINE_FILES):
+        raise RuntimeError("Primeline-Modell unvollständig; bitte erneut herunterladen.")
+    return path
+
+
+def split_audio(audio: np.ndarray, max_seconds: float = 90):
+    """An der leisesten 400-ms-Stelle vor der Grenze schneiden, ohne Samples zu verlieren."""
+    max_n = int(max_seconds * SAMPLE_RATE)
+    win_n = int(0.4 * SAMPLE_RATE)
+    if max_n < 2 * win_n:
+        raise ValueError("Audioabschnitte müssen mindestens 0,8 Sekunden lang sein.")
+    search_n = int(min(15, max_seconds / 2) * SAMPLE_RATE)
+    start = 0
+    while len(audio) - start > max_n:
+        tail = audio[start + max_n - search_n:start + max_n]
+        windows = len(tail) // win_n
+        energy = (tail[:windows * win_n].reshape(windows, win_n).astype(np.float64) ** 2).mean(axis=1)
+        cut = max_n - search_n + int(energy.argmin()) * win_n + win_n // 2
+        yield start, audio[start:start + cut]
+        start += cut
+    if start < len(audio):
+        yield start, audio[start:]
+
+
+class SherpaParakeetTranscriber:
+    """Deutsche Primeline-Nachschulung; Abschnitte und Pegel nach Kodiktats lokalem Audioweg."""
+
+    def __init__(self, path: Path, threads: int = 4):
+        self.path, self.threads = path, threads
+        self._recognizer = None
+        self._lock = threading.Lock()
+
+    def _load(self):
+        if self._recognizer is None:
+            import sherpa_onnx
+
+            path = ensure_primeline_model(self.path)
+            self._recognizer = sherpa_onnx.OfflineRecognizer.from_transducer(
+                encoder=str(path / PRIMELINE_FILES[0]), decoder=str(path / PRIMELINE_FILES[2]),
+                joiner=str(path / PRIMELINE_FILES[3]), tokens=str(path / PRIMELINE_FILES[4]),
+                model_type="nemo_transducer", num_threads=self.threads,
+                decoding_method="greedy_search",
+            )
+        return self._recognizer
+
+    def _decode(self, audio: np.ndarray, offset: int) -> list[Word]:
+        peak = float(np.abs(audio).max()) if len(audio) else 0.0
+        if peak == 0:
+            return []
+        if peak < 0.5:
+            audio = audio * min(0.5 / peak, 30)
+        rec = self._load()
+        stream = rec.create_stream()
+        stream.accept_waveform(SAMPLE_RATE, audio)
+        rec.decode_stream(stream)
+        result = stream.result
+        start, end = offset / SAMPLE_RATE, (offset + len(audio)) / SAMPLE_RATE
+        stamps = [min(max(float(t), 0), len(audio) / SAMPLE_RATE) for t in result.timestamps]
+        return tokens_to_words(list(result.tokens), stamps, start, end, result.text)
+
+    def transcribe(self, audio: np.ndarray, progress: ProgressFn) -> list[Word]:
+        words: list[Word] = []
+        with self._lock:
+            for offset, chunk in split_audio(audio):
+                decoded = self._decode(chunk, offset)
+                if not decoded and len(chunk) > 20 * SAMPLE_RATE:
+                    for suboffset, part in split_audio(chunk, 20):
+                        decoded.extend(self._decode(part, offset + suboffset))
+                words.extend(decoded)
+                progress((offset + len(chunk)) / len(audio))
+        progress(1.0)
+        return words
+
+
+def create_transcriber(settings) -> Transcriber:
+    if settings.asr_model == "parakeet-primeline":
+        path = Path(settings.asr_model_path) if settings.asr_model_path else settings.models_dir / "parakeet-primeline-onnx"
+        return SherpaParakeetTranscriber(path)
+    return ParakeetTranscriber(settings.asr_model, settings.asr_quantization, settings.asr_model_path)
+
+
 def tokens_to_words(tokens: list[str], stamps: list[float], seg_start: float, seg_end: float,
                     fallback_text: str = "") -> list[Word]:
     """Subword-Tokens (Leerzeichen = Wortanfang) mit relativen Zeitstempeln zu Wörtern zusammensetzen."""
@@ -82,6 +175,7 @@ def tokens_to_words(tokens: list[str], stamps: list[float], seg_start: float, se
     words: list[Word] = []
     cur_text, cur_start = "", None
     for i, (tok, ts) in enumerate(zip(tokens, stamps)):
+        tok = tok.replace("▁", " ")
         t = seg_start + ts
         if cur_start is None or tok.startswith(" "):
             if cur_text.strip():

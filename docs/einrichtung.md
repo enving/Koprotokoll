@@ -144,10 +144,21 @@ Bot-Einplanung an. Quellen lassen sich einzeln aktivieren/deaktivieren und wiede
 
 ## Konfiguration
 
+Die deutsche Spracherkennung verwendet standardmäßig **Parakeet primeline**
+(Fine-Tuning: primeline, Basismodell: NVIDIA; CC-BY-4.0).
+Der [ONNX-Export](https://huggingface.co/flozen1981/parakeet-primeline-onnx)
+wird mit fester Revision aus `koprotokoll/speech.py` unter
+`<Datenordner>/models/parakeet-primeline-onnx/` vorbereitet.
+`python scripts/download_models.py` lädt die gewählte Engine und die
+Sprechererkennung vorab. Mit `KOPROTOKOLL_ASR_MODEL=nemo-parakeet-tdt-0.6b-v3`
+bleibt das mehrsprachige Modell wählbar. Primeline teilt lange Aufnahmen an
+leisen Stellen in höchstens 90 Sekunden, verstärkt leise Abschnitte begrenzt
+und versucht leere Ergebnisse in höchstens 20 Sekunden erneut.
+
 | Variable | Standard | Bedeutung |
 |---|---|---|
 | `KOPROTOKOLL_DATA` | `./data` | Datenbank, Mediendateien, Modelle |
-| `KOPROTOKOLL_ASR_MODEL` | `nemo-parakeet-tdt-0.6b-v3` | z. B. `nemo-parakeet-tdt-0.6b-v2` (nur Englisch) |
+| `KOPROTOKOLL_ASR_MODEL` | `parakeet-primeline` | Deutsch; alternativ `nemo-parakeet-tdt-0.6b-v3` für mehrere Sprachen |
 | `KOPROTOKOLL_ASR_QUANT` | `int8` | leer lassen für fp32 (genauer, größer) |
 | `KOPROTOKOLL_ASR_PATH` | – | lokaler Modellordner statt Download |
 | `KOPROTOKOLL_DIARIZATION` | `1` | `0` schaltet Sprechererkennung ab |
