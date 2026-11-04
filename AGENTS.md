@@ -46,13 +46,17 @@ Copilot Coding Agent, Jules), genauso wie für Menschen mit Agent im Terminal.
    - Branch-Name: `agent/<issue-nr>-<kurzname>`, z. B. `agent/12-jitsi-adapter`.
 4. **Umsetzen.** Nur das, was das Issue verlangt. Die Regeln unten gelten, Tests mit `pytest -q`.
    Bei größeren Aufgaben früh einen **Entwurfs-PR** öffnen, damit andere den Stand sehen.
-5. **Pull Request** gegen `main` von `enving/Koprotokoll`:
+5. **Pull Request durch den umsetzenden Agenten** gegen `main` von `enving/Koprotokoll`:
    - Titel auf Deutsch, z. B. „Bot-Adapter für Jitsi (#12)“
    - im Text `Closes #<nr>`, die PR-Vorlage ausfüllen, beschreiben, **wie getestet** wurde
    - offen sagen, was **nicht** getestet werden konnte (z. B. echte Meetings, Outlook auf Windows)
-   - kennzeichnen, dass der PR von einem Agenten erstellt wurde, und den verantwortlichen Menschen nennen
-6. **Review.** Die CI muss grün sein. Jeder Agenten-PR braucht die Freigabe eines Menschen –
-   Agenten mergen nie selbst. Review-Kommentare im selben Branch beheben.
+   - den erstellenden Agenten mit Modell und verwendetem GitHub-Account nennen
+6. **Review und Freigabe durch einen anderen Agenten.** Der Review-Agent prüft Änderungen,
+   Tests und Nachweise unabhängig vom umsetzenden Agenten und dokumentiert Befunde sowie
+   Freigabe mit Modell und geprüfter Commit-ID im PR. Eigene Änderungen nicht selbst
+   freigeben. Review-Kommentare im selben Branch beheben; nach weiteren Änderungen die
+   Freigabe für den neuen Stand erneut einholen. Nach Agenten-Freigabe und grüner CI
+   dürfen Agenten den PR mergen. Die geltende Vorgabe, nur auf Zuruf zu pushen, bleibt bestehen.
 7. **Neue Ideen** oder zu große Aufgaben: nicht im PR mitlösen, sondern ein neues Issue anlegen
    (Vorlage „Agenten-Aufgabe“) und im PR darauf verweisen.
 
@@ -158,11 +162,11 @@ Der Gesamtplan mit Arbeitspaketen, Reihenfolge und „Fertig, wenn“-Kriterien 
 
 ## Beiträge und überprüfbare Nachweise
 
-Menschen und Agenten verwenden denselben Issue- und PR-Ablauf oben; Agenten nennen
-Modell und verantwortliche Person. Vor einem PR die Änderungen und den aktuellen
+Für PR-Erstellung, Review und Freigabe gilt der [Ablauf oben](#mitmachen-als-agent-issue--fork--pull-request).
+Vor einem PR die Änderungen und den aktuellen
 Zielzweig prüfen, passende Tests ausführen und im PR Befehl, Ergebnis, übersprungene
 Tests und nicht geprüfte Fälle nennen. Abhängige PRs und die getesteten Commit-IDs
-angeben. Ein Mensch prüft und gibt Agenten-PRs frei; Agenten mergen nicht selbst.
+angeben.
 
 Für visuelle oder manuelle Prüfungen dient [docs/nachweise/README.md](docs/nachweise/README.md).
 Im PR den dauerhaft erreichbaren Nachweis verlinken und erklären, was er tatsächlich
