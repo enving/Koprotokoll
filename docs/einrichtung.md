@@ -109,6 +109,24 @@ Kurz vor Terminbeginn (~15 Minuten) legt Koprotokoll den Bot automatisch an.
 
 ## Weitere Kalender-Quellen: CalDAV & ICS
 
+### Klassisches Outlook unter Windows
+
+Mit installiertem klassischem Outlook und `pip install -r requirements-windows.txt`
+erscheint in **Kalender-Quellen** der Knopf **Outlook-Kalender lokal hinzufügen**.
+Er verbindet den Standardkalender des lokalen Outlook-Profils, ohne Microsoft-
+Cloud-Anmeldung. Serien werden als einzelne Vorkommen gelesen; abgelehnte
+Termine plant der Scheduler nicht als Bot-Meeting ein. Die Quelle lässt sich
+wie andere Kalender deaktivieren und entfernen. Es wird nichts in den Kalender
+geschrieben. Das neue Outlook stellt diese COM-Schnittstelle nicht bereit.
+
+Ein manueller Test mit einem echten Windows-Outlook steht aus. Automatisiert
+geprüft sind COM-Aufrufreihenfolge, Windows-Datumsformat, Serien-IDs,
+Teilnehmer und API-Verwaltung mit Nachbildungen. Outlook-Profil, lokale
+Zugriffsabfragen und Zeitzonen auf einem echten Windows-System sind dadurch
+nicht bestätigt.
+
+### CalDAV und ICS
+
 Neben Google und Microsoft lassen sich weitere Kalender als Quellen für die Bot-Einplanung
 hinzufügen (mehrere Quellen parallel) – unter **Integrationen & API** → **Kalender-Quellen**.
 Voraussetzung für beide Quellen sind die Zusatzpakete `icalendar` und `recurring-ical-events`
@@ -128,6 +146,12 @@ Kalender-Kollektion aus den Kalender-Einstellungen).
 iCalendar-Abo eintragen (Outlook „Kalender veröffentlichen“, Google „geheime iCal-Adresse“,
 Nextcloud, iCloud …) – inklusive Serien-Terminen und Zeitzonen, ebenfalls nur lesend.
 Lokale `.ics`-Dateien müssen im Datenordner (`KOPROTOKOLL_DATA`, Standard `./data`) liegen.
+
+Nach unabhängigem Review werden Termine über Outlooks `StartUTC`/`EndUTC`
+gelesen. Die Windows-Formatierung erhält die lokalen Uhrfelder ausdrücklich;
+der Jet-Filter liest ganze lokale Tage, danach begrenzt Python exakt auf das
+angefragte UTC-Fenster. Regressionen bilden die pywin32-Konvertierung und eine
+angebrochene letzte Minute nach. Der echte Windows-Test bleibt weiterhin offen.
 
 > **Sicherheit:** Das CalDAV-Passwort wird **im Klartext** in der lokalen Datenbank
 > (`koprotokoll.sqlite3` im Datenordner) gespeichert. Legt deshalb unbedingt ein
