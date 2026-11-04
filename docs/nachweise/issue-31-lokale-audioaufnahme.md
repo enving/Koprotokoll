@@ -5,6 +5,9 @@ Referenzen bleiben außerhalb des Git-Verlaufs. Es dokumentiert ausschließlich
 freigegebene Testinhalte; reale Gespräche, Namen und Zugangsdaten gehören nicht
 hinein.
 
+Die [Screenshots der Mac-App und der Freigaben](#screenshots-der-mac-app-und-der-freigaben)
+zeigen die während der Erprobung sichtbaren Einstellungen und macOS-Dialoge.
+
 ## Aufbau
 
 Der Test nutzt keinen Meeting-Bot, keine Browser-Audiofreigabe und keine
@@ -551,3 +554,96 @@ Bildschirmaufnahme-Eintrag bleibt in den Systemeinstellungen sichtbar.
 
 API-Grundlage: [Apples Core-Audio-Tap-Beispiel](https://developer.apple.com/documentation/coreaudio/capturing-system-audio-with-core-audio-taps)
 und [Audio-Zwecktext](https://developer.apple.com/documentation/bundleresources/information-property-list/nsaudiocaptureusagedescription).
+
+## Screenshots der Mac-App und der Freigaben
+
+Auf Nutzerwunsch am 04.11.2026 aus den bereitgestellten Bildern und dem lokalen
+Screenshot-Ordner ergänzt. Die Bilder zeigen historische Zwischenstände.
+Codebezug: `d795e04ed1cc89733c7ecb8655a82d687b60ba2a` für das Einstellungsfenster,
+`75b291c329f3ed9c069b0cc1c6029c4ff69a0bb1` für den späteren reinen Audioweg.
+Eine Build-ID direkt zum jeweiligen Aufnahmezeitpunkt wurde nicht protokolliert;
+die Bilder werden deshalb nicht als Screenshots exakt dieser Commits ausgegeben.
+
+Der show-me-Skill steht in dieser Sitzung nicht zur Verfügung. Die beschrifteten Abbildungen
+verwenden die in den [Nachweisregeln](README.md#änderungen-mit-show-me-erklären)
+vorgesehene Alternative. Der Ablauf ist: Audioquelle und Kürzel in der App
+wählen, nötige macOS-Freigaben bestätigen, Aufnahme starten und stoppen.
+Die Auswertung beginnt anschließend. Die zugehörigen ausgeführten Prüfungen
+und deren Grenzen stehen in den Abschnitten oben.
+
+### Einstellungen der Mac-App
+
+![Koprotokoll-Einstellungen mit Systemton plus Mikrofon, Alt-Doppeltipp und noch fehlender Eingabeüberwachung](assets/issue-31/app-einstellungen.png)
+
+**11:10:00 Uhr laut Originaldateiname.** Sichtbar sind Audioquelle,
+Tastenkürzel-Einstellungen, Freigabehinweis sowie Start- und Meeting-Schaltfläche.
+Die App ist bereit, nimmt aber nicht auf. Das Bild zeigt ausdrücklich noch
+fehlende Eingabeüberwachung und belegt keinen funktionierenden globalen Hotkey.
+Der Hinweis auf die reine Audiofreigabe wurde erst später ergänzt.
+
+### Auswahl der Doppeltipp-Taste
+
+![Geöffnete Tastenauswahl mit Alt, Control und Umschalt; Alt ist ausgewählt](assets/issue-31/app-tastenauswahl.png)
+
+**Vom Nutzer bereitgestellter Screenshot.** Die Liste bietet Alt/Option,
+Control und Umschalt an; ausgewählt ist Alt. Sichtbar ist die Auswahlmöglichkeit,
+kein ausgelöster Doppeltipp und keine laufende Aufnahme. Ein genauer
+Aufnahmezeitpunkt ist für diesen Anhang nicht belegt.
+
+### Mikrofonzugriff
+
+![macOS fragt nach Mikrofonzugriff für Koprotokoll mit den Optionen Nicht erlauben und Erlauben](assets/issue-31/mikrofon-freigabe.png)
+
+**12:01:03 Uhr laut Originaldateiname.** macOS zeigt Koprotokolls
+Mikrofon-Zwecktext. Das Bild dokumentiert die Anfrage vor der Entscheidung;
+es zeigt weder die erteilte Freigabe noch die spätere Audioaufzeichnung.
+Systemaudio und Eingabeüberwachung haben eigene Freigaben.
+
+### Dateizugriff beim Start aus dem Entwicklungsprojekt
+
+![macOS fragt, ob Koprotokoll auf Dateien im Ordner Dokumente zugreifen darf](assets/issue-31/dokumente-freigabe.png)
+
+**11:49:19 Uhr laut Originaldateiname.** Dieser Entwicklungsstand liegt im
+Ordner Dokumente und startet dort den lokalen Server. Das Bild zeigt die
+zusätzliche Dateizugriffsabfrage dieser Installation. Es ist kein Nachweis
+einer Mikrofon-, Systemaudio- oder Bildschirmfreigabe.
+
+### Herkunft und Bereinigung
+
+Bildpixel, Abmessungen und Farbprofile wurden unverändert übernommen. Entfernt
+wurden ausschließlich PNG-Text-/EXIF-Metadaten. Alle bild- und farbrelevanten
+PNG-Blöcke wurden vor und nach der Übernahme byteweise verglichen; die Originale
+blieben unverändert. Die vier Ansichten wurden auf sichtbare private Inhalte
+geprüft. Doppelte Bilder und eine Ansicht mit einem fremden Fenster am Rand
+wurden nicht übernommen. Gesprächsinhalte, Audiodateien und Zugangsdaten sind
+in diesen Bildern nicht enthalten.
+
+Prüfung der Ergänzung: vier relative Bildverweise und die internen Zielabschnitte
+vorhanden, PNG-Prüfsummen und dekodierbare Bilddaten geprüft, keine Text-/EXIF-Blöcke.
+`.venv/bin/pytest -q -ra`: **96 bestanden in 87,59 s**, keine übersprungenen Tests.
+`git diff --check` meldete keine Formatfehler.
+
+| Eingebundene Datei | Originalquelle |
+| --- | --- |
+| `app-einstellungen.png` | Screenshot-Ordner: `Bildschirmfoto 2026-11-04 um 11.10.00.png` |
+| `app-tastenauswahl.png` | Nutzeranhang `image.png` mit geöffneter Doppeltipp-Auswahl |
+| `mikrofon-freigabe.png` | Screenshot-Ordner: `Bildschirmfoto 2026-11-04 um 12.01.03.png` |
+| `dokumente-freigabe.png` | Screenshot-Ordner: `Bildschirmfoto 2026-11-04 um 11.49.19.png` |
+
+<details>
+<summary>SHA-256 der unveränderten Originaldateien</summary>
+
+```text
+f282e1a8527afb1ba98ef3fbaccb773bc52fdde7895cac5652ddd5e5989d0213  app-einstellungen.png (Original)
+ed92c079c110a96b3acd8799941c5e5a5e1d99c674249be1bea7e6963b5c2fd8  app-tastenauswahl.png (Original)
+1630214a6021bea78c1ece3676c45adf170e655018900f8269f1f330d59e0312  mikrofon-freigabe.png (Original)
+fd5741a1192b4fee9d9aa36f8f28c8780a599b1c66eb1f37cf0fd6486ed72395  dokumente-freigabe.png (Original)
+```
+
+</details>
+
+Die später bestätigte reine Systemaudio-Freigabe und die 133-Sekunden-Aufnahme
+sind [im Audioweg-Abschnitt](#reiner-systemaudio-zugriff-auf-nutzerwunsch-04112026)
+dokumentiert. Die hier eingebundenen Dialogbilder ersetzen diesen gesonderten
+Nachweis nicht. Der globale Hotkey und die menschliche Wort-/Sprecherreferenz
+bleiben offen.
