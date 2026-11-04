@@ -156,22 +156,53 @@ of on one or our out really right so some that the their them then there these t
 very was we well were what when where which who will with would yeah yes you your
 """.split())
 
+_ACTION_VERBS = (r"kümmere|kümmern|übernehme|übernehmen|übernimmt|schick\w*|send\w*|"
+                 r"meld\w*|liefer\w*|erstell\w*|prüf\w*|aktualisier\w*|überarbeit\w*|"
+                 r"ergänz\w*|abschließen|fertigstellen|nachfassen|dokumentier\w*")
 ACTION_PATTERNS = [
-    r"\b(ich|wir)\s+(werde|werden|kümmere|kümmern|übernehme|übernehmen|schicke|schicken|sende|senden|melde|melden)\b",
-    r"\b(muss|müssen|sollte|sollten|soll|sollen)\b.{3,}\b(bis|noch|nächste|morgen|heute)\b",
-    r"\b(bitte|to-?do|aufgabe|action item|nachfassen|follow[- ]?up)\b",
-    r"\bbis\s+(montag|dienstag|mittwoch|donnerstag|freitag|morgen|ende|nächste)",
+    rf"\b(?:ich|wir)\s+(?:werde|werden|{_ACTION_VERBS})\b",
+    r"\b(?:muss|müssen|soll|sollen)\b",
+    rf"\b(?:kannst|könnt|könnten)\s+(?:du|ihr|Sie)\b.*\b(?:{_ACTION_VERBS})\b",
+    rf"\bbitte\b.*\b(?:{_ACTION_VERBS})\b",
+    rf"^[A-ZÄÖÜ][\wäöüß-]+,\s+.*\b(?:{_ACTION_VERBS})\b",
+    r"\b(?:to-?do|aufgabe|action item)\s*:",
+    rf"^[A-ZÄÖÜ][\wäöüß-]+\s+(?:wird|{_ACTION_VERBS})\b",
     r"\b(i|we)('ll| will| need to| have to| should)\b",
-    r"\b(let's|lets|make sure|deadline|by (monday|tuesday|wednesday|thursday|friday|tomorrow|next))\b",
+    r"\b(let's|lets|make sure|deadline\s*:|by (monday|tuesday|wednesday|thursday|friday|tomorrow|next))\b",
 ]
 _ACTION_RE = [re.compile(p, re.I) for p in ACTION_PATTERNS]
+_DUE_RE = re.compile(
+    r"\bbis\s+(?:zum\s+)?(?:\d{1,2}\.\d{1,2}\.(?:\d{4})?|"
+    r"(?:nächsten?\s+)?(?:Montag|Dienstag|Mittwoch|Donnerstag|Freitag|Samstag|Sonntag)|"
+    r"übermorgen|morgen|heute|Ende\s+(?:der\s+Woche|des\s+Monats))|"
+    r"\bnächste\s+Woche\b|\bEnde\s+des\s+Monats\b|\b(?:übermorgen|morgen|heute)\b", re.I)
 _WORD_RE = re.compile(r"[A-Za-zÄÖÜäöüß][\wÄÖÜäöüß-]{2,}")
+
+
+def _action_item(sentence: dict, names: dict[str, str]) -> dict | None:
+    text = sentence["text"]
+    if len(text.split()) < 3 or re.search(
+        r"\b(?:nicht|nichts|kein\w*|vielleicht|eventuell)\b|"
+        r"\b(?:ist|sind|hat|haben|wurde|wurden)\b.*\b(?:erledigt|abgeschlossen|geschickt)\b", text, re.I
+    ):
+        return None
+    due = _DUE_RE.search(text)
+    if not any(r.search(text) for r in _ACTION_RE):
+        if not (due and re.search(r"\bsollten?\b", text, re.I)
+                and re.search(rf"\b(?:{_ACTION_VERBS})\b", text, re.I)):
+            return None
+    named = re.match(r"(?:Bitte\s+)?([A-ZÄÖÜ][\wäöüß-]+)(?:,|\s+(?:wird|übernimmt)\b)", text)
+    owner = named[1] if named and named[1].lower() not in {"ich", "wir", "bitte"} else None
+    if owner is None and re.search(r"\bich\b", text, re.I):
+        owner = names.get(sentence["speaker"], sentence["speaker"])
+    return {"owner": owner, "task": text, "due": due[0] if due else None,
+            "time": fmt_time(sentence["start"])}
 
 
 def _sentences(segments: list[dict]) -> list[dict]:
     out = []
     for s in segments:
-        for part in re.split(r"(?<=[.!?])\s+", s["text"]):
+        for part in re.split(r"(?<=[!?])\s+|(?<!\d\.)(?<=\.)\s+", s["text"]):
             if part.strip():
                 out.append({"text": part.strip(), "start": s["start"], "speaker": s["speaker"]})
     return out
@@ -193,9 +224,9 @@ def heuristic_summary(segments: list[dict], names: dict[str, str]) -> dict:
 
     actions = []
     for s in sents:
-        if any(r.search(s["text"]) for r in _ACTION_RE) and len(s["text"].split()) >= 4:
-            actions.append({"owner": names.get(s["speaker"], s["speaker"]), "task": s["text"],
-                            "due": None, "time": fmt_time(s["start"])})
+        action = _action_item(s, names)
+        if action:
+            actions.append(action)
 
     # Gliederung: Transkript in bis zu 6 gleich lange Zeitabschnitte teilen.
     n_parts = min(6, max(1, len(segments) // 6))

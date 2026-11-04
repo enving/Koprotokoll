@@ -8,6 +8,13 @@
 
 ## Lokales LLM für Zusammenfassungen (empfohlen)
 
+Ohne LLM erkennt die lokale Heuristik auch deutsche Aufgaben, ausdrücklich genannte
+Verantwortliche und Fristen wie „bis Freitag“, „nächste Woche“ oder „bis zum 3.11.“.
+Fristen bleiben zunächst im gesprochenen Wortlaut. Bei „wir“ oder einer Frage an
+„du“ ohne Namen bleibt die Zuständigkeit offen. Vage Vorschläge, verneinte und
+bereits erledigte Aufgaben werden gefiltert. Die Regeln ersetzen keine inhaltliche
+Prüfung; insbesondere verschachtelte Aussagen und indirekte Zusagen können fehlen.
+
 Ohne LLM erstellt die App eine einfache extraktive Zusammenfassung. Für echte
 KI-Zusammenfassungen ein lokales Modell über eine OpenAI-kompatible API bereitstellen,
 z. B. mit [Ollama](https://ollama.com):
