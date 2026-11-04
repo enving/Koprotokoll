@@ -57,7 +57,7 @@ Aus den Accessibility-Texten der Seite ergibt sich das beworbene Kern-Feature-Se
 | Datei-Upload (MP3, MP4, WAV, M4A …) | ✔ | ffmpeg → 16 kHz Mono |
 | Transkription | ✔ NVIDIA **Parakeet TDT 0.6B v3** (25 Sprachen inkl. Deutsch), CPU | `onnx-asr` + Silero-VAD |
 | Sprechererkennung | ✔ automatisch oder feste Sprecheranzahl, Namen umbenennbar | `sherpa-onnx` (pyannote-Segmentierung + ERes2Net-Embeddings) |
-| AI Summary (Überblick, Stichwörter, Gliederung, Action Items, Entscheidungen, Fragen) | ✔ lokales LLM; Offline-Heuristik als Fallback | OpenAI-kompatible API (Ollama, llama.cpp, LM Studio) |
+| AI Summary (Überblick, Stichwörter, Gliederung, Action Items, Entscheidungen, Fragen) | ✔ lokales LLM; Offline-Heuristik mit deutschen Aufgaben, Zuständigkeit und Frist als Fallback | OpenAI-kompatible API (Ollama, llama.cpp, LM Studio) |
 | Suche über alle Meetings | ✔ Volltext mit Präfixsuche und Trefferhervorhebung | SQLite FTS5 |
 | AskFred | ✔ „Frag das Meeting“ | LLM mit Transkript-Kontext; ohne LLM Suchtreffer |
 | Soundbites / Kommentare / Action-Item-Lesezeichen | ✔ mit Zeitstempel | Tabelle `bookmarks` |
