@@ -43,8 +43,18 @@ def test_manual_and_legacy_names_survive_processing(tmp_path):
     db.merge_speaker_names(mid, {"S1": "Anna", "S2": "Ben", "S3": "Carl"}, diarization={"status": "completed"})
     meeting = db.get_meeting(mid)
     assert meeting["speakers"] == {"S1": "Alter manueller Name", "S2": "Sprecher 2", "S3": "Carl"}
-    assert meeting["meta"]["manual_speakers"] == ["S2"]
+    assert meeting["meta"]["manual_speakers"] == {"S1": "Alter manueller Name", "S2": "Sprecher 2"}
     assert meeting["meta"]["source"] == "bot"
+
+
+def test_reprocessing_removes_inactive_labels_and_preserves_manual_reserve(tmp_path):
+    db = Database(tmp_path / "db.sqlite")
+    mid = db.create_meeting("Test", None)
+    db.update_meeting(mid, speakers={"S1": "Sprecher 1", "S2": "Sprecher 2", "S3": "Anna"})
+    db.merge_speaker_names(mid, {"S1": "Ben"})
+    assert db.get_meeting(mid)["speakers"] == {"S1": "Ben"}
+    db.merge_speaker_names(mid, {"S1": "Ben", "S3": "Anderer Vorschlag"})
+    assert db.get_meeting(mid)["speakers"] == {"S1": "Ben", "S3": "Anna"}
 
 
 def test_bot_sanitizes_observations_and_stores_no_bot_name(tmp_path):
@@ -59,7 +69,8 @@ def test_bot_sanitizes_observations_and_stores_no_bot_name(tmp_path):
 def test_raw_observations_are_not_sent_to_webhooks():
     from koprotokoll.pipeline import meeting_payload
 
-    meeting = {"meta": {"source": "bot", "speaker_activity": activity(["Anna"])}}
+    meeting = {"meta": {"source": "bot", "speaker_activity": activity(["Anna"]),
+                         "manual_speakers": {"S3": "Alter Name"}, "automatic_speakers": {"S1": "Anna"}}}
     assert meeting_payload(meeting)["meta"] == {"source": "bot"}
     assert "speaker_activity" in meeting["meta"]
 
@@ -86,6 +97,29 @@ def test_pipeline_uses_activity_and_keeps_edit_made_during_diarization(tmp_path)
         assert result["speakers"] == {"S1": "Mein Name", "S2": "Anna"}
         assert result["meta"]["source"] == "bot"
         assert result["meta"]["diarization"]["status"] == "completed"
+
+
+@pytest.mark.parametrize("case", ["overlap", "pauses"])
+def test_pipeline_retains_raw_diarization_intervals(tmp_path, case):
+    from test_integrations import make_client
+    from test_koprotokoll import wav_bytes, wait_done
+    from koprotokoll.speech import Turn, Word
+
+    with make_client(tmp_path) as client:
+        db, pipeline = client.app.state.db, client.app.state.pipeline
+        source = tmp_path / "input.wav"
+        source.write_bytes(wav_bytes(tmp_path, seconds=5))
+        mid = db.create_meeting("Überlappung", None, meta={"speaker_activity": activity(["Anna"])})
+        db.update_meeting(mid, audio_path=str(source))
+        words = [Word(0, 2, "Eins"), Word(2, 4, "zwei.")] if case == "overlap" else [
+            Word(at, at + 0.1, "Wort") for at in (0, 1.5, 3, 4.5)]
+        turns = [Turn(0, 4, 0), Turn(0, 4, 1)] if case == "overlap" else [
+            Turn(word.start, word.end, 0) for word in words]
+        pipeline.transcriber = SimpleNamespace(transcribe=lambda audio, progress: words)
+        pipeline.diarizer = SimpleNamespace(diarize=lambda *args: turns)
+        pipeline.submit(mid)
+        result = wait_done(client, mid)
+        assert result["speakers"] == {"S1": "Sprecher 1"}
 
 
 def test_google_observations_follow_recorder_clock_and_stop():

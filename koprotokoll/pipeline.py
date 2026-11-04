@@ -104,10 +104,15 @@ class Pipeline:
                 log.warning("Sprechererkennung fehlgeschlagen: %s", e)
                 diarization = {"status": "failed", "error": str(e)[:500]}
 
-        segments = build_utterances(words, turns)
+        labels: dict[int, str] = {}
+        segments = build_utterances(words, turns, speaker_labels=labels)
         self.db.replace_segments(meeting_id, segments)
         current = self.db.get_meeting(meeting_id)
-        automatic = names_from_activity(segments, current["meta"].get("speaker_activity", [])) if turns else {}
+        # Äußerungen verlieren überlappende Turns und können Pausen einschließen.
+        # Die Zuordnung braucht deshalb die echten Sprecherzeiten, mit identischen Labels.
+        speaker_turns = [{"start": turn.start, "end": turn.end,
+                          "speaker": labels.get(turn.speaker, f"unmapped:{turn.speaker}")} for turn in turns]
+        automatic = names_from_activity(speaker_turns, current["meta"].get("speaker_activity", [])) if turns else {}
         names = {segment["speaker"]: automatic.get(segment["speaker"], f"Sprecher {segment['speaker'][1:]}")
                  for segment in segments}
         speakers = self.db.merge_speaker_names(meeting_id, names, diarization=diarization)
@@ -140,5 +145,5 @@ def meeting_payload(m: dict) -> dict:
     payload = {k: m.get(k) for k in ("id", "title", "created_at", "duration", "status", "error",
                                     "speakers", "summary", "meta")}
     # Die rohe personenbezogene Beobachtungsreihe gehört nicht in externe Webhooks.
-    payload["meta"] = {k: v for k, v in (m.get("meta") or {}).items() if k != "speaker_activity"}
+    payload["meta"] = {k: v for k, v in (m.get("meta") or {}).items() if k not in ("speaker_activity", "manual_speakers", "automatic_speakers")}
     return payload

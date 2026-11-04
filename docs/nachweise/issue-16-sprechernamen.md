@@ -23,3 +23,9 @@ Vor Schließen von #16 müssen die tatsächlich angezeigten Namen, Sprecherwechs
 Zeitabgleich und Schutz einer manuellen Korrektur dort geprüft werden. Die
 Audio-Diarisierung bleibt maßgeblich; unbekannte oder mehrdeutige DOM-Hinweise
 sollen keine Namen erzeugen.
+
+Das unabhängige Review fand, dass geglättete Textsegmente überlappende Stimmen und
+Pausen verdecken können. Die Pipeline verwendet deshalb die ursprünglichen
+Diarisierungszeiten mit derselben Label-Map wie das Transkript. Zwei Pipeline-
+Gegenfälle decken Überlappung und kurze Wortinseln mit Pausen ab. Erneute Verarbeitung
+entfernt inaktive Labels aus der Anzeige und erhält manuelle Namen als Reserve.
