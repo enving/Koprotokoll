@@ -270,7 +270,8 @@ gesetztes Datum; der ursprüngliche Wortlaut steht in der Aufgabenbeschreibung.
 Wiederholter Export unveränderter Aufgaben erzeugt im selben Ziel keine Dubletten.
 Vorhandene Aufgaben werden belassen; es gibt keinen laufenden Abgleich ihrer
 Erledigung oder später geänderter Fristen. Ein geänderter Aufgabentext oder eine
-andere Zuständigkeit kann eine neue Aufgabe erzeugen. CalDAV nutzt stabile UIDs
+andere Zuständigkeit, Frist oder Quellzeit kann eine neue Aufgabe erzeugen. Unterschiedliche
+Vorkommen bleiben auch bei gleichem Text und gleicher Zuständigkeit getrennt. CalDAV nutzt stabile UIDs
 und bedingtes Anlegen, Outlook eine eigene Eigenschaft und Microsoft To Do eine
 verknüpfte Quellen-ID. Beschreibung und Link verweisen auf die Transkriptstelle,
 soweit eine Zeitmarke vorliegt.

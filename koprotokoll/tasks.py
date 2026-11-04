@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import calendar
+import json
 import re
 import threading
 import time
@@ -48,7 +49,7 @@ def meeting_tasks(meeting: dict, segments: list[dict], public_url: str, namespac
     safe_url(public_url)
     stamp = meeting.get("meta", {}).get("event_start") or meeting["created_at"]
     anchor = datetime.fromtimestamp(stamp).date()
-    tasks = {}
+    tasks, occurrences = [], {}
     for action in (meeting.get("summary") or {}).get("action_items", []):
         if not isinstance(action, dict) or not isinstance(action.get("task"), str):
             continue
@@ -56,8 +57,11 @@ def meeting_tasks(meeting: dict, segments: list[dict], public_url: str, namespac
         if not title:
             continue
         owner = str(action.get("owner") or "")
-        identity = f"{meeting['id']}:{owner.casefold()}:{' '.join(title.casefold().split())}"
-        uid = str(uuid.uuid5(uuid.UUID(namespace), identity)) + "@koprotokoll"
+        identity = json.dumps([meeting["id"], owner.casefold(), " ".join(title.casefold().split()),
+                               action.get("due"), action.get("time")], sort_keys=True, ensure_ascii=False)
+        occurrence = occurrences.get(identity, 0)
+        occurrences[identity] = occurrence + 1
+        uid = str(uuid.uuid5(uuid.UUID(namespace), identity + f":{occurrence}")) + "@koprotokoll"
         clock = str(action.get("time") or "")
         seconds = None
         if re.fullmatch(r"\d+(?::\d{1,2}){1,2}", clock):
@@ -74,9 +78,9 @@ def meeting_tasks(meeting: dict, segments: list[dict], public_url: str, namespac
         if excerpt:
             lines.append(f"Transkript [{clock}]: {excerpt}")
         lines.append("Meeting: " + link)
-        tasks[uid] = {"uid": uid, "title": title, "description": "\n".join(lines), "link": link,
-                      "due": resolve_due(action.get("due"), anchor)}
-    return list(tasks.values())
+        tasks.append({"uid": uid, "title": title, "description": "\n".join(lines), "link": link,
+                      "due": resolve_due(action.get("due"), anchor)})
+    return tasks
 
 
 def tasks_ics(tasks: list[dict]) -> bytes:

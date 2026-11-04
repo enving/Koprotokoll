@@ -196,3 +196,16 @@ def test_task_export_and_time_link_in_browser(tmp_path, monkeypatch):
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
         assert errors == []
         browser.close()
+
+
+def test_same_task_text_keeps_distinct_occurrences(tmp_path):
+    with make_client(tmp_path) as client:
+        mid = meeting(client)
+        actions = [{"task": "Bericht prüfen", "owner": "Ben", "due": due, "time": stamp}
+                   for due, stamp in [("Freitag", "00:05"), ("Montag", "00:30"), ("Montag", "00:30")]]
+        client.app.state.db.update_meeting(mid, summary={"action_items": actions})
+        path = f"/api/meetings/{mid}/aufgaben.ics"
+        todos = Calendar.from_ical(client.get(path).content).walk("VTODO")
+        assert len(todos) == 3 and len({str(task["UID"]) for task in todos}) == 3
+        again = Calendar.from_ical(client.get(path).content).walk("VTODO")
+        assert [str(task["UID"]) for task in again] == [str(task["UID"]) for task in todos]
