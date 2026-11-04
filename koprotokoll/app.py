@@ -31,7 +31,7 @@ from .microsoft import MicrosoftCalendarSource, MicrosoftClient, MicrosoftError
 from .pipeline import Pipeline
 from .recap import RecapMailer
 from .scheduler import CalendarScheduler
-from .speech import Diarizer, ParakeetTranscriber, SherpaDiarizer, Transcriber
+from .speech import Diarizer, SherpaDiarizer, Transcriber, create_transcriber
 from .summarize import LLM, ask
 from .transcriptions import FORMATS, render, transcribe_upload
 
@@ -137,7 +137,7 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
     s.ensure_dirs()
     db = Database(s.db_path)
     if transcriber is None:
-        transcriber = ParakeetTranscriber(s.asr_model, s.asr_quantization, s.asr_model_path)
+        transcriber = create_transcriber(s)
     if diarizer is None and s.diarization:
         diarizer = SherpaDiarizer(s.models_dir, s.diarization_threshold)
     if llm is None:
