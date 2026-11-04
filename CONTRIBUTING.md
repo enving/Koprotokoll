@@ -84,6 +84,22 @@ selbst arbeitest: `python scripts/download_models.py`.
 - [ ] Oberfläche und Doku sind auf Deutsch und aktuell (README, `docs/`)
 - [ ] keine Zugangsdaten, Aufnahmen oder persönlichen Daten im Commit
 
+## Änderungen zeigen und auf Qualität prüfen
+
+Für PRs und erläuternde Issue-Kommentare gilt der
+[show-me-Ablauf](docs/nachweise/README.md#änderungen-mit-show-me-erklären).
+Zeige die gebaute Änderung so, dass andere Problem, Ablauf und Ergebnis verstehen.
+
+Bei UI, Texten und Code-Kommentaren
+[anti-slop](https://github.com/miqdadbadjuber/anti-slop) als Qualitätsfilter
+verwenden. Die Originalquelle enthält Regeln und Installation; keine lokale
+Regelkopie pflegen. Die passenden Skills auswählen (UI, Copywriting,
+Barrierefreiheit, mobile Layouts oder Code-Kommentare) und vor Abgabe prüfen.
+Im PR kurz konkrete Befunde, Korrekturen und verbleibende Grenzen nennen.
+Projektvorgaben und ausdrücklich beauftragter Umfang haben Vorrang; bestehende
+Oberflächen nicht ungefragt umgestalten. Externe Skills sind Entwicklungshelfer,
+keine Laufzeitabhängigkeiten von Koprotokoll.
+
 ## Verhaltenskodex
 
 Wir gehen freundlich und respektvoll miteinander um – siehe [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).

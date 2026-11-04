@@ -1,12 +1,12 @@
 :root {
   --bg: #f7f7fb; --panel: #ffffff; --text: #1d1d2b; --muted: #6b6b80; --line: #e4e4ee;
-  --accent: #6c3ce1; --accent-soft: #efe9fd; --danger: #c73a3a; --hl: #fff3b0;
+  --accent: #6c3ce1; --accent-soft: #efe9fd; --danger: #c73a3a; --danger-text: #c73a3a; --hl: #fff3b0;
   --s1: #6c3ce1; --s2: #0e8f7e; --s3: #d9480f; --s4: #1971c2; --s5: #c2255c; --s6: #5c940d;
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
   :root { --bg: #14141c; --panel: #1d1d28; --text: #e8e8f0; --muted: #9a9ab0; --line: #2e2e3d;
-    --accent: #9b7bff; --accent-soft: #2a2340; --hl: #5a4d00; }
+    --accent: #9b7bff; --accent-soft: #2a2340; --danger-text: #ff9292; --hl: #5a4d00; }
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -14,8 +14,8 @@ body { margin: 0; display: grid; grid-template-columns: 300px 1fr; height: 100vh
   background: var(--bg); color: var(--text); }
 button, select, input { font: inherit; color: inherit; }
 button, select { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
-button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-button.danger { color: var(--danger); }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--panel); }
+button.danger { color: var(--danger-text); }
 button:disabled { opacity: .5; cursor: default; }
 input { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; width: 100%; }
 #sidebar { background: var(--panel); border-right: 1px solid var(--line); padding: 16px; display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
@@ -45,13 +45,13 @@ mark { background: var(--hl); color: inherit; border-radius: 3px; }
 audio { width: 100%; margin: 16px 0 8px; position: sticky; top: -24px; z-index: 2; }
 .progress { display: flex; align-items: center; gap: 12px; margin: 14px 0; color: var(--muted); font-size: 13px; }
 .progress .bar { flex: 1; height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; }
-.progress .bar div { height: 100%; background: var(--accent); width: 0; transition: width .4s; }
+.progress .bar div { height: 100%; width: 100%; background: var(--accent); transform: scaleX(0); transform-origin: left center; transition: transform .4s; }
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin: 8px 0 16px; overflow-x: auto; }
 .tabs button { white-space: nowrap; }
 .tabs button { border: none; background: none; border-bottom: 2px solid transparent; border-radius: 0; padding: 8px 12px; color: var(--muted); }
 .tabs button.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 20px; margin-bottom: 16px; }
-.card h3 { margin: 0 0 8px; font-size: 15px; }
+.card h2 { margin: 0 0 8px; font-size: 19px; }
 .grid2 { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
 @media (max-width: 1100px) { .grid2 { grid-template-columns: 1fr; } }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -79,10 +79,10 @@ audio { width: 100%; margin: 16px 0 8px; position: sticky; top: -24px; z-index: 
 .row { display: flex; gap: 8px; }
 .row select { flex: none; }
 #ask-answer { white-space: pre-wrap; margin-top: 16px; }
-dialog { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); color: var(--text); width: min(440px, 92vw); }
+dialog { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); color: var(--text); width: min(440px, 92vw); padding: 1.25rem; }
 dialog::backdrop { background: rgba(0,0,0,.35); }
-dialog h2 { margin-top: 0; }
-dialog label { display: block; margin: 10px 0; font-size: 13px; color: var(--muted); }
+dialog h2 { margin-top: 0; font-size: 20px; }
+dialog label { display: block; margin: 10px 0; font-size: 13px; color: var(--text); }
 dialog label input, dialog label select { margin-top: 4px; width: 100%; }
 dialog menu { display: flex; justify-content: flex-end; gap: 8px; padding: 0; margin: 16px 0 0; }
 .rec-state { display: flex; align-items: center; gap: 10px; margin: 12px 0; font-variant-numeric: tabular-nums; font-size: 20px; }
