@@ -732,7 +732,12 @@ async function renderEmail() {
         sender: sender.value.trim(), tls: tls.value,
         ...(password.value || clear.checked ? { password: clear.checked ? "" : password.value } : {}),
       });
-      try { await api("/api/integrations/email", jsonOpts("PUT", values)); password.value = ""; clear.checked = false; status.textContent = "E-Mail-Einstellungen gespeichert."; }
+      try {
+        Object.assign(config, await api("/api/integrations/email", jsonOpts("PUT", values)));
+        password.value = ""; clear.checked = false;
+        password.placeholder = config.smtp.password_set ? "Gespeichert; leer lassen zum Beibehalten" : "App-Passwort";
+        status.textContent = "E-Mail-Einstellungen gespeichert.";
+      }
       catch (err) { status.textContent = err.message; }
       finally { save.disabled = false; }
     } }, h("label", { for: "mail-provider" }, "Versandweg"), provider, fields,
@@ -774,7 +779,7 @@ async function renderGoogle() {
   }
   if (!g.connected) {
     box.replaceChildren(
-      h("p", { class: "muted small" }, "Verbinde dein Google-Konto: Der Bot tritt dann automatisch deinen Kalender-Meetings bei, und nach jedem Meeting kommt die Zusammenfassung per Gmail."),
+      h("p", { class: "muted small" }, "Verbinde dein Google-Konto für Kalender-Meetings und Gmail. Den Versand von Zusammenfassungen stellst du im Bereich E-Mail ein."),
       h("button", { class: "primary", onclick: () => { window.location = withKey("/api/integrations/google/connect"); } }, "Mit Google verbinden"));
     return;
   }
@@ -788,8 +793,7 @@ async function renderGoogle() {
   box.replaceChildren(
     h("p", {}, "Verbunden als ", h("b", {}, g.email || "?")),
     toggle("auto_join", "Bot tritt Kalender-Meetings mit Meet-Link automatisch bei"),
-    toggle("send_recap", "Zusammenfassung nach dem Meeting per Gmail an mich"),
-    toggle("recap_to_attendees", "… auch an alle Teilnehmer des Termins"),
+    h("p", { class: "muted small" }, "Zusammenfassungen und Empfänger im Bereich E-Mail einstellen."),
     sync ? h("p", { class: "muted small" }, sync) : null,
     h("div", { class: "row" },
       h("button", { onclick: async (e) => {

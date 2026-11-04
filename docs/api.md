@@ -9,6 +9,9 @@ einem Reverse-Proxy oder aus Tools wie n8n/Zapier/Make: API-Schlüssel in der Ob
 `python -m koprotokoll create-key n8n` erzeugen und mitsenden. Mit `KOPROTOKOLL_REQUIRE_KEY=1` gilt
 die Schlüsselpflicht auch lokal.
 
+Ändernde Browser-Anfragen mit fremdem `Origin` oder `Sec-Fetch-Site: cross-site`
+werden abgewiesen. CLI-Aufrufe ohne diese Browser-Header bleiben möglich.
+
 ```bash
 KEY=kp_…
 # Bot in ein Meeting schicken

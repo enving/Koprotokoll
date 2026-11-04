@@ -57,3 +57,44 @@ def test_smtp_settings_ui(tmp_path, width, theme, monkeypatch):
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
         assert errors == []
         browser.close()
+
+
+def test_gmail_recipient_preference_has_one_editor(tmp_path, monkeypatch):
+    from playwright.sync_api import expect, sync_playwright
+
+    monkeypatch.setattr('koprotokoll.google._http', lambda *args, **kwargs: {'items': []})
+    with make_client(tmp_path) as client, sync_playwright() as pw:
+        db = client.app.state.db
+        db.set_kv('google_tokens', {'refresh_token': 'test', 'access_token': 'test',
+                                    'expires_at': 99999999999, 'email': 'anna@example.com'})
+        db.set_kv('google_settings', {'recap_to_attendees': True})
+        browser = pw.chromium.launch(executable_path=_chrome_path(), headless=True)
+        page = browser.new_page()
+
+        def serve(route):
+            req = route.request
+            response = client.request(req.method, req.url, content=req.post_data_buffer, headers=req.headers)
+            route.fulfill(status=response.status_code, headers=dict(response.headers), body=response.content)
+
+        page.route('**/*', serve)
+        page.goto('http://127.0.0.1/#integrations')
+        page.wait_for_load_state('networkidle')
+        expect(page.locator('#google-box input[type=checkbox]')).to_have_count(1)
+        attendees = page.get_by_label('Zusätzlich an alle Teilnehmenden senden', exact=True)
+        expect(attendees).to_be_checked()
+        attendees.uncheck()
+        page.get_by_role('button', name='E-Mail-Einstellungen speichern', exact=True).click()
+        expect(page.get_by_role('status')).to_have_text('E-Mail-Einstellungen gespeichert.')
+        assert not db.get_kv('google_settings')['recap_to_attendees']
+        page.get_by_label('Versandweg', exact=True).select_option('smtp')
+        page.get_by_label('Versandweg', exact=True).select_option('gmail')
+        expect(attendees).not_to_be_checked()
+        page.get_by_role('button', name='E-Mail-Einstellungen speichern', exact=True).click()
+        expect(page.get_by_role('status')).to_have_text('E-Mail-Einstellungen gespeichert.')
+        assert not db.get_kv('google_settings')['recap_to_attendees']
+        page.reload()
+        expect(page.get_by_label('Zusätzlich an alle Teilnehmenden senden', exact=True)).not_to_be_checked()
+        page.get_by_role('button', name='E-Mail-Einstellungen speichern', exact=True).click()
+        expect(page.get_by_role('status')).to_have_text('E-Mail-Einstellungen gespeichert.')
+        assert not db.get_kv('google_settings')['recap_to_attendees']
+        browser.close()

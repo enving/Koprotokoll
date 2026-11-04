@@ -4,6 +4,8 @@ from contextlib import contextmanager
 from email import policy
 from email.parser import BytesParser
 from pathlib import Path
+import pytest
+
 from types import SimpleNamespace
 from urllib.parse import unquote
 
@@ -128,3 +130,33 @@ def test_draft_dropdown_and_download_in_browser(tmp_path, monkeypatch):
             assert errors == []
             page.close()
         browser.close()
+
+
+@pytest.mark.parametrize("headers", [
+    {"Origin": "https://fremde-seite.example"},
+    {"Origin": "null"},
+    {"Sec-Fetch-Site": "cross-site"},
+])
+def test_foreign_browser_cannot_open_local_mail_or_send_test_mail(tmp_path, monkeypatch, headers):
+    calls = []
+    monkeypatch.setattr("koprotokoll.app.open_draft", lambda *args: calls.append(args))
+    with make_client(tmp_path) as client:
+        mid = client.app.state.db.create_meeting("Test", None)
+        client.app.state.db.update_meeting(mid, status="done")
+        headers = {**headers, "Content-Type": "application/x-www-form-urlencoded"}
+        for endpoint in (f"/api/meetings/{mid}/recap/draft?ziel=outlook", "/api/integrations/email/test"):
+            response = client.post(endpoint, headers=headers)
+            assert response.status_code == 403
+        assert not calls
+        assert client.post(f"/api/meetings/{mid}/recap/draft?ziel=outlook", headers={"Origin": "http://testserver"}).status_code == 200
+        assert len(calls) == 1
+
+
+def test_public_url_origin_is_accepted_behind_https_proxy(tmp_path):
+    with make_client(tmp_path, public_url='https://meetings.example.com') as client:
+        key = client.post('/api/keys', json={'name': 'Proxy-Test'}).json()['key']
+        headers = {'Origin': 'https://meetings.example.com', 'X-Forwarded-For': '203.0.113.1',
+                   'Authorization': 'Bearer ' + key}
+        assert client.post('/api/keys', json={'name': 'Zweiter Schlüssel'}, headers=headers).status_code == 201
+        headers['Origin'] = 'https://fremd.example.com'
+        assert client.post('/api/keys', json={'name': 'Unerwünscht'}, headers=headers).status_code == 403
