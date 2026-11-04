@@ -747,10 +747,12 @@ Am 04.11.2026 meldete der Nutzer nach der erneuerten Eingabefreigabe:
 Doppeltipps durch eine Nutzerrückmeldung bestätigt. Die vorangegangene Bitte,
 einen Passwortdialog zu bestätigen, war zu diesem Zeitpunkt überholt.
 
-Die Rückmeldung nennt Start und Stopp nicht getrennt. Ein vom Agenten
-beobachteter vollständiger Start-/Stopp-Ablauf oder eine neue Prüfung der
-resultierenden Aufnahme wird daraus nicht abgeleitet. Für diese Rückmeldung
-wurde das App-Bundle nicht verändert, gebaut oder neu signiert.
+Anschließend beantwortete der Nutzer die ausdrückliche Frage nach sichtbarem
+Aufnahmestart und erneutem Alt-Doppeltipp zum Stoppen mit:
+**„Start und Stopp funktionieren“**. Damit sind beide Aktionen durch den
+physischen Nutzertest bestätigt. Eine neue inhaltliche Prüfung der resultierenden
+Aufnahme wird daraus nicht abgeleitet. Das App-Bundle wurde für diese Prüfung
+nicht verändert, gebaut oder neu signiert.
 
-Prüfung dieser Dokumentation: `pytest -q -ra` → **96 bestanden in 35,30 s**,
+Prüfung dieser Dokumentation: `pytest -q -ra` → **96 bestanden in 36,87 s**,
 keine übersprungenen Tests; `git diff --check` ohne Befund.
