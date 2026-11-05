@@ -51,11 +51,11 @@ Aus den Accessibility-Texten der Seite ergibt sich das beworbene Kern-Feature-Se
 |---|---|---|
 | Fireflies-„Notetaker“ tritt Meetings bei | ✔ Bot tritt Google Meet, Jitsi und Microsoft Teams (Gastbeitritt) als Teilnehmer bei (manuell oder automatisch aus dem Kalender) | Playwright-Chromium, WebRTC-Audiospuren per Init-Skript abgegriffen |
 | Kalender-Anbindung (Auto-Join) | ✔ Google Kalender, Microsoft/Outlook (auch Privatkonten) | OAuth 2.0, Kalender nur lesen; Termine der nächsten 7 Tage auf der Startseite |
-| Recap-E-Mail nach dem Meeting | ✔ über Gmail an sich selbst, optional an alle Teilnehmer | Gmail API (nur senden) |
+| Recap-E-Mail nach dem Meeting | ✔ über den gewählten Mailweg Gmail oder SMTP an sich selbst, optional an alle Teilnehmer; EML und lokale Mailentwürfe | Gmail API, `smtplib`, Thunderbird oder klassisches Outlook |
 | API / Webhooks / MCP | ✔ REST mit API-Schlüsseln, OpenAPI, HMAC-signierte Webhooks, MCP-Server | FastAPI, `mcp` |
 | Aufnahme ohne Bot | Browser-Aufnahme: Mikrofon **oder** Mikrofon + Tab-/Bildschirmton | `MediaRecorder` + `getDisplayMedia` |
 | Datei-Upload (MP3, MP4, WAV, M4A …) | ✔ | ffmpeg → 16 kHz Mono |
-| Transkription | ✔ NVIDIA **Parakeet TDT 0.6B v3** (25 Sprachen inkl. Deutsch), CPU | `onnx-asr` + Silero-VAD |
+| Transkription | ✔ Standard: deutsches **Parakeet primeline**; optional NVIDIA **Parakeet TDT 0.6B v3** (25 Sprachen) | `sherpa-onnx`; v3 über `onnx-asr` + Silero-VAD |
 | Sprechererkennung | ✔ automatisch oder feste Sprecheranzahl, Namen umbenennbar | `sherpa-onnx` (pyannote-Segmentierung + ERes2Net-Embeddings) |
 | AI Summary (Überblick, Stichwörter, Gliederung, Action Items, Entscheidungen, Fragen) | ✔ lokales LLM; Offline-Heuristik mit deutschen Aufgaben, Zuständigkeit und Frist als Fallback | OpenAI-kompatible API (Ollama, llama.cpp, LM Studio) |
 | Suche über alle Meetings | ✔ Volltext mit Präfixsuche und Trefferhervorhebung | SQLite FTS5 |

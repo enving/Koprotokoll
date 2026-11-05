@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import os
 import secrets
+from urllib.parse import urlsplit
 
 from fastapi import HTTPException, Request
 
@@ -43,6 +44,14 @@ def presented_key(request: Request) -> str | None:
 
 
 def require_auth(request: Request) -> None:
+    # Auch ein fremdes HTML-Formular erreicht Loopback; CORS verhindert dessen POST nicht.
+    if request.method not in ("GET", "HEAD", "OPTIONS"):
+        origin = request.headers.get("origin")
+        public = urlsplit(request.app.state.settings.public_url)
+        allowed = {str(request.base_url).rstrip("/").lower(), f"{public.scheme}://{public.netloc}".lower()}
+        if (request.headers.get("sec-fetch-site") == "cross-site"
+                or (origin is not None and origin.rstrip("/").lower() not in allowed)):
+            raise HTTPException(403, "Änderungen aus einer fremden Webseite sind nicht erlaubt.")
     db: Database = request.app.state.db
     key = presented_key(request)
     if key and db.find_api_key(hash_key(key)):

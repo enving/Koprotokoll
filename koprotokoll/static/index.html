@@ -72,6 +72,10 @@
             <div id="microsoft-box"></div>
           </div>
           <div class="card">
+            <h2>E-Mail</h2>
+            <div id="email-box" aria-live="polite"></div>
+          </div>
+          <div class="card">
             <h2>Kalender-Quellen</h2>
             <p class="muted small">Weitere Kalender als Quelle für die Bot-Einplanung: CalDAV-Konten
               (Posteo, mailbox.org, iCloud, Fastmail, Nextcloud …) – mehrere Quellen sind möglich.</p>
@@ -144,6 +148,9 @@
           <div id="m-meta" class="meta"></div>
         </div>
         <div class="head-actions">
+          <select id="m-recap" aria-label="Als E-Mail öffnen">
+            <option value="">Als E-Mail öffnen …</option>
+          </select>
           <select id="m-export" aria-label="Exportieren">
             <option value="">Exportieren …</option>
             <option value="md">Markdown (.md)</option>

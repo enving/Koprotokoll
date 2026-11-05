@@ -11,9 +11,11 @@ import urllib.parse
 from dataclasses import asdict
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, FastAPI, File, Form, HTTPException, UploadFile, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
+from fastapi.exceptions import RequestValidationError
+from fastapi.exception_handlers import request_validation_exception_handler
 from pydantic import BaseModel
 
 from . import auth
@@ -23,11 +25,13 @@ from .calendar_source import CalendarEvent
 from .capture import HardwareRecorder
 from .config import CALDAV_PRESETS, Settings
 from .db import Database
+from .drafts import draft_targets, open_draft, recap_eml
 from .events import EVENTS, EventBus
 from .export import export
 from .google import GoogleCalendarSource, GoogleClient, GoogleError
 from .ics_source import IcsCalendarSource, IcsError
 from .microsoft import MicrosoftCalendarSource, MicrosoftClient, MicrosoftError
+from .mail import MailError, MailService
 from .pipeline import Pipeline
 from .recap import RecapMailer
 from .scheduler import CalendarScheduler
@@ -130,6 +134,18 @@ class MicrosoftSettingsIn(BaseModel):
     recap_to_attendees: bool | None = None
 
 
+class EmailSettingsIn(BaseModel):
+    provider: str | None = None
+    host: str | None = None
+    port: int | None = None
+    user: str | None = None
+    password: str | None = None
+    sender: str | None = None
+    tls: str | None = None
+    send_recap: bool | None = None
+    recap_to_attendees: bool | None = None
+
+
 def create_app(settings: Settings | None = None, transcriber: Transcriber | None = None,
                diarizer: Diarizer | None = None, llm: LLM | None = None,
                google: GoogleClient | None = None, background: bool = True) -> FastAPI:
@@ -147,7 +163,8 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
     capture = HardwareRecorder(s.data_dir / "captures")
     google = google or GoogleClient(s, db)
     microsoft = MicrosoftClient(s, db)
-    events.subscribe(RecapMailer(google, s.public_url))
+    mail = MailService(s, db, google)
+    events.subscribe(RecapMailer(mail, s.public_url))
     from .bot.runner import BotManager
 
     bots = BotManager(s, db, pipeline, events, tick_seconds=5.0 if background else 3600)
@@ -198,11 +215,71 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
     api = APIRouter(dependencies=[Depends(auth.require_auth)])
     public = APIRouter()
 
+    @app.exception_handler(RequestValidationError)
+    async def validation_error(request: Request, error: RequestValidationError):
+        if request.url.path == "/api/integrations/email":
+            details = [{key: value for key, value in item.items() if key not in ("input", "ctx")}
+                       for item in error.errors()]
+            return JSONResponse(status_code=422, content={"detail": details})
+        return await request_validation_exception_handler(request, error)
+
+    @api.get("/api/integrations/email", tags=["email"])
+    def email_status():
+        return mail.status()
+
+    @api.put("/api/integrations/email", tags=["email"])
+    def email_settings(body: EmailSettingsIn):
+        try:
+            return mail.update(body.model_dump(exclude_none=True))
+        except MailError as e:
+            raise HTTPException(400, str(e)) from e
+
+    @api.post("/api/integrations/email/test", tags=["email"])
+    def email_test():
+        try:
+            own = mail.own_email()
+            if not own:
+                raise MailError("Eigene E-Mail-Adresse fehlt. Bitte den Mailweg einrichten.")
+            mail.send([own], "Koprotokoll: Test-Mail", "Der Mailversand funktioniert.",
+                      "<p>Der Mailversand funktioniert.</p>")
+        except (MailError, GoogleError, OSError) as e:
+            raise HTTPException(400, str(e)) from e
+        return {"ok": True}
+
     def meeting_or_404(meeting_id: int) -> dict:
         m = db.get_meeting(meeting_id)
         if m is None:
             raise HTTPException(404, "Meeting nicht gefunden")
         return m
+
+    def finished_meeting(meeting_id: int) -> dict:
+        meeting = meeting_or_404(meeting_id)
+        if meeting["status"] != "done":
+            raise HTTPException(409, "Das Meeting muss zuerst fertig ausgewertet sein.")
+        return meeting
+
+    @api.get("/api/integrations/email/drafts", tags=["email"])
+    def email_draft_targets(request: Request):
+        return {"targets": draft_targets(auth.is_local(request))}
+
+    @api.get("/api/meetings/{meeting_id}/recap.eml", tags=["email"])
+    def download_recap_eml(meeting_id: int):
+        try:
+            content = recap_eml(finished_meeting(meeting_id), s.public_url, mail.own_email())
+        except MailError as e:
+            raise HTTPException(400, str(e)) from e
+        return Response(content, media_type="message/rfc822",
+                        headers={"Content-Disposition": f'attachment; filename="meeting-{meeting_id}.eml"'})
+
+    @api.post("/api/meetings/{meeting_id}/recap/draft", tags=["email"])
+    def create_recap_draft(meeting_id: int, request: Request, ziel: str):
+        if not auth.is_local(request):
+            raise HTTPException(403, "Native Mailprogramme können nur direkt am Server geöffnet werden. EML-Datei herunterladen.")
+        try:
+            open_draft(ziel, finished_meeting(meeting_id), s.public_url, s.data_dir)
+        except MailError as e:
+            raise HTTPException(400, str(e)) from e
+        return {"ok": True}
 
     @api.get("/api/status")
     def status():

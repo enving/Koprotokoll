@@ -142,6 +142,62 @@ Bot-Einplanung an. Quellen lassen sich einzeln aktivieren/deaktivieren und wiede
 > und nur teilweise gegen die Anbieter-Dokumentation geprüft. Weicht ein Anbieter ab, genügt
 > der Eintrag der Server- oder Kalender-URL unter „Erweiterte Einstellungen“.
 
+## E-Mail über SMTP
+
+Unter **Integrationen & API → E-Mail** den Versandweg **SMTP** wählen,
+Server, Port, Verschlüsselung, Benutzername und eigene Absenderadresse eintragen.
+Falls der Anbieter es unterstützt, ein App-Passwort verwenden.
+Speichern und mit **Test-Mail an mich** prüfen. Automatische Recaps sind für SMTP
+zunächst aus; sie lassen sich für Bot-Meetings an die eigene Adresse und zusätzlich
+an die Termin-Teilnehmenden aktivieren. Es wird jeweils nur der gewählte Mailweg benutzt.
+
+Beispielwerte, geprüft anhand der verlinkten Quellen am 04.11.2026, ohne Anmeldung
+bei einem Anbieter:
+
+| Anbieter | Server | Port | Verschlüsselung | Quelle / Voraussetzung |
+|---|---|---:|---|---|
+| GMX | `mail.gmx.net` | 587 | STARTTLS | [GMX-Hilfe](https://hilfe.gmx.net/pop-imap/imap/imap-serverdaten.html), Zugriff für Mailprogramme aktivieren |
+| WEB.DE | `smtp.web.de` | 587 | STARTTLS | [WEB.DE-Hilfe](https://hilfe.web.de/pop-imap/imap/imap-serverdaten.html), Zugriff für Mailprogramme aktivieren |
+| Posteo | `posteo.de` | 587 | STARTTLS | [Thunderbird-Anbieterkonfiguration](https://autoconfig.thunderbird.net/v1.1/posteo.de); alternativ Port 465 mit SSL |
+| Outlook.com | `smtp-mail.outlook.com` | 587 | STARTTLS | [Microsoft-Hilfe](https://support.microsoft.com/de-de/outlook/pop-imap-and-smtp-settings-for-outlook-com): verlangt OAuth2; der SMTP-Passwortweg von Koprotokoll unterstützt diese Anmeldung nicht. Dafür den Microsoft-Anschluss verwenden. |
+
+Umgebungsvariablen haben Vorrang vor gespeicherten Einstellungen:
+`KOPROTOKOLL_SMTP_HOST`, `KOPROTOKOLL_SMTP_PORT` (Standard 587),
+`KOPROTOKOLL_SMTP_USER`, `KOPROTOKOLL_SMTP_PASSWORD`, `KOPROTOKOLL_SMTP_FROM`
+und `KOPROTOKOLL_SMTP_TLS` (`starttls`, `ssl`; `none` nur für Loopback-Testserver).
+Bei gesetztem `SMTP_HOST` wird SMTP vorausgewählt; der automatische Versand
+bleibt ausgeschaltet, bis er in der Oberfläche aktiviert wird.
+
+Passwörter aus der Oberfläche liegen im Klartext in der lokalen Datenbank.
+Die API liefert nur `password_set`, kein gespeichertes Passwort. Ein leeres
+Passwortfeld beim Speichern behält den bisherigen Wert; zum Entfernen die
+eigene Option **Gespeichertes Passwort löschen** nutzen. Die SMTP-Verbindung
+prüft TLS-Zertifikate. Serverfehler geben keine Anmeldedaten aus.
+
+## Zusammenfassung als E-Mail-Entwurf
+
+Im fertig ausgewerteten Meeting öffnet **Als E-Mail öffnen** die verfügbaren Ziele.
+Die **EML-Datei** enthält Betreff, Termin-Teilnehmende sowie Text- und HTML-Teil.
+Du öffnest sie mit deinem Mailprogramm, prüfst den Entwurf und sendest selbst.
+Ob ein Programm die Datei direkt als bearbeitbaren Entwurf öffnet, hängt vom
+Mailprogramm ab; die Datei enthält dafür den Hinweis `X-Unsent: 1`.
+
+Läuft Koprotokoll auf demselben Rechner, werden zusätzlich installiertes
+**Thunderbird** und unter Windows **klassisches Outlook** angeboten.
+Für Outlook zuerst `pip install -r requirements-windows.txt` ausführen.
+Das neue Outlook bietet kein COM und wird so nicht unterstützt.
+Bei Zugriff über ein anderes Gerät oder einen Proxy bleibt die EML-Datei
+verfügbar; die API startet dort keine Programme auf dem Server.
+
+Thunderbird wird mit `-compose` gestartet. Seine lokale HTML-Vorlage bleibt
+unter `<Datenordner>/drafts/`, weil das Mailprogramm sie verzögert liest.
+Argumentwerte werden vor der Übergabe kodiert; Meeting-Titel erzeugen dadurch
+keine zusätzlichen Kommandozeilenfelder. Die Auswertung öffnet keinen Entwurf
+automatisch. Kein Entwurfsziel sendet eine Nachricht.
+
+Mit echtem Thunderbird und Windows-Outlook wurde dieser Weg hier nicht getestet.
+Die automatisierten Tests prüfen Dateiformat und nachgebildete Programmaufrufe.
+
 ## Konfiguration
 
 Die deutsche Spracherkennung verwendet standardmäßig **Parakeet primeline**
