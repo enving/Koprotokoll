@@ -337,3 +337,13 @@ def test_database_lock_does_not_leave_device_poll_stuck(tmp_path, monkeypatch):
     monkeypatch.setattr(ms, '_http', http)
     assert client.poll_device() == {'status': 'pending', 'interval': 5}
     assert calls == [True]
+
+
+def test_task_permissions_are_requested_only_explicitly(tmp_path, monkeypatch):
+    fake = FakeGraph()
+    monkeypatch.setattr(ms, "_http", fake)
+    with make_client(tmp_path, microsoft_client_id="public-client") as client:
+        client.post("/api/integrations/microsoft/device")
+        assert "Tasks.ReadWrite" not in fake.calls[-1][2]["scope"]
+        client.post("/api/integrations/microsoft/device?tasks=1")
+        assert "Tasks.ReadWrite" in fake.calls[-1][2]["scope"]

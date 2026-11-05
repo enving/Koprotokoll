@@ -7,6 +7,7 @@ import re
 import sqlite3
 import threading
 import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -338,6 +339,12 @@ class Database:
         with self._lock:
             row = self._conn.execute("SELECT value FROM kv WHERE key = ?", (key,)).fetchone()
         return json.loads(row["value"]) if row else default
+
+    def task_namespace(self) -> str:
+        with self._lock, self._conn:
+            self._conn.execute("INSERT OR IGNORE INTO kv (key, value) VALUES (?, ?)",
+                               ("task_namespace", json.dumps(uuid.uuid4().hex)))
+            return json.loads(self._conn.execute("SELECT value FROM kv WHERE key = ?", ("task_namespace",)).fetchone()[0])
 
     def set_kv(self, key: str, value: Any) -> None:
         with self._lock, self._conn:

@@ -43,6 +43,10 @@ mark { background: var(--hl); color: inherit; border-radius: 3px; }
 .head-actions { display: flex; gap: 8px; }
 .meeting-head .head-actions { flex-wrap: wrap; max-width: 100%; }
 #m-recap { min-height: 44px; max-width: 100%; }
+.task-export summary, .task-export select, .task-export button { min-height: 44px; cursor: pointer; }
+.task-export select { width: 100%; max-width: 100%; min-width: 0; }
+.task-export .stack { margin-top: 8px; }
+.list .grow { min-width: 0; overflow-wrap: anywhere; }
 .meta { color: var(--muted); font-size: 13px; }
 audio { width: 100%; margin: 16px 0 8px; position: sticky; top: -24px; z-index: 2; }
 .progress { display: flex; align-items: center; gap: 12px; margin: 14px 0; color: var(--muted); font-size: 13px; }

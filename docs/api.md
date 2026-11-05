@@ -115,3 +115,15 @@ verwenden die bestehenden `/api/calendars/{id}`-Endpunkte.
 
 Beide Endpunkte benötigen die normale API-Authentifizierung. Die bestehende
 Anmeldung mit Weiterleitung bleibt für Clients mit Secret verfügbar.
+
+## Aufgaben
+
+- `GET /api/meetings/{id}/aufgaben.ics`: Aufgaben eines fertig ausgewerteten Meetings als VTODO mit stabilen UIDs, Fälligkeit und Quellenlink.
+- `GET /api/tasks/targets`: erreichbare Aufgabenlisten und gegebenenfalls Verbindungsfehler. CalDAV-Zugangsdaten werden nicht ausgegeben.
+- `POST /api/meetings/{id}/tasks/export` mit `{"target":"<id aus targets>"}`: expliziter Export in die ausgewählte Liste, Antwort `created`/`skipped`. Wiederholungen überspringen dieselben Aufgaben.
+- `POST /api/integrations/microsoft/device?tasks=1`: erneute Anmeldung mit ausdrücklich angeforderten `Tasks.ReadWrite`-Rechten für To Do.
+
+Alle Endpunkte nutzen die normale Authentifizierung. Unfertige Meetings liefern
+409. Exportiert wird ausschließlich in ein aktuell verbundenes Ziel. Bei einem
+unterbrochenen Export lassen sich dieselben Aufgaben erneut übergeben.
+Links `/#meeting={id}&t={Sekunden}` öffnen die zugehörige Player-Stelle.
