@@ -98,6 +98,8 @@ def find_meeting_url(event: dict, jitsi_hosts: Iterable[str] = (), bbb_hosts: It
 class Adapter:
     """Basisklasse: beliebige Webseite öffnen und deren Ton aufnehmen (Plattform „web“)."""
 
+    speaker_script: str | None = None
+
     def join(self, page, url: str, bot_name: str, admit_timeout: float, on_status) -> None:
         page.goto(url, wait_until="domcontentloaded")
 
@@ -113,6 +115,18 @@ class Adapter:
 
 class GoogleMeet(Adapter):
     """Google Meet über die Weboberfläche (englische UI erzwungen für stabile Selektoren)."""
+
+    # Meet-interne Klassen sind kein stabiler Vertrag; bei unbekanntem DOM keine Namen raten.
+    speaker_script = """() => {
+      const names = new Set();
+      for (const tile of document.querySelectorAll('[data-participant-id]')) {
+        if (!tile.getClientRects().length || tile.matches('[data-self-name]') || tile.querySelector('[data-self-name]')) continue;
+        if (!tile.matches('.Oaajhc, .HX2H7') && !tile.querySelector('.Oaajhc, .HX2H7')) continue;
+        const name = tile.querySelector('span.notranslate')?.textContent.trim();
+        if (name && name.length <= 120) names.add(name);
+      }
+      return [...names];
+    }"""
 
     JOIN = re.compile(r"^(ask to join|join now|join anyway|switch here)$", re.I)
     LEAVE = re.compile(r"leave call", re.I)

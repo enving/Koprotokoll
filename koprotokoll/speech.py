@@ -269,9 +269,9 @@ def speaker_for(word: Word, turns: list[Turn]) -> int | None:
 
 
 def build_utterances(words: list[Word], turns: list[Turn], max_len: float = 30.0,
-                     max_gap: float = 1.5) -> list[dict]:
+                     max_gap: float = 1.5, speaker_labels: dict[int, str] | None = None) -> list[dict]:
     """Wörter zu Äußerungen gruppieren; Sprecher-IDs in Auftrittsreihenfolge nummerieren."""
-    labels: dict[int, str] = {}
+    labels: dict[int, str] = speaker_labels if speaker_labels is not None else {}
 
     def label(spk: int | None) -> str:
         if spk is None:
