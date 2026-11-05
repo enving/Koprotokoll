@@ -1,0 +1,27 @@
+services:
+  koprotokoll:
+    build: .
+    ports:
+      - "${KOPROTOKOLL_BIND:-127.0.0.1}:${KOPROTOKOLL_PORT:-8000}:8000"
+    environment:
+      KOPROTOKOLL_DATA: /data
+      KOPROTOKOLL_REQUIRE_KEY: "1"
+      KOPROTOKOLL_PUBLIC_URL: ${KOPROTOKOLL_PUBLIC_URL:-http://localhost:8000}
+      KOPROTOKOLL_LLM_URL: http://ollama:11434/v1
+      KOPROTOKOLL_LLM_MODEL: ${KOPROTOKOLL_LLM_MODEL:-qwen2.5:7b-instruct}
+    volumes:
+      - koprotokoll-data:/data
+    depends_on:
+      - ollama
+    restart: unless-stopped
+    shm_size: 1gb
+
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama-models:/root/.ollama
+    restart: unless-stopped
+
+volumes:
+  koprotokoll-data:
+  ollama-models:

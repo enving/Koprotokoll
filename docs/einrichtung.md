@@ -85,6 +85,53 @@ sind lokal getestet; die Prüfung in einem echten Meet mit mehreren Personen ste
 noch aus. Andere Plattformen können dieselbe Adapter-Schnittstelle
 `speaker_script` ergänzen. Namen und Zeitreihen werden nicht protokolliert.
 
+## Betrieb mit Docker und Ollama
+
+Voraussetzung: Docker Engine bzw. Docker Desktop mit Compose. Im Repository:
+
+```bash
+docker compose up -d --build
+docker compose exec koprotokoll python -m koprotokoll create-key Browser
+docker compose exec ollama ollama pull qwen2.5:7b-instruct
+```
+
+Unter `http://localhost:8000` den einmal ausgegebenen Schlüssel eintragen. Der
+Container verlangt ihn auch bei lokalem Zugriff. Ollama lädt das Sprachmodell
+ausdrücklich mit `pull`; bis es verfügbar ist, verwendet Koprotokoll die lokale
+Heuristik für Zusammenfassungen. Die [Ollama-Dokumentation](https://docs.ollama.com/docker)
+beschreibt den CPU-Betrieb und zusätzliche GPU-Konfigurationen. Diese Compose-Datei
+nutzt CPU und veröffentlicht keinen Ollama-Port.
+
+Das Volume `koprotokoll-data` enthält Datenbank, Medien, Bot-Profil und
+Erkennungsmodelle unter `/data`; `ollama-models` enthält die LLM-Gewichte. Das Image
+enthält keine Modelle. Für einen späteren Offline-Betrieb die Erkennungsmodelle
+vorher laden:
+
+```bash
+docker compose exec koprotokoll python scripts/download_models.py
+```
+
+`docker compose down` erhält diese Volumes. `down -v` entfernt auch die Daten.
+Die Anwendung läuft im Container als Benutzer mit UID 10001. Bei eigenen
+Bind-Mounts muss dieser Benutzer auf das Datenverzeichnis schreiben können.
+
+Standardmäßig ist Port 8000 nur am Loopback des Hosts erreichbar. Für einen
+freigegebenen LAN-Zugang beispielsweise:
+
+```bash
+KOPROTOKOLL_BIND=0.0.0.0 KOPROTOKOLL_PUBLIC_URL=http://server.example:8000 docker compose up -d
+```
+
+Die Schlüsselpflicht bleibt dabei aktiv. `KOPROTOKOLL_PORT`,
+`KOPROTOKOLL_PUBLIC_URL` und `KOPROTOKOLL_LLM_MODEL` können ebenfalls über die
+Shell oder eine lokale `.env` für Compose gesetzt werden. Weitere Anwendungs-
+Einstellungen bei Bedarf unter `environment` im Service ergänzen. Für HTTPS einen
+lokalen Reverse-Proxy vorschalten. Native Outlook-COM-Funktionen sind in diesem
+Linux-Container nicht verfügbar; Microsoft Graph und CalDAV bleiben nutzbar.
+
+Der [Docker-Nachweis](nachweise/issue-19-docker.md) trennt Build-/Startprüfungen,
+echten Audio-Upload und nicht geprüfte Betriebsarten.
+
 ## Google Kalender & Gmail einrichten
 
 1. In der [Google Cloud Console](https://console.cloud.google.com/) ein Projekt anlegen und die

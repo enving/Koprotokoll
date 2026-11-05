@@ -193,17 +193,21 @@ Die Analyse des Vorbilds Fireflies.ai mit [REA](https://github.com/morluto/rea) 
 - [x] Transkription, Sprecher, Zusammenfassung, Suche, Export
 - [x] Meeting-Bot für Google Meet und Jitsi, Google Kalender & Gmail
 - [x] REST-API, Webhooks, MCP-Server
-- [ ] Deutsches Modell **Parakeet primeline** über **Kostimme**, Server für **Kodiktat** (`/v1/audio/transcriptions`)
+- [x] Deutsches Modell **Parakeet primeline** als Standard; Parakeet v3 bleibt wählbar
+- [ ] **Kostimme** als gemeinsamer Erkennungsdienst für **Kodiktat** (`/v1/audio/transcriptions`)
 - [x] Kalender aus **Outlook/Microsoft** (auch Privatkonten) – Termine der nächsten 7 Tage auf der Startseite
 - [x] **CalDAV** (Nextcloud, iCloud, Posteo, mailbox.org …) und **ICS-Abos** als weitere Kalenderquellen (nur lesen)
-- [ ] Recap per **SMTP** oder als **Entwurf** in Outlook/Thunderbird, Aufgaben-Export
+- [x] Recap per **SMTP** oder **Microsoft Graph**, Download als **.eml**
+- [x] Native **Entwürfe** in Outlook/Thunderbird und **Aufgaben-Export** implementiert ([Prüfgrenzen](docs/einrichtung.md#aufgaben-exportieren))
 - [ ] **Kodiktat** als Begleit-App für Teams-/Zoom-Apps und Telefonate
 - [x] Meeting-Bot für **Microsoft Teams** (Web-Client, Gastbeitritt)
 - [ ] Meeting-Bot für **BigBlueButton**: Adapter implementiert, echter Beitritt noch zu prüfen
 - [ ] Meeting-Bot für **Zoom**
 - [ ] **Live-Transkript** während des Meetings
+- [ ] **Sprechernamen aus Meet**: automatische Zuordnung implementiert, echter Meet-Test steht aus
 - [ ] Sprecher **wiedererkennen** über Meetings hinweg (Stimmprofile)
-- [ ] **Docker**-Image und Installer für Windows/macOS
+- [x] **Docker**-Image und Compose mit Ollama ([Einrichtung](docs/einrichtung.md#betrieb-mit-docker-und-ollama))
+- [ ] Installer für Windows/macOS
 - [ ] Mehrbenutzer-Betrieb mit Teams und Freigaben
 
 Wie das umgesetzt werden soll – Outlook, Thunderbird, Nextcloud, Desktop-Meetings und das
