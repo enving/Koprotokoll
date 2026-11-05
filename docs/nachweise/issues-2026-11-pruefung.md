@@ -21,7 +21,7 @@ Dieser Nachtrag und der Regressionstest gehören zum selben Folgecommit.
 | #11 | VTODO, CalDAV-, Outlook- und To-Do-Aufgabenexport | ICS geparst, echter lokaler CalDAV-Server, COM/Graph nachgebildet, Browser mit Quellzeitsprung; echte Zielsysteme offen |
 | #13 | BigBlueButton-Gastadapter mit „Nur zuhören“ | [16 Link-/API-/Chromium-Tests](issue-13-bbb.md); echter BBB-Beitritt samt Audio offen |
 | #16 | Namen aus zeitgleichen Meet-Hinweisen | [Browser, Roh-Diarisierungszeiten, Mehrdeutigkeit und manuelle Reserven](issue-16-sprechernamen.md); echtes Meet offen |
-| #19 | Docker und Compose mit Ollama (Build-Workflow noch nachzureichen) | [Image gebaut, echte Erkennung mit Diarisierung und Neustart](issue-19-docker.md); AMD64/GPU und generatives LLM nicht geprüft |
+| #19 | Docker, Compose mit Ollama und Build-Workflow | [Image gebaut, echte Erkennung mit Diarisierung und Neustart](issue-19-docker.md); AMD64/GPU und generatives LLM nicht geprüft |
 
 #14 war durch den bereits gemergten PR #26 implementiert. Das Issue wurde nach
 Abgleich geschlossen; es wurde kein neuer echter Teams-Beitritt durchgeführt.
