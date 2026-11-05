@@ -1,16 +1,4 @@
-"""Microsoft-Integration: OAuth 2.0 und Microsoft Graph (Outlook-Kalender lesen).
-
-Einrichtung: In Azure (portal.azure.com) eine App-Registrierung anlegen, unter
-„Authentifizierung" die Weiterleitungs-URI
-``<KOPROTOKOLL_PUBLIC_URL>/api/integrations/microsoft/callback`` eintragen und unter
-„API-Berechtigungen" die Berechtigungen ``Calendars.Read`` (Delegiert) hinzufügen.
-Anschließend ein Client-Secret erzeugen. Client-ID und -Secret per Umgebungsvariable
-``KOPROTOKOLL_MICROSOFT_CLIENT_ID`` / ``KOPROTOKOLL_MICROSOFT_CLIENT_SECRET`` oder in
-der Weboberfläche hinterlegen.
-
-Die folgende Datei enthält nur die Grundbausteine (Konstanten, Fehlerklasse,
-HTTP-Helfer). Der ``MicrosoftClient`` mit OAuth-Logik kommt in einem späteren Schritt.
-"""
+"""Optionale Microsoft-Anbindung über OAuth und Graph; Einrichtung in docs/einrichtung.md."""
 
 from __future__ import annotations
 
@@ -19,6 +7,7 @@ import html
 import json
 import re
 import secrets
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -31,6 +20,7 @@ from .db import Database
 # persönliche Microsoft-Konten und Azure-AD-Konten gleichermaßen).
 AUTH_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
 TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+DEVICE_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/devicecode"
 
 # Microsoft Graph – Kalenderereignisse des angemeldeten Benutzers.
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
@@ -41,11 +31,14 @@ SCOPES = [
     "offline_access",          # nötig für das Refresh-Token
     "Calendars.Read",          # Outlook-/Microsoft-365-Kalender lesen
     "Mail.Send",               # Recap-Mails senden (analog zu Gmail)
+    "User.Read",
 ]
 
 
 class MicrosoftError(RuntimeError):
-    pass
+    def __init__(self, message: str, code: str = ""):
+        super().__init__(message)
+        self.code = code
 
 
 def _http(method: str, url: str, *, form: dict | None = None, body: dict | None = None,
@@ -66,8 +59,12 @@ def _http(method: str, url: str, *, form: dict | None = None, body: dict | None 
             raw = r.read()
             return json.loads(raw) if raw else {}
     except urllib.error.HTTPError as e:
-        detail = e.read().decode(errors="replace")[:500]
-        raise MicrosoftError(f"Microsoft-API {e.code}: {detail}") from e
+        try:
+            error = json.loads(e.read()).get("error", "")
+        except (ValueError, AttributeError):
+            error = ""
+        code = error if error in ("authorization_pending", "slow_down", "expired_token", "authorization_declined") else ""
+        raise MicrosoftError(f"Microsoft-Anfrage fehlgeschlagen (HTTP {e.code}). Anmeldung und Berechtigungen prüfen.", code) from None
 
 
 def _jwt_payload(token: str) -> dict:
@@ -79,14 +76,13 @@ def _jwt_payload(token: str) -> dict:
 
 
 class MicrosoftClient:
-    """OAuth-Client für Microsoft (Anmeldung, Token-Verwaltung, Graph-Zugriff).
-
-    Dieser Schritt umfasst nur Konfiguration und Status – die OAuth-Methoden
-    ``auth_url()``/``exchange()`` kommen im nächsten Schritt.
-    """
+    """OAuth-Client mit Gerätecode oder bestehender Anmeldung über Weiterleitung."""
 
     def __init__(self, settings: Settings, db: Database):
         self.s, self.db = settings, db
+        self._token_lock = threading.RLock()
+        self._auth_generation = 0
+        self._device_poll_generation: int | None = None
 
     # -- Konfiguration ---------------------------------------------------------
     def _client(self) -> tuple[str, str]:
@@ -95,15 +91,23 @@ class MicrosoftClient:
                 self.s.microsoft_client_secret or stored.get("client_secret", ""))
 
     def set_client(self, client_id: str, client_secret: str) -> None:
-        self.db.set_kv("microsoft_client", {"client_id": client_id.strip(),
-                                            "client_secret": client_secret.strip()})
+        with self._token_lock:
+            if self._client()[0] != (self.s.microsoft_client_id or client_id.strip()):
+                self.disconnect()
+            self.db.set_kv("microsoft_client", {"client_id": client_id.strip(),
+                                                "client_secret": client_secret.strip()})
+
+    def _cancel_pending_auth(self) -> None:
+        self._auth_generation += 1
+        self.db.set_kv("microsoft_device", None)
+        self.db.set_kv("microsoft_oauth_state", None)
 
     @property
     def redirect_uri(self) -> str:
         return f"{self.s.public_url}/api/integrations/microsoft/callback"
 
     def configured(self) -> bool:
-        return all(self._client())
+        return bool(self._client()[0])
 
     def connected(self) -> bool:
         return bool(self.db.get_kv("microsoft_tokens", {}).get("refresh_token"))
@@ -111,11 +115,12 @@ class MicrosoftClient:
     def status(self) -> dict:
         tokens = self.db.get_kv("microsoft_tokens", {})
         return {"configured": self.configured(), "connected": self.connected(),
+                "redirect_available": bool(self._client()[1]),
                 "email": tokens.get("email"), "redirect_uri": self.redirect_uri,
                 "settings": self.settings()}
 
     def settings(self) -> dict:
-        return {"auto_join": True, "send_recap": True, "recap_to_attendees": False,
+        return {"auto_join": True, "send_recap": False, "recap_to_attendees": False,
                 **self.db.get_kv("microsoft_settings", {})}
 
     def update_settings(self, **values: bool) -> dict:
@@ -127,53 +132,170 @@ class MicrosoftClient:
         client_id, _ = self._client()
         if not client_id:
             raise MicrosoftError("Microsoft-OAuth-Client ist nicht konfiguriert")
+        if not self._client()[1]:
+            raise MicrosoftError("Für die Weiterleitung fehlt ein Client-Secret. Bitte stattdessen mit Gerätecode anmelden.")
         state = secrets.token_urlsafe(24)
-        self.db.set_kv("microsoft_oauth_state", {"state": state, "expires": time.time() + 600})
+        with self._token_lock:
+            self._cancel_pending_auth()
+            self.db.set_kv("microsoft_oauth_state", {"state": state, "expires": time.time() + 600})
         return AUTH_URL + "?" + urllib.parse.urlencode({
             "client_id": client_id, "redirect_uri": self.redirect_uri, "response_type": "code",
             "scope": " ".join(SCOPES), "response_mode": "query", "state": state,
         })
 
+    def start_device(self) -> dict:
+        client_id, _ = self._client()
+        if not client_id:
+            raise MicrosoftError("Microsoft-Client-ID fehlt. Zuerst die App-Registrierung eintragen.")
+        with self._token_lock:
+            self._cancel_pending_auth()
+            generation = self._auth_generation
+        scope = " ".join(SCOPES)
+        data = _http("POST", DEVICE_URL, form={"client_id": client_id, "scope": scope})
+        uri = urllib.parse.urlsplit(data["verification_uri"])
+        if uri.scheme != "https" or not (uri.hostname in ("microsoft.com", "microsoftonline.com") or
+                                         (uri.hostname or "").endswith((".microsoft.com", ".microsoftonline.com"))):
+            raise MicrosoftError("Microsoft lieferte keine gültige Anmeldeseite.")
+        interval = max(5, int(data.get("interval", 5)))
+        with self._token_lock:
+            if generation != self._auth_generation:
+                raise MicrosoftError("Die Anmeldung wurde zwischenzeitlich abgebrochen.")
+            self.db.set_kv("microsoft_device", {"device_code": data["device_code"],
+                           "expires": time.time() + int(data["expires_in"]), "interval": interval,
+                           "next_poll": time.time() + interval, "scope": scope})
+        return {"user_code": data["user_code"], "verification_uri": data["verification_uri"],
+                "expires_in": int(data["expires_in"]), "interval": interval}
+
+    def poll_device(self) -> dict:
+        with self._token_lock:
+            pending = self.db.get_kv("microsoft_device", {})
+            generation = self._auth_generation
+            if not pending or pending["expires"] <= time.time():
+                self.db.set_kv("microsoft_device", None)
+                raise MicrosoftError("Der Anmeldecode ist abgelaufen. Bitte neu starten.")
+            interval = pending["interval"]
+            if self._device_poll_generation == generation or time.time() < pending["next_poll"]:
+                return {"status": "pending", "interval": interval}
+            # Auch eine langsame Anfrage darf nicht von einer zweiten überholt werden.
+            self.db.set_kv("microsoft_device", {**pending, "next_poll": time.time() + interval})
+            self._device_poll_generation = generation
+        try:
+            client_id, _ = self._client()
+            try:
+                token = _http("POST", TOKEN_URL, form={
+                    "client_id": client_id, "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+                    "device_code": pending["device_code"],
+                })
+            except MicrosoftError as e:
+                with self._token_lock:
+                    self._check_pending(generation, pending)
+                    if e.code in ("authorization_pending", "slow_down"):
+                        if e.code == "slow_down":
+                            interval += 5
+                        self.db.set_kv("microsoft_device", {**pending, "interval": interval,
+                                                            "next_poll": time.time() + interval})
+                        return {"status": "pending", "interval": interval}
+                    self.db.set_kv("microsoft_device", None)
+                    if e.code in ("expired_token", "authorization_declined"):
+                        raise MicrosoftError("Anmeldung abgelehnt oder abgelaufen. Bitte bei Bedarf neu starten.") from None
+                    raise
+            with self._token_lock:
+                self._check_pending(generation, pending)
+                self._store_tokens({**token, "scope": token.get("scope") or pending["scope"]}, "device")
+                self.db.set_kv("microsoft_device", None)
+                return {"status": "connected", **self.status()}
+        finally:
+            with self._token_lock:
+                if self._device_poll_generation == generation:
+                    self._device_poll_generation = None
+
+    def _check_pending(self, generation: int, pending: dict) -> None:
+        current = self.db.get_kv("microsoft_device", {})
+        if generation != self._auth_generation or current.get("device_code") != pending["device_code"]:
+            raise MicrosoftError("Die Anmeldung wurde zwischenzeitlich abgebrochen.")
+
+    def _store_tokens(self, token: dict, flow: str) -> dict:
+        if not token.get("refresh_token") or not token.get("access_token"):
+            raise MicrosoftError("Microsoft hat keine vollständige Anmeldung geliefert. Offline-Zugriff erlauben und erneut verbinden.")
+        claims = _jwt_payload(token.get("id_token", ""))
+        profile = _http("GET", GRAPH_BASE + "/me?$select=mail,userPrincipalName", token=token["access_token"])
+        email = profile.get("mail") or claims.get("email")
+        if not isinstance(email, str) or "@" not in email or any(c in email for c in "\r\n"):
+            email = None
+        tokens = {"refresh_token": token["refresh_token"], "access_token": token["access_token"],
+                  "expires_at": time.time() + int(token.get("expires_in", 3600)) - 60,
+                  "email": email, "scope": token.get("scope"), "auth_flow": flow}
+        self.db.set_kv("microsoft_tokens", tokens)
+        return tokens
+
     def exchange(self, code: str, state: str) -> dict:
-        expected = self.db.get_kv("microsoft_oauth_state", {})
-        if not expected or not secrets.compare_digest(expected.get("state", ""), state or "") \
-                or expected.get("expires", 0) < time.time():
-            raise MicrosoftError("Ungültiger oder abgelaufener OAuth-Status – bitte erneut verbinden")
-        self.db.set_kv("microsoft_oauth_state", None)
+        with self._token_lock:
+            generation = self._auth_generation
+            expected = self.db.get_kv("microsoft_oauth_state", {})
+            if not expected or not secrets.compare_digest(expected.get("state", ""), state or "") \
+                    or expected.get("expires", 0) < time.time():
+                raise MicrosoftError("Ungültiger oder abgelaufener OAuth-Status; bitte erneut verbinden")
+            self.db.set_kv("microsoft_oauth_state", None)
         client_id, client_secret = self._client()
         tok = _http("POST", TOKEN_URL, form={
             "code": code, "client_id": client_id, "client_secret": client_secret,
             "redirect_uri": self.redirect_uri, "grant_type": "authorization_code",
         })
-        if "refresh_token" not in tok:
-            raise MicrosoftError("Microsoft hat kein Refresh-Token geliefert")
-        tokens = {
-            "refresh_token": tok["refresh_token"], "access_token": tok["access_token"],
-            "expires_at": time.time() + int(tok.get("expires_in", 3600)) - 60,
-            "email": _jwt_payload(tok.get("id_token", "")).get("email"), "scope": tok.get("scope"),
-        }
-        self.db.set_kv("microsoft_tokens", tokens)
-        return tokens
+        with self._token_lock:
+            if generation != self._auth_generation:
+                raise MicrosoftError("Die Anmeldung wurde zwischenzeitlich abgebrochen.")
+            return self._store_tokens(tok, "redirect")
 
     def disconnect(self) -> None:
-        self.db.set_kv("microsoft_tokens", None)
+        with self._token_lock:
+            self.db.set_kv("microsoft_tokens", None)
+            self._cancel_pending_auth()
 
     def _access_token(self) -> str:
+        with self._token_lock:
+            return self._current_access_token()
+
+    def _current_access_token(self) -> str:
         tokens = self.db.get_kv("microsoft_tokens", {})
         if not tokens.get("refresh_token"):
             raise MicrosoftError("Microsoft ist nicht verbunden")
         if tokens.get("expires_at", 0) > time.time():
             return tokens["access_token"]
         client_id, client_secret = self._client()
-        tok = _http("POST", TOKEN_URL, form={
+        form = {
             "refresh_token": tokens["refresh_token"], "client_id": client_id,
-            "client_secret": client_secret, "grant_type": "refresh_token",
-            "scope": " ".join(SCOPES),
-        })
+            "grant_type": "refresh_token", "scope": tokens.get("scope") or " ".join(SCOPES),
+        }
+        if tokens.get("auth_flow") != "device" and client_secret:
+            form["client_secret"] = client_secret
+        tok = _http("POST", TOKEN_URL, form=form)
         tokens.update(access_token=tok["access_token"],
+                      refresh_token=tok.get("refresh_token") or tokens["refresh_token"],
                       expires_at=time.time() + int(tok.get("expires_in", 3600)) - 60)
         self.db.set_kv("microsoft_tokens", tokens)
         return tokens["access_token"]
+
+    def send_mail(self, to: list[str], subject: str, text: str, html: str | None = None) -> dict:
+        return _http("POST", GRAPH_BASE + "/me/sendMail", token=self._access_token(), body={
+            "message": {"subject": subject, "body": {"contentType": "HTML" if html else "Text", "content": html or text},
+                        "toRecipients": [{"emailAddress": {"address": address}} for address in to]},
+            "saveToSentItems": True,
+        })
+
+    def list_values(self, path: str) -> list[dict]:
+        url = GRAPH_BASE + path
+        seen = set()
+        items = []
+        while url:
+            if not isinstance(url, str) or not url.startswith(GRAPH_BASE + "/") or url in seen or len(seen) >= 1000:
+                raise MicrosoftError("Microsoft lieferte eine ungültige oder endlose Folgeseite.")
+            seen.add(url)
+            data = _http("GET", url, token=self._access_token())
+            if not isinstance(data.get("value", []), list):
+                raise MicrosoftError("Microsoft lieferte keine gültige Ergebnisliste.")
+            items.extend(data.get("value", []))
+            url = data.get("@odata.nextLink")
+        return items
 
     # -- Kalender (Microsoft Graph) ---------------------------------------------------
     def events(self, time_min: float, time_max: float) -> list[dict]:
@@ -184,8 +306,7 @@ class MicrosoftClient:
             "startDateTime": iso(time_min), "endDateTime": iso(time_max),
             "$orderby": "start/dateTime", "$top": "50",
         })
-        data = _http("GET", f"{GRAPH_BASE}/me/calendarview?{params}", token=self._access_token())
-        return data.get("value", [])
+        return self.list_values(f"/me/calendarview?{params}")
 
 
 class MicrosoftCalendarSource:

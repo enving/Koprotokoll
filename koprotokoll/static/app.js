@@ -649,7 +649,7 @@ async function renderEmail() {
     const config = await api("/api/integrations/email");
     const smtp = config.smtp;
     const provider = h("select", { id: "mail-provider" },
-      ...[["gmail", "Gmail"], ["smtp", "SMTP"], ["none", "Kein Versand"]].map(([value, label]) =>
+      ...[["gmail", "Gmail"], ["microsoft", "Microsoft 365 / Outlook.com"], ["smtp", "SMTP"], ["none", "Kein Versand"]].map(([value, label]) =>
         h("option", { value, selected: config.provider === value }, label)));
     const field = (id, value, type = "text") => h("input", { id, type, value });
     const host = field("mail-host", smtp.host);
@@ -774,10 +774,11 @@ async function renderGoogle() {
 }
 
 function msAdvanced(g, open) {
-  const id = h("input", { placeholder: "Client-ID" }),
-    secret = h("input", { placeholder: "Client-Secret", type: "password" });
+  const id = h("input", { id: "ms-client-id", placeholder: "Client-ID" }),
+    secret = h("input", { id: "ms-client-secret", placeholder: "Client-Secret (optional für Weiterleitung)", type: "password" });
   return h("details", open ? { open: true } : {},
     h("summary", { class: "muted small" }, "Erweiterte Einstellungen (Client-ID / Secret)"),
+    h("p", { class: "muted small" }, "Für die Anmeldung mit Code reicht die Client-ID. In Entra unter „Authentifizierung → Erweiterte Einstellungen“ öffentliche Clientflows erlauben; eine Weiterleitungs-URI und ein Secret sind dafür nicht nötig. Die Anleitung darunter beschreibt den weiterhin verfügbaren Weg mit Weiterleitung."),
     h("p", { class: "muted small" }, "Einmalige Einrichtung im Azure-Portal (portal.azure.com) – die Anmeldung dort geht auch mit einem privaten Microsoft- oder GitHub-Konto, ein Abonnement ist nicht nötig:"),
     h("ol", { class: "muted small" },
       h("li", {}, "In der Suche nach „App-Registrierungen“ suchen → „Neue Registrierung“, Name z. B. „Koprotokoll“."),
@@ -793,10 +794,35 @@ function msAdvanced(g, open) {
       h("li", {}, "„API permissions“ → „Add a permission“ → „Microsoft Graph“ → „Delegated permissions“ → ",
         h("code", {}, "Calendars.Read"), " und ", h("code", {}, "Mail.Send"), " hinzufügen."),
       h("li", {}, "Hier unten Client-ID und Secret eintragen und speichern, dann „Mit Microsoft verbinden“.")),
-    h("div", { class: "stack" }, id, secret, h("button", { onclick: async () => {
+    h("div", { class: "stack" }, h("label", { for: "ms-client-id" }, "Microsoft Client-ID"), id,
+      h("label", { for: "ms-client-secret" }, "Client-Secret für Weiterleitung (optional)"), secret, h("button", { onclick: async () => {
       await api("/api/integrations/microsoft/client", jsonOpts("PUT", { client_id: id.value, client_secret: secret.value }));
       renderMicrosoft();
     } }, "Speichern")));
+}
+
+async function startMicrosoftDevice() {
+  const box = $("#microsoft-box");
+  box.replaceChildren(h("p", { role: "status" }, "Anmeldecode wird angefordert …"));
+  try {
+    const device = await api("/api/integrations/microsoft/device", { method: "POST" });
+    const status = h("p", { role: "status" }, "Nach der Bestätigung bei Microsoft die Anmeldung hier prüfen.");
+    const button = h("button", { onclick: async () => {
+      button.disabled = true;
+      try {
+        const result = await api("/api/integrations/microsoft/device/poll", { method: "POST" });
+        if (result.status === "connected") { await renderMicrosoft(); await renderEmail(); }
+        else status.textContent = `Noch nicht bestätigt. Frühestens in ${result.interval} Sekunden erneut prüfen.`;
+      } catch (err) { status.textContent = err.message; }
+      finally { button.disabled = false; }
+    } }, "Anmeldung prüfen");
+    box.replaceChildren(h("p", {}, "Diesen Code bei Microsoft eingeben: ", h("strong", {}, device.user_code)),
+      h("a", { href: device.verification_uri, target: "_blank", rel: "noopener noreferrer" }, "Microsoft-Anmeldeseite öffnen"),
+      h("p", { class: "muted small" }, `Der Code ist ${Math.ceil(device.expires_in / 60)} Minuten gültig.`), status,
+      h("div", { class: "row" }, button, h("button", { onclick: renderMicrosoft }, "Zurück")));
+  } catch (err) {
+    box.replaceChildren(h("p", { role: "alert" }, err.message), h("button", { onclick: renderMicrosoft }, "Zurück"));
+  }
 }
 
 async function renderMicrosoft() {
@@ -810,8 +836,9 @@ async function renderMicrosoft() {
   }
   if (!g.connected) {
     box.replaceChildren(
-      h("p", { class: "muted small" }, "Verbinde dein Microsoft-/Outlook-Konto: Der Bot tritt dann automatisch deinen Kalender-Meetings bei, und nach jedem Meeting kommt die Zusammenfassung per Mail."),
-      h("button", { class: "primary", onclick: () => { window.location = withKey("/api/integrations/microsoft/connect"); } }, "Mit Microsoft verbinden"),
+      h("p", { class: "muted small" }, "Verbinde dein Microsoft-/Outlook-Konto für Kalender-Meetings. Den Mailversand wählst du anschließend unter „E-Mail“ und aktivierst ihn dort separat."),
+      h("button", { class: "primary", onclick: startMicrosoftDevice }, "Mit Microsoft per Code anmelden"),
+      g.redirect_available ? h("button", { onclick: () => { window.location = withKey("/api/integrations/microsoft/connect"); } }, "Anmeldung mit Weiterleitung") : null,
       msAdvanced(g, false));
     return;
   }
@@ -824,7 +851,7 @@ async function renderMicrosoft() {
   const sync = g.last_sync?.at ? `Letzter Abgleich: ${new Date(g.last_sync.at * 1000).toLocaleTimeString("de-DE")}${g.last_sync.error ? ` – Fehler: ${g.last_sync.error}` : ""}` : "";
   box.replaceChildren(...[
     h("p", {}, "Verbunden als ", h("b", {}, g.email || "?")),
-    toggle("auto_join", "Bot tritt Kalender-Meetings mit Meet-/Jitsi-Link automatisch bei"),
+    toggle("auto_join", "Bot tritt unterstützten Kalender-Meetings automatisch bei"),
     sync ? h("p", { class: "muted small" }, sync) : null,
     h("div", { class: "row" },
       h("button", { class: "danger", onclick: async () => {
