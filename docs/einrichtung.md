@@ -244,6 +244,42 @@ automatisch. Kein Entwurfsziel sendet eine Nachricht.
 Mit echtem Thunderbird und Windows-Outlook wurde dieser Weg hier nicht getestet.
 Die automatisierten Tests prüfen Dateiformat und nachgebildete Programmaufrufe.
 
+## Aufgaben exportieren
+
+In der Meeting-Übersicht unter den Aufgaben **Aufgaben exportieren** öffnen.
+Die **ICS-Datei** enthält VTODO-Aufgaben und funktioniert ohne verbundenes Konto.
+Zusätzlich lassen sich Aufgaben gezielt in eine gewählte Liste eines verbundenen
+CalDAV-Kontos, in lokale Outlook-Aufgaben oder in Microsoft To Do schreiben.
+Die Ziele werden erst beim Öffnen des Exportbereichs geladen; geschrieben wird
+erst nach **In gewählte Aufgabenliste exportieren**.
+
+CalDAV verwendet die gespeicherten Zugangsdaten und sucht Listen mit VTODO-Unterstützung.
+Klassisches Outlook benötigt die optionale Windows-Einrichtung aus dem Kalenderabschnitt.
+Für Microsoft To Do in der Microsoft-Karte **Microsoft-Aufgabenrechte freigeben**
+wählen und die zusätzliche delegierte Berechtigung `Tasks.ReadWrite` bestätigen.
+Die normale Kalender-/Mail-Anmeldung fordert diese Aufgabenrechte nicht an.
+
+Die Fälligkeit wird relativ zum Datum des Kalendertermins bestimmt, falls vorhanden,
+sonst zum Anlegedatum des Meetings auf dem Server. „Bis Freitag“ meint den nächsten
+Freitag einschließlich des gleichen Tages; „nächsten Freitag“ liegt bei gleichem
+Wochentag eine Woche später. „Nächste Woche“ wird zum nächsten Montag, „Ende des Monats“
+zum letzten Kalendertag. Numerische Daten ohne Jahr verwenden das Meetingjahr,
+auch wenn dieser Tag bereits vergangen ist. Unklare Fristen bleiben ohne automatisch
+gesetztes Datum; der ursprüngliche Wortlaut steht in der Aufgabenbeschreibung.
+
+Wiederholter Export unveränderter Aufgaben erzeugt im selben Ziel keine Dubletten.
+Vorhandene Aufgaben werden belassen; es gibt keinen laufenden Abgleich ihrer
+Erledigung oder später geänderter Fristen. Ein geänderter Aufgabentext oder eine
+andere Zuständigkeit, Frist oder Quellzeit kann eine neue Aufgabe erzeugen. Unterschiedliche
+Vorkommen bleiben auch bei gleichem Text und gleicher Zuständigkeit getrennt. CalDAV nutzt stabile UIDs
+und bedingtes Anlegen, Outlook eine eigene Eigenschaft und Microsoft To Do eine
+verknüpfte Quellen-ID. Beschreibung und Link verweisen auf die Transkriptstelle,
+soweit eine Zeitmarke vorliegt.
+
+Getestet sind ein lokaler CalDAV-Testserver, nachgebildetes COM und Microsoft
+Graph sowie ICS-Parsing mit Umlauten und langen Zeilen. Echter Windows-/To-Do-/
+Nextcloud-Betrieb und der Import in konkrete Aufgabenprogramme sind hier nicht geprüft.
+
 ## Konfiguration
 
 Die deutsche Spracherkennung verwendet standardmäßig **Parakeet primeline**

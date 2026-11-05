@@ -116,6 +116,7 @@ class MicrosoftClient:
         tokens = self.db.get_kv("microsoft_tokens", {})
         return {"configured": self.configured(), "connected": self.connected(),
                 "redirect_available": bool(self._client()[1]),
+                "tasks_enabled": self.has_scope("Tasks.ReadWrite"),
                 "email": tokens.get("email"), "redirect_uri": self.redirect_uri,
                 "settings": self.settings()}
 
@@ -143,14 +144,18 @@ class MicrosoftClient:
             "scope": " ".join(SCOPES), "response_mode": "query", "state": state,
         })
 
-    def start_device(self) -> dict:
+    def has_scope(self, scope: str) -> bool:
+        scopes = self.db.get_kv("microsoft_tokens", {}).get("scope") or ""
+        return scope.casefold() in {s.rsplit("/", 1)[-1].casefold() for s in scopes.split()}
+
+    def start_device(self, include_tasks: bool = False) -> dict:
         client_id, _ = self._client()
         if not client_id:
             raise MicrosoftError("Microsoft-Client-ID fehlt. Zuerst die App-Registrierung eintragen.")
         with self._token_lock:
             self._cancel_pending_auth()
             generation = self._auth_generation
-        scope = " ".join(SCOPES)
+        scope = " ".join(SCOPES + (["Tasks.ReadWrite"] if include_tasks else []))
         data = _http("POST", DEVICE_URL, form={"client_id": client_id, "scope": scope})
         uri = urllib.parse.urlsplit(data["verification_uri"])
         if uri.scheme != "https" or not (uri.hostname in ("microsoft.com", "microsoftonline.com") or
