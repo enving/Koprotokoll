@@ -207,7 +207,8 @@ Reihenfolge nach Verbreitung und Machbarkeit:
 
 1. **Jitsi** – ✔ erledigt: Beitritt ohne Konto, eigene Instanzen per Einstellung
    (`KOPROTOKOLL_JITSI_HOSTS`). Audio-Aufnahme über `HTMLMediaElement`-Hooks in `capture.js`.
-2. **BigBlueButton** – offen, „Nur zuhören“ beim Beitritt wählen.
+2. **BigBlueButton** – Adapter mit Greenlight-Gastbeitritt und „Nur zuhören“ implementiert;
+   [Browser-Nachweis](nachweise/issue-13-bbb.md), echter Beitritt und Ton noch zu prüfen.
 3. **Microsoft Teams (Web)** – ✔ erledigt: Gastbeitritt „Im Browser fortfahren“, Name setzen,
    Lobby abwarten. Klappt nur, wenn die Organisation anonymen Beitritt erlaubt; sonst Begleit-App.
 4. **Zoom (Web)** – „Über Browser beitreten“. Offiziell verlangt Zoom für Bots das Meeting-SDK mit

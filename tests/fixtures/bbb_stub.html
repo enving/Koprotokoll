@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Lokaler BBB-Test</title>
+<body>
+<form id="join">
+  <label>Name <input name="name"></label>
+  <button>Join meeting</button>
+</form>
+<p id="waiting" hidden>Waiting for moderator</p>
+<div data-test="audioModal" hidden>
+  <h1>How would you like to join the audio?</h1>
+  <button data-test="listenOnlyBtn">Listen only</button>
+  <button id="microphone">Microphone</button>
+</div>
+<section id="meeting" hidden>
+  <p id="participant"></p>
+  <button data-test="leaveMeetingDropdown">Leave meeting</button>
+  <div id="app-leave-meeting-menu" hidden>
+    <button id="leave">Leave session</button>
+    <button id="end">End meeting</button>
+  </div>
+</section>
+<script>
+const mode = new URLSearchParams(location.search).get("mode");
+if (mode === 'de-consent' || mode === 'en-consent') {
+  const de = mode === 'de-consent';
+  document.querySelector('#join button').textContent = de ? 'Konferenz beitreten' : 'Join meeting';
+  const label = document.createElement('label');
+  label.innerHTML = '<input id="consentCheck" type="checkbox" required>';
+  label.append(de ? ' Diese Konferenz kann aufgezeichnet werden.' : ' This meeting may be recorded.');
+  document.querySelector('#join').append(label);
+}
+window.usedListenOnly = window.usedMicrophone = window.endedForOthers = false;
+const audio = document.querySelector('[data-test="audioModal"]');
+document.querySelector('#join').onsubmit = (event) => {
+  event.preventDefault();
+  window.botName = document.querySelector('input[name=name]').value;
+  document.querySelector('#join').hidden = true;
+  if (mode === 'denied') { document.body.textContent = 'Access denied'; return; }
+  document.querySelector('#waiting').hidden = false;
+  if (mode !== 'waiting') setTimeout(() => {
+    document.querySelector('#waiting').hidden = true;
+    audio.hidden = false;
+    if (mode === 'no-listen') document.querySelector('[data-test="listenOnlyBtn"]').hidden = true;
+  }, 500);
+};
+document.querySelector('[data-test="listenOnlyBtn"]').onclick = () => {
+  window.usedListenOnly = true; audio.hidden = true;
+  document.querySelector('#participant').textContent = window.botName;
+  document.querySelector('#meeting').hidden = false;
+};
+document.querySelector('#microphone').onclick = () => { window.usedMicrophone = true; };
+document.querySelector('[data-test="leaveMeetingDropdown"]').onclick = () => {
+  document.querySelector('#app-leave-meeting-menu').hidden = false;
+};
+document.querySelector('#leave').onclick = () => { document.body.textContent = 'You have left the meeting'; };
+document.querySelector('#end').onclick = () => { window.endedForOthers = true; };
+</script>
+</body></html>

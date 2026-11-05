@@ -65,5 +65,6 @@ Aus den Accessibility-Texten der Seite ergibt sich das beworbene Kern-Feature-Se
 | Redeanteile (Talk-Time) | ✔ | aus Segmentdauern |
 | Download | ✔ Markdown, TXT, SRT, JSON | `/api/meetings/{id}/export` |
 | Bot für Microsoft Teams | ✔ Web-Client, Gastbeitritt (setzt erlaubte anonyme Beitritte voraus) | `bot/platforms.py` |
+| Bot für BigBlueButton | Adapter für Greenlight-Gastlinks und „Nur zuhören“ implementiert; Live-Prüfung offen | [Nachweis und Grenzen](nachweise/issue-13-bbb.md) |
 | Bot für Zoom | ✘ Links werden erkannt, Beitritt noch nicht umgesetzt | – |
 | CRM/Slack-Integrationen, Team-Freigaben, Sentiment | ✘ nicht Teil der Grundfunktionen (über Webhooks/API anbindbar) | – |

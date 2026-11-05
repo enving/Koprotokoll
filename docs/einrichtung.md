@@ -56,6 +56,16 @@ Web-Client (Gastbeitritt unter dem Bot-Namen). Voraussetzung für Teams: Die Org
 Beitritt ist noch nicht umgesetzt. Mit `platform: "web"` nimmt der Bot den
 Ton einer beliebigen Webseite auf (z. B. Webinar).
 
+**BigBlueButton:** Der Adapter unterstützt Greenlight-Gastlinks (`/b/…` und
+`/rooms/…/join`). `demo.bigbluebutton.org` wird erkannt; eigene Instanzen als
+kommagetrennte Hostnamen in `KOPROTOKOLL_BBB_HOSTS` eintragen, beispielsweise
+`bbb.example.org,konferenz.example.org`. Der Bot setzt seinen sichtbaren Namen,
+wartet auf die Raumfreigabe und wählt ausschließlich **Nur zuhören**. Fehlt diese
+Audio-Option oder verlangt der Raum einen nicht unterstützten Zugang, bricht er
+mit einer Meldung ab. Geschlossene Installationen mit Anmeldung sind nicht abgedeckt.
+Der Adapter wurde gegen eine lokale Browser-Nachbildung geprüft; ein echter BBB-
+Beitritt samt Tonaufnahme steht noch aus ([Nachweis](nachweise/issue-13-bbb.md)).
+
 > Hinweis: Aufzeichnungen nur mit Einverständnis der Teilnehmenden. Der Bot tritt sichtbar
 > unter seinem Namen bei.
 
@@ -316,3 +326,4 @@ und versucht leere Ergebnisse in höchstens 20 Sekunden erneut.
 | `KOPROTOKOLL_BOT_ALONE_SECONDS` | `15` | Allein-Erkennung-Zeitraum (Sekunden) |
 | `KOPROTOKOLL_BOT_ADMIT_MINUTES` | `10` | Wartezeit auf Einlass |
 | `KOPROTOKOLL_JITSI_HOSTS` | – | Eigene Jitsi-Instanzen (kommagetrennte Hostnames) |
+| `KOPROTOKOLL_BBB_HOSTS` | – | Eigene BigBlueButton-Instanzen (kommagetrennte Hostnamen) |
