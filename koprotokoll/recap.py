@@ -7,6 +7,7 @@ import logging
 
 from .google import GoogleError
 from .mail import MailError, MailService
+from .microsoft import MicrosoftError
 from .summarize import fmt_time
 
 log = logging.getLogger(__name__)
@@ -73,5 +74,5 @@ class RecapMailer:
         try:
             self.mail.send(list(dict.fromkeys(to)), subject, text, html_body)
             log.info("Recap für Meeting %s verschickt", meeting["id"])
-        except (MailError, GoogleError, OSError) as e:
+        except (MailError, GoogleError, MicrosoftError, OSError) as e:
             log.warning("Recap-Versand fehlgeschlagen: %s", e)

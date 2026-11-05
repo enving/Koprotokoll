@@ -40,6 +40,16 @@ class GmailMailSender:
         self.client.send_mail(to, subject, text, html)
 
 
+class GraphMailSender:
+    """Gleicher Mailvertrag für Microsoft Graph statt Gmail."""
+
+    def __init__(self, client):
+        self.client = client
+
+    def send(self, to: list[str], subject: str, text: str, html: str) -> None:
+        self.client.send_mail(to, subject, text, html)
+
+
 class SmtpMailSender:
     def __init__(self, config: dict):
         self.config = config
@@ -81,8 +91,8 @@ def validate_smtp(config: dict) -> None:
 
 
 class MailService:
-    def __init__(self, settings: Settings, db: Database, google):
-        self.s, self.db, self.google = settings, db, google
+    def __init__(self, settings: Settings, db: Database, google, microsoft):
+        self.s, self.db, self.google, self.microsoft = settings, db, google, microsoft
 
     def smtp_config(self) -> dict:
         config = {"host": "", "port": 587, "user": "", "password": "", "sender": "", "tls": "starttls",
@@ -100,30 +110,36 @@ class MailService:
         provider = provider or stored.get("provider", defaults["provider"])
         if provider == "gmail":
             return {"provider": provider, **self.google.settings()}
+        if provider == "microsoft":
+            return {"provider": provider, **self.microsoft.settings()}
         preferences = self.db.get_kv("smtp_recap_settings", {}) if provider == "smtp" else {}
         return {**defaults, **preferences, "provider": provider}
 
     def own_email(self) -> str:
         if self.preferences()["provider"] == "gmail":
             return self.google.status().get("email") or ""
+        if self.preferences()["provider"] == "microsoft":
+            return self.microsoft.status().get("email") or ""
         return parseaddr(self.smtp_config()["sender"])[1]
 
     def connected(self) -> bool:
         provider = self.preferences()["provider"]
+        if provider == "microsoft":
+            return self.microsoft.connected()
         return self.google.connected() if provider == "gmail" else provider == "smtp" and bool(self.smtp_config()["host"])
 
     def status(self) -> dict:
         config = self.smtp_config()
         password_set = bool(config.pop("password"))
         options = {provider: {key: self.preferences(provider)[key] for key in ("send_recap", "recap_to_attendees")}
-                   for provider in ("gmail", "smtp", "none")}
+                   for provider in ("gmail", "microsoft", "smtp", "none")}
         return {**self.preferences(), "provider_settings": options, "smtp": {**config, "password_set": password_set},
                 "connected": self.connected(), "own_email": self.own_email()}
 
     def update(self, values: dict) -> dict:
         provider = values.get("provider", self.preferences()["provider"])
-        if provider not in ("gmail", "smtp", "none"):
-            raise MailError("Mailweg muss gmail, smtp oder none sein.")
+        if provider not in ("gmail", "microsoft", "smtp", "none"):
+            raise MailError("Mailweg muss gmail, microsoft, smtp oder none sein.")
         smtp = self.smtp_config()
         smtp.update({key: values[key] for key in smtp if key in values})
         if provider == "smtp":
@@ -135,6 +151,8 @@ class MailService:
         preferences = {key: values[key] for key in ("send_recap", "recap_to_attendees") if key in values}
         if provider == "gmail":
             self.google.update_settings(**preferences)
+        elif provider == "microsoft":
+            self.microsoft.update_settings(**preferences)
         elif provider == "smtp":
             self.db.set_kv("smtp_recap_settings", {**self.db.get_kv("smtp_recap_settings", {}), **preferences})
         return self.status()
@@ -143,5 +161,10 @@ class MailService:
         provider = self.preferences()["provider"]
         if not self.connected():
             raise MailError("Kein Mailweg verbunden. Bitte E-Mail in den Integrationen einrichten.")
-        sender = GmailMailSender(self.google) if provider == "gmail" else SmtpMailSender(self.smtp_config())
+        if provider == "gmail":
+            sender = GmailMailSender(self.google)
+        elif provider == "microsoft":
+            sender = GraphMailSender(self.microsoft)
+        else:
+            sender = SmtpMailSender(self.smtp_config())
         sender.send(to, subject, text, html)

@@ -84,7 +84,7 @@ Werkzeuge: `list_meetings`, `search_meetings`, `get_summary`, `get_transcript`, 
 ## E-Mail-Einstellungen
 
 - `GET /api/integrations/email`: gewählter Versandweg, Recap-Optionen und SMTP-Konfiguration. Enthält nur `smtp.password_set`, niemals das gespeicherte Passwort.
-- `PUT /api/integrations/email`: `provider` (`gmail`, `smtp`, `none`), `host`, `port`, `tls`, `user`, `password`, `sender`, `send_recap`, `recap_to_attendees`. Fehlende Felder bleiben erhalten; `password: ""` löscht das Passwort. Umgebungsvariablen haben Vorrang.
+- `PUT /api/integrations/email`: `provider` (`gmail`, `microsoft`, `smtp`, `none`), `host`, `port`, `tls`, `user`, `password`, `sender`, `send_recap`, `recap_to_attendees`. Fehlende Felder bleiben erhalten; `password: ""` löscht das Passwort. Umgebungsvariablen haben Vorrang.
 - `POST /api/integrations/email/test`: Test-Mail an die eigene gespeicherte Adresse. Kein beliebiger Empfänger im Request.
 
 Alle drei Endpunkte verwenden die normale API-Authentifizierung. SMTP und Gmail
@@ -107,3 +107,11 @@ unter Windows mit COM verfügbar ist. `POST /api/calendars` mit
 `{"kind":"outlook"}` fügt dessen Standardkalender hinzu. Ein zweiter Eintrag
 desselben Standardkalenders liefert 409. Test, Deaktivierung und Entfernen
 verwenden die bestehenden `/api/calendars/{id}`-Endpunkte.
+
+## Microsoft-Gerätecode
+
+- `POST /api/integrations/microsoft/device`: startet nach Nutzeraktion eine Code-Anmeldung; liefert `user_code`, `verification_uri`, `expires_in`, `interval`. Der private Gerätecode bleibt lokal.
+- `POST /api/integrations/microsoft/device/poll`: liefert `status: pending` mit Warteintervall oder `status: connected` mit bereinigtem Kontostatus. Zu frühe Abfragen gehen nicht an Microsoft; `slow_down` erhöht das Intervall. Abgelaufene oder abgelehnte Anmeldungen liefern einen deutschen 400-Fehler.
+
+Beide Endpunkte benötigen die normale API-Authentifizierung. Die bestehende
+Anmeldung mit Weiterleitung bleibt für Clients mit Secret verfügbar.
