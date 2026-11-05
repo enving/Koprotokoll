@@ -65,6 +65,13 @@ class Settings:
     microsoft_client_id: str = field(default_factory=lambda: _env("KOPROTOKOLL_MICROSOFT_CLIENT_ID", ""))
     microsoft_client_secret: str = field(default_factory=lambda: _env("KOPROTOKOLL_MICROSOFT_CLIENT_SECRET", ""))
 
+    smtp_host: str | None = field(default_factory=lambda: os.environ.get("KOPROTOKOLL_SMTP_HOST"))
+    smtp_port: int | None = field(default_factory=lambda: int(os.environ["KOPROTOKOLL_SMTP_PORT"]) if "KOPROTOKOLL_SMTP_PORT" in os.environ else None)
+    smtp_user: str | None = field(default_factory=lambda: os.environ.get("KOPROTOKOLL_SMTP_USER"))
+    smtp_password: str | None = field(default_factory=lambda: os.environ.get("KOPROTOKOLL_SMTP_PASSWORD"))
+    smtp_sender: str | None = field(default_factory=lambda: os.environ.get("KOPROTOKOLL_SMTP_FROM"))
+    smtp_tls: str | None = field(default_factory=lambda: os.environ.get("KOPROTOKOLL_SMTP_TLS"))
+
     # Meeting-Bot (tritt Meetings als Teilnehmer bei).
     bot_name: str = field(default_factory=lambda: _env("KOPROTOKOLL_BOT_NAME", "Koprotokoll"))
     bot_headless: bool = field(default_factory=lambda: _env("KOPROTOKOLL_BOT_HEADLESS", "1") != "0")

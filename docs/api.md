@@ -9,6 +9,9 @@ einem Reverse-Proxy oder aus Tools wie n8n/Zapier/Make: API-Schlüssel in der Ob
 `python -m koprotokoll create-key n8n` erzeugen und mitsenden. Mit `KOPROTOKOLL_REQUIRE_KEY=1` gilt
 die Schlüsselpflicht auch lokal.
 
+Ändernde Browser-Anfragen mit fremdem `Origin` oder `Sec-Fetch-Site: cross-site`
+werden abgewiesen. CLI-Aufrufe ohne diese Browser-Header bleiben möglich.
+
 ```bash
 KEY=kp_…
 # Bot in ein Meeting schicken
@@ -77,3 +80,22 @@ claude mcp add koprotokoll -- python -m koprotokoll mcp
 ```
 
 Werkzeuge: `list_meetings`, `search_meetings`, `get_summary`, `get_transcript`, `ask_meeting`, `send_bot`.
+
+## E-Mail-Einstellungen
+
+- `GET /api/integrations/email`: gewählter Versandweg, Recap-Optionen und SMTP-Konfiguration. Enthält nur `smtp.password_set`, niemals das gespeicherte Passwort.
+- `PUT /api/integrations/email`: `provider` (`gmail`, `smtp`, `none`), `host`, `port`, `tls`, `user`, `password`, `sender`, `send_recap`, `recap_to_attendees`. Fehlende Felder bleiben erhalten; `password: ""` löscht das Passwort. Umgebungsvariablen haben Vorrang.
+- `POST /api/integrations/email/test`: Test-Mail an die eigene gespeicherte Adresse. Kein beliebiger Empfänger im Request.
+
+Alle drei Endpunkte verwenden die normale API-Authentifizierung. SMTP und Gmail
+verwenden dieselbe Text-/HTML-Vorlage aus `build_recap()`.
+
+## E-Mail-Entwürfe
+
+- `GET /api/integrations/email/drafts`: verfügbare `targets` (`eml`, lokal gegebenenfalls `thunderbird` und `outlook`).
+- `GET /api/meetings/{id}/recap.eml`: fertiges Meeting als MIME-Mail mit Text, HTML und Empfängern aus `meta.attendees`.
+- `POST /api/meetings/{id}/recap/draft?ziel=thunderbird` bzw. `ziel=outlook`: öffnet einen Entwurf, versendet nichts. Nur direkt vom Serverrechner ohne Proxy erlaubt; externer Zugriff erhält 403.
+
+Unfertige Meetings liefern 409. Fehlende Mailprogramme liefern einen deutschen
+Fehler mit Hinweis auf den EML-Ausweichweg. Alle Endpunkte benötigen die normale
+API-Authentifizierung.
