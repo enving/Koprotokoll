@@ -32,6 +32,7 @@ from .google import GoogleCalendarSource, GoogleClient, GoogleError
 from .ics_source import IcsCalendarSource, IcsError
 from .microsoft import MicrosoftCalendarSource, MicrosoftClient, MicrosoftError
 from .mail import MailError, MailService
+from .outlook import OutlookComCalendarSource, OutlookError, outlook_available
 from .pipeline import Pipeline
 from .recap import RecapMailer
 from .scheduler import CalendarScheduler
@@ -176,6 +177,8 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
             return IcsCalendarSource(f"ics-{row['id']}", row["label"], cfg.get("url", ""),
                                      own_email=cfg.get("own_email", ""), enabled=row["enabled"],
                                      base_dir=s.data_dir)
+        if row["kind"] == "outlook":
+            return OutlookComCalendarSource(f"outlook-{row['id']}", row["label"], enabled=row["enabled"])
         return CalDavCalendarSource(f"caldav-{row['id']}", row["label"],
                                     server_url=cfg.get("server_url", ""),
                                     calendar_url=cfg.get("url", ""),
@@ -639,6 +642,10 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
     def calendar_presets():
         return [{"id": key, **value} for key, value in CALDAV_PRESETS.items()]
 
+    @api.get("/api/calendars/capabilities", tags=["calendars"])
+    def calendar_capabilities():
+        return {"outlook": outlook_available()}
+
     @api.get("/api/calendars", tags=["calendars"])
     def calendar_sources():
         return [source_out(row) for row in db.list_calendar_sources()]
@@ -646,9 +653,17 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
     @api.post("/api/calendars", status_code=201, tags=["calendars"])
     def add_calendar_source(c: CalendarSourceIn):
         kind = (c.kind or "").strip().lower()
-        if kind not in ("ics", "caldav"):
-            raise HTTPException(400, f"Unbekannte Quellen-Art „{c.kind}“ – erlaubt: ics, caldav")
+        if kind not in ("ics", "caldav", "outlook"):
+            raise HTTPException(400, f"Unbekannte Quellen-Art „{c.kind}“; erlaubt: ics, caldav, outlook")
         label = (c.label or "").strip()
+        if kind == "outlook":
+            if not outlook_available():
+                raise HTTPException(400, "Outlook lokal benötigt Windows, klassisches Outlook und pywin32.")
+            if any(row["kind"] == "outlook" for row in db.list_calendar_sources()):
+                raise HTTPException(409, "Der lokale Outlook-Standardkalender ist bereits verbunden.")
+            source_id = db.add_calendar_source(kind, label or "Outlook (lokal)", {})
+            refresh_sources()
+            return source_out(db.get_calendar_source(source_id))
         if kind == "ics":
             url = check_ics_url((c.url or "").strip())
             if not url:
@@ -699,7 +714,7 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
         source = stored_source(row)
         try:
             found = source.events(time.time() - 86400, time.time() + 30 * 86400)
-        except (CalDavError, IcsError) as e:
+        except (CalDavError, IcsError, OutlookError) as e:
             raise HTTPException(400, str(e)) from e
         return {"events": [asdict(e) for e in found]}
 
