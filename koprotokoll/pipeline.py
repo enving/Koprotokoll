@@ -11,6 +11,7 @@ from .audio import SAMPLE_RATE, load_wav, to_wav16k
 from .db import Database
 from .events import EventBus
 from .speech import Diarizer, Transcriber, build_utterances
+from .speaker_names import names_from_activity
 from .summarize import LLM, summarize
 
 log = logging.getLogger(__name__)
@@ -103,21 +104,24 @@ class Pipeline:
                 log.warning("Sprechererkennung fehlgeschlagen: %s", e)
                 diarization = {"status": "failed", "error": str(e)[:500]}
 
-        # Ein fertiges Transkript mit nur S1 beweist keine erfolgreiche Diarisierung.
-        # Der Status bleibt deshalb am Meeting sichtbar und überschreibt keine Quell-Metadaten.
-        meta = {**meeting.get("meta", {}), "diarization": diarization}
-        self.db.update_meeting(meeting_id, meta=meta)
-
-        segments = build_utterances(words, turns)
+        labels: dict[int, str] = {}
+        segments = build_utterances(words, turns, speaker_labels=labels)
         self.db.replace_segments(meeting_id, segments)
-        speakers = {s["speaker"]: meeting["speakers"].get(s["speaker"], f"Sprecher {s['speaker'][1:]}")
-                    for s in segments}
-        self.db.update_meeting(meeting_id, speakers=speakers)
+        current = self.db.get_meeting(meeting_id)
+        # Äußerungen verlieren überlappende Turns und können Pausen einschließen.
+        # Die Zuordnung braucht deshalb die echten Sprecherzeiten, mit identischen Labels.
+        speaker_turns = [{"start": turn.start, "end": turn.end,
+                          "speaker": labels.get(turn.speaker, f"unmapped:{turn.speaker}")} for turn in turns]
+        automatic = names_from_activity(speaker_turns, current["meta"].get("speaker_activity", [])) if turns else {}
+        names = {segment["speaker"]: automatic.get(segment["speaker"], f"Sprecher {segment['speaker'][1:]}")
+                 for segment in segments}
+        speakers = self.db.merge_speaker_names(meeting_id, names, diarization=diarization)
 
         self._step(meeting_id, "summarizing")
         summary = summarize(self.db.get_segments(meeting_id), speakers, self.llm)
         fields: dict = {"summary": summary, "status": "done", "progress": 1.0, "error": None}
-        if summary.get("title") and meeting["title"] == meeting.get("source_name"):
+        current = self.db.get_meeting(meeting_id)
+        if summary.get("title") and current["title"] == current.get("source_name"):
             fields["title"] = summary["title"]
         self.db.update_meeting(meeting_id, **fields)
         self._emit("meeting.completed", meeting_id)
@@ -138,5 +142,8 @@ class Pipeline:
 
 def meeting_payload(m: dict) -> dict:
     """Öffentliche Darstellung eines Meetings für Webhooks und E-Mails."""
-    return {k: m.get(k) for k in ("id", "title", "created_at", "duration", "status", "error",
+    payload = {k: m.get(k) for k in ("id", "title", "created_at", "duration", "status", "error",
                                     "speakers", "summary", "meta")}
+    # Die rohe personenbezogene Beobachtungsreihe gehört nicht in externe Webhooks.
+    payload["meta"] = {k: v for k, v in (m.get("meta") or {}).items() if k not in ("speaker_activity", "manual_speakers", "automatic_speakers")}
+    return payload

@@ -107,6 +107,16 @@
     return btoa(bin);
   }
 
+  // Der Adapter liefert nur die Plattform-Abfrage; die Uhr startet mit dem Recorder.
+  let speakerReader = null, speakerTimer = null, startedAt = 0;
+  window.__ntObserveSpeakers = (reader) => { speakerReader = reader; };
+  const sampleSpeakers = () => {
+    if (!speakerReader || st.rec?.state !== "recording") return;
+    let names = [];
+    try { names = speakerReader(); } catch (e) { /* DOM-Wechsel unterbrechen keine Aufnahme. */ }
+    notify({type: "speakers", time: (performance.now() - startedAt) / 1000, names});
+  };
+
   window.__ntStart = (timesliceMs) => {
     ensureGraph();
     if (st.rec) return true;
@@ -119,11 +129,18 @@
       st.chain = st.chain.then(async () => window.__ntChunk(toBase64(new Uint8Array(await e.data.arrayBuffer()))));
     };
     st.rec.onstop = () => { st.chain = st.chain.then(() => notify({ type: "stopped" })); };
+    startedAt = performance.now();
     st.rec.start(timesliceMs || 5000);
+    if (speakerReader) {
+      sampleSpeakers();
+      speakerTimer = setInterval(sampleSpeakers, 500);
+    }
     return true;
   };
 
   window.__ntStop = () => {
+    clearInterval(speakerTimer);
+    speakerTimer = null;
     if (st.rec && st.rec.state !== "inactive") st.rec.stop();
     else notify({ type: "stopped" });
   };
