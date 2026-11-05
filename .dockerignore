@@ -1,0 +1,9 @@
+*
+!Dockerfile
+!requirements.txt
+!koprotokoll/
+!koprotokoll/**
+!scripts/
+!scripts/download_models.py
+**/__pycache__
+**/*.pyc
