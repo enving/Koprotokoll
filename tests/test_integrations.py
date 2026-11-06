@@ -202,7 +202,8 @@ def test_transcription_formats(client, tmp_path):
     assert text.text.strip() == r.json()["text"]
 
     verbose = _transcribe(client, tmp_path, response_format="verbose_json", language="de").json()
-    assert verbose["language"] == "de" and verbose["duration"] == 2.0
+    assert verbose["language"] == "" and verbose["duration"] == 2.0
+    assert verbose["asr"]["mode"] == "de" and verbose["asr"]["language_forced"] is False
     assert verbose["text"] == r.json()["text"]
     seg = verbose["segments"][0]
     assert seg["id"] == 0 and seg["start"] == 0.0 and seg["end"] > seg["start"] and seg["text"]

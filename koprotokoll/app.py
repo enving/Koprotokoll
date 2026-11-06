@@ -7,6 +7,7 @@ import re
 import secrets
 import shutil
 import time
+import threading
 import urllib.parse
 from dataclasses import asdict
 from pathlib import Path
@@ -36,7 +37,8 @@ from .outlook import OutlookComCalendarSource, OutlookError, outlook_available
 from .pipeline import Pipeline
 from .recap import RecapMailer
 from .scheduler import CalendarScheduler
-from .speech import Diarizer, SherpaDiarizer, Transcriber, create_transcriber
+from .speech import (Diarizer, ModelUnavailable, SherpaDiarizer, Transcriber, create_transcriber,
+                     language_mode, transcription_info)
 from .summarize import LLM, ask
 from .transcriptions import FORMATS, render, transcribe_upload
 from .tasks import TaskError, TaskExporter, meeting_tasks, tasks_ics
@@ -158,14 +160,34 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
     s = settings or Settings()
     s.ensure_dirs()
     db = Database(s.db_path)
+    custom_transcriber = transcriber is not None
+    default_mode = language_mode(None, s.asr_language)
     if transcriber is None:
         transcriber = create_transcriber(s)
+    engines = {}
+    engines_lock = threading.Lock()
+
+    def select_transcriber(language: str | None = None) -> Transcriber:
+        mode = language_mode(language, default_mode)
+        if custom_transcriber:
+            return pipeline.transcriber
+        candidate = create_transcriber(s, mode)
+        info = candidate.asr_info
+        key = (info["model"], info["model_path"], info["quantization"])
+        with engines_lock:
+            return engines.setdefault(key, candidate)
+
+    if not custom_transcriber:
+        info = transcriber.asr_info
+        engines[(info["model"], info["model_path"], info["quantization"])] = transcriber
     if diarizer is None and s.diarization:
         diarizer = SherpaDiarizer(s.models_dir, s.diarization_threshold)
     if llm is None:
         llm = LLM(s)
     events = EventBus(db)
-    pipeline = Pipeline(db, s.media_dir, transcriber, diarizer, llm, events)
+    pipeline = Pipeline(db, s.media_dir, transcriber, diarizer, llm, events,
+                        select_transcriber=None if custom_transcriber else select_transcriber,
+                        default_language=default_mode)
     capture = HardwareRecorder(s.data_dir / "captures")
     google = google or GoogleClient(s, db)
     microsoft = MicrosoftClient(s, db)
@@ -319,7 +341,8 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
     @api.get("/api/status")
     def status():
         return {
-            "asr_model": s.asr_model,
+            "asr_model": transcription_info(transcriber, default_mode)["model"],
+            "asr": transcription_info(transcriber, default_mode),
             "diarization": diarizer is not None,
             "llm": {"available": llm.available(), "model": s.llm_model, "url": s.llm_base_url},
         }
@@ -374,13 +397,20 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
         return db.get_meeting(meeting_id)
 
     @api.post("/api/meetings", status_code=201)
-    def upload(file: UploadFile = File(...), title: str = Form(""), num_speakers: int | None = Form(None)):
+    def upload(file: UploadFile = File(...), title: str = Form(""), num_speakers: int | None = Form(None),
+               language: str | None = Form(None)):
         name = Path(file.filename or "aufnahme.webm").name
         ext = Path(name).suffix.lower()
         if ext not in ALLOWED_EXT:
             raise HTTPException(400, f"Dateityp {ext or '?'} wird nicht unterstützt")
+        try:
+            mode = language_mode(language, default_mode)
+            select_transcriber(mode)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from e
         meeting_id = db.create_meeting(title.strip() or Path(name).stem, Path(name).stem,
-                                       num_speakers if num_speakers and num_speakers > 0 else None)
+                                       num_speakers if num_speakers and num_speakers > 0 else None,
+                                       meta={"asr_language": mode})
         dst = s.media_dir / f"{meeting_id}{ext}"
         with dst.open("wb") as out:
             shutil.copyfileobj(file.file, out)
@@ -474,7 +504,7 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
     def openai_transcribe(file: UploadFile = File(...), model: str = Form(""), language: str | None = Form(None),
                           prompt: str = Form(""), response_format: str = Form("json"),
                           temperature: float | None = Form(None)):
-        # model, prompt und temperature werden angenommen, aber ignoriert: es gibt nur die eine Engine.
+        # model, prompt und temperature bleiben Kompatibilitätsfelder; language wählt den Modus.
         if response_format not in FORMATS:
             raise HTTPException(400, f"Unbekanntes response_format: {response_format} "
                                      f"(erlaubt: {', '.join(FORMATS)})")
@@ -482,13 +512,27 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
         if ext not in TRANSCRIBE_EXT:
             raise HTTPException(400, f"Dateityp {ext} wird nicht unterstützt")
         try:
-            words, duration = transcribe_upload(file.file, ext, transcriber, s.data_dir / "tmp")
+            mode = language_mode(language, default_mode)
+            selected = select_transcriber(mode)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from e
+        try:
+            words, duration = transcribe_upload(file.file, ext, selected, s.data_dir / "tmp")
+        except ModelUnavailable as e:
+            raise HTTPException(503, str(e)) from e
         except RuntimeError as e:
             raise HTTPException(400, str(e)) from e
-        body, mime = render(words, duration, response_format, language)
+        except Exception as e:
+            log.exception("Lokale Transkription fehlgeschlagen (%s)", selected)
+            raise HTTPException(503, f"Lokale Transkription fehlgeschlagen: {type(e).__name__}: {e}") from e
+        info = transcription_info(selected, mode)
+        body, mime = render(words, duration, response_format, None)
+        headers = {"X-Koprotokoll-ASR-Model": info["model"], "X-Koprotokoll-ASR-Mode": mode,
+                   "X-Koprotokoll-ASR-Backend": info["backend"]}
         if isinstance(body, dict):
-            return JSONResponse(body)
-        return Response(body, media_type=mime)
+            body["asr"] = info
+            return JSONResponse(body, headers=headers)
+        return Response(body, media_type=mime, headers=headers)
 
     # -- Bots (Teilnehmer in Online-Meetings) -------------------------------------------
     @api.post("/api/bots", status_code=201, tags=["bots"])
