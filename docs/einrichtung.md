@@ -355,23 +355,110 @@ Nextcloud-Betrieb und der Import in konkrete Aufgabenprogramme sind hier nicht g
 
 ## Konfiguration
 
-Die deutsche Spracherkennung verwendet standardmäßig **Parakeet primeline**
-(Fine-Tuning: primeline, Basismodell: NVIDIA; CC-BY-4.0).
-Der [ONNX-Export](https://huggingface.co/flozen1981/parakeet-primeline-onnx)
-wird mit fester Revision aus `koprotokoll/speech.py` unter
-`<Datenordner>/models/parakeet-primeline-onnx/` vorbereitet.
-`python scripts/download_models.py` lädt die gewählte Engine und die
-Sprechererkennung vorab. Mit `KOPROTOKOLL_ASR_MODEL=nemo-parakeet-tdt-0.6b-v3`
-bleibt das mehrsprachige Modell wählbar. Primeline teilt lange Aufnahmen an
-leisen Stellen in höchstens 90 Sekunden, verstärkt leise Abschnitte begrenzt
-und versucht leere Ergebnisse in höchstens 20 Sekunden erneut.
+### Sprachwahl und CPU-Modelle
+
+Der Standardmodus `auto` verwendet **NVIDIA Parakeet TDT 0.6B v3**. Das
+[Modell](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) unterstützt 25 Sprachen,
+darunter Deutsch und Englisch, und bestimmt die Ausgabesprache selbst. Die vorhandene
+[onnx-asr-Runtime](https://github.com/istupakov/onnx-asr) lädt den
+[ONNX-Export von istupakov](https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx).
+ASR und Silero-VAD verwenden ausdrücklich `CPUExecutionProvider`, Primeline `provider="cpu"`.
+Eine GPU, CUDA und ein Cloud-Dienst werden nicht benötigt.
+
+| Modus (`language` / `KOPROTOKOLL_ASR_LANGUAGE`) | Auswahl |
+|---|---|
+| `auto` | Mehrsprachiges v3; auch Englisch landet immer hier |
+| `en` | Dasselbe v3; keine technische Spracherzwingung und keine Übersetzung |
+| `de` | Deutsches Primeline; mit ausdrücklich gesetztem `KOPROTOKOLL_ASR_MODEL=nemo-parakeet-tdt-0.6b-v3` weiterhin v3 |
+
+`KOPROTOKOLL_ASR_MODEL=parakeet-primeline` gilt nur für den Modus `de`.
+Bei `auto` oder `en` hat die mehrsprachige Auswahl Vorrang. Andere Sprachcodes
+und unbekannte Modellnamen erzeugen eine Fehlermeldung. Die übrigen v3-Sprachen
+können über `auto` erkannt werden; für einzelne Codes bietet diese API keine Auswahl.
+Wer dauerhaft nur Primeline verwenden möchte, setzt
+`KOPROTOKOLL_ASR_LANGUAGE=de` und `KOPROTOKOLL_ASR_MODEL=parakeet-primeline`.
+
+Modelle vor der ersten Verwendung ausdrücklich installieren:
+
+```bash
+python scripts/download_models.py                  # Standardmodus plus Sprechererkennung
+python scripts/download_models.py --all-asr         # zusätzlich de vorbereiten
+python scripts/download_models.py --language en --asr-only
+```
+
+Der Installer verwendet dieselbe Konfiguration wie der Server. `--all-asr` folgt
+auch einer ausdrücklich konfigurierten v3-Wahl für `de`. Nach der Installation
+läuft die ASR offline; bei fehlenden oder unvollständigen Dateien bricht sie sichtbar
+ab, ohne Download oder anderes Backend. Vorhandene vollständige Modellordner werden
+vom Installer beibehalten. Die festen Download-Revisionen und Dateilisten stehen in
+[`speech.py`](../koprotokoll/speech.py). Darunter liegen standardmäßig:
+
+- `models/parakeet-tdt-0.6b-v3-onnx/` für v3 (INT8 rund 670 MB),
+- `models/silero-vad-onnx/` für die Erkennung von Sprachabschnitten (rund 2,3 MB),
+- `models/parakeet-primeline-onnx/` für Primeline (rund 670 MB).
+
+Die Pfade beziehen sich auf den Datenordner. Die Sprechererkennung bleibt unverändert;
+für vollständig netzlosen Meeting-Betrieb auch ihre Modelle vorab installieren und
+gegebenenfalls externe Kalender-/Mail-Integrationen abschalten. Eine Abschaltung des
+lokalen LLM erfolgt mit `KOPROTOKOLL_LLM=0`.
+
+### Migration vorhandener Modellpfade
+
+`KOPROTOKOLL_ASR_PATH` bleibt als Altpfad erhalten. Die Dateistruktur ordnet ihn
+Primeline (`tokens.txt`/Joiner) oder v3 (`vocab.txt` und `config.json`) zu. Er wird nur
+an dieses Backend weitergereicht. Ein alter Primeline-Pfad unter `auto` führt deshalb
+zum separaten v3-Standardordner; Primeline bleibt unter `de` am alten Ort verfügbar.
+Fehlt der Altpfad oder ist er nicht eindeutig, erscheint eine Migrationsmeldung.
+
+Für neue Installationen getrennte Pfade verwenden. Beispiel mit erfundenem Datenort:
+
+```bash
+export KOPROTOKOLL_ASR_MODEL=auto
+export KOPROTOKOLL_ASR_LANGUAGE=auto
+export KOPROTOKOLL_ASR_V3_PATH=/srv/koprotokoll/models/parakeet-tdt-0.6b-v3-onnx
+export KOPROTOKOLL_ASR_PRIMELINE_PATH=/srv/koprotokoll/models/parakeet-primeline-onnx
+export KOPROTOKOLL_ASR_VAD_PATH=/srv/koprotokoll/models/silero-vad-onnx
+python scripts/download_models.py --all-asr
+```
+
+Ein modellspezifischer Pfad hat Vorrang vor dem Altpfad. Die Verzeichnisstruktur
+verhindert eine Verwechslung zwischen den beiden Exportformaten; sie prüft weder
+die Herkunft eigener Gewichte noch deren Inhalt kryptografisch. Bereits im
+Hugging-Face-Hub-Cache liegende v3-Dateien können über `ASR_V3_PATH` auf ihren
+Snapshot-Ordner verwendet werden. Silero benötigt zusätzlich seinen lokalen Pfad.
+Bestehende Meetings werden nicht automatisch neu transkribiert. Neue Jobs sowie
+vorher unterbrochene Jobs ohne Sprachangabe verwenden den nun eingestellten Standard.
+
+### Herkunft und Grenzen
+
+NVIDIA und der v3-ONNX-Export veröffentlichen das Modell unter **CC BY 4.0**:
+bei Weitergabe NVIDIA sowie den Export von istupakov nennen und Lizenzhinweise
+erhalten. Das deutsche Primeline ist eine Nachschulung von primeline auf NVIDIA-Basis;
+sein [ONNX-Export von flozen1981](https://huggingface.co/flozen1981/parakeet-primeline-onnx)
+steht ebenfalls unter CC BY 4.0. onnx-asr und
+[Silero-VAD](https://huggingface.co/istupakov/silero-vad-onnx) stehen unter MIT;
+der Silero-Lizenztext wird mitgeladen. Die Projektlizenz ersetzt keine Modelllizenz.
+
+v3 verwendet Silero-VAD und höchstens 25 Sekunden lange Sprachabschnitte.
+Wortzeiten werden aus Tokenzeiten abgeleitet. Kurze Wörter, Geräusche und
+Sprachwechsel können falsch erkannt oder von VAD ausgelassen werden; `en` erzwingt
+auch bei anderssprachigem Audio keine englische Ausgabe. Primeline teilt lange
+Aufnahmen an leisen Stellen in höchstens 90 Sekunden, verstärkt leise Abschnitte
+begrenzt und versucht leere Ergebnisse in höchstens 20 Sekunden erneut.
+Ein leerer Text bei Stille ist ein erfolgreiches Ergebnis.
+Die [synthetischen CPU-Proben](nachweise/issue-49-cpu.md) ersetzen keinen
+Qualitätstest mit echten Meetings, Akzenten und überlappender Sprache.
 
 | Variable | Standard | Bedeutung |
 |---|---|---|
 | `KOPROTOKOLL_DATA` | `./data` | Datenbank, Mediendateien, Modelle |
-| `KOPROTOKOLL_ASR_MODEL` | `parakeet-primeline` | Deutsch; alternativ `nemo-parakeet-tdt-0.6b-v3` für mehrere Sprachen |
-| `KOPROTOKOLL_ASR_QUANT` | `int8` | leer lassen für fp32 (genauer, größer) |
-| `KOPROTOKOLL_ASR_PATH` | – | lokaler Modellordner statt Download |
+| `KOPROTOKOLL_ASR_MODEL` | `auto` | Auswahl gemäß Sprachmodus oben; explizites v3 gilt auch für `de` |
+| `KOPROTOKOLL_ASR_LANGUAGE` | `auto` | Standardmodus für Imports, Bot, Hardwareaufnahme und Transkriptions-API |
+| `KOPROTOKOLL_ASR_QUANT` | `int8` | v3: `int8` oder leer für fp32; Primeline bleibt INT8 |
+| `KOPROTOKOLL_ASR_PATH` | – | abwärtskompatibler, anhand der Dateistruktur zugeordneter Altpfad |
+| `KOPROTOKOLL_ASR_V3_PATH` | `models/parakeet-tdt-0.6b-v3-onnx` im Datenordner | eigener v3-Modellordner |
+| `KOPROTOKOLL_ASR_PRIMELINE_PATH` | `models/parakeet-primeline-onnx` im Datenordner | eigener deutscher Modellordner |
+| `KOPROTOKOLL_ASR_VAD_PATH` | `models/silero-vad-onnx` im Datenordner | lokales Silero-VAD für v3 |
 | `KOPROTOKOLL_DIARIZATION` | `1` | `0` schaltet Sprechererkennung ab |
 | `KOPROTOKOLL_DIARIZATION_THRESHOLD` | `0.8` | kleiner = mehr Sprecher |
 | `KOPROTOKOLL_LLM` | `1` | `0` = nur Offline-Heuristik |
@@ -390,3 +477,30 @@ und versucht leere Ergebnisse in höchstens 20 Sekunden erneut.
 | `KOPROTOKOLL_BOT_ADMIT_MINUTES` | `10` | Wartezeit auf Einlass |
 | `KOPROTOKOLL_JITSI_HOSTS` | – | Eigene Jitsi-Instanzen (kommagetrennte Hostnames) |
 | `KOPROTOKOLL_BBB_HOSTS` | – | Eigene BigBlueButton-Instanzen (kommagetrennte Hostnamen) |
+
+### Lokales Textmodell auswählen
+
+Unter „Integrationen & API → Lokales Textmodell“ die Modellliste aktualisieren und
+bewusst ein installiertes Modell auswählen. Koprotokoll ruft dazu `/v1/models`
+über die bestehende LLM-Verbindung ab. Es lädt keine Modelle herunter und wechselt
+nicht automatisch. „Modell vorhanden“ bestätigt die Liste, keinen erfolgreichen
+Inferenzaufruf. Erst die Zusammenfassung nennt `llm:<Modell>`; bei einem Fehler
+oder Timeout zeigt sie eine Warnung und verwendet die Heuristik.
+
+Die Auswahl liegt in `KOPROTOKOLL_DATA/llm-settings.json` und gilt auch für die
+Auswertung nach dem ausdrücklichen Hardwareaufnahme-Stopp. Während der Aufnahme
+findet darüber keine Inferenz statt. `KOPROTOKOLL_LLM_MODEL` hat Vorrang vor der
+gespeicherten Auswahl; dieser Vorrang wird angezeigt. URL, Aktivierung und Timeout
+bleiben über `KOPROTOKOLL_LLM_URL`, `KOPROTOKOLL_LLM` und
+`KOPROTOKOLL_LLM_TIMEOUT` konfiguriert.
+
+Ausgabelimit (1–32768 Tokens) und Thinking sind optional. Leere Werte senden keinen
+zusätzlichen Parameter. Nur aktivieren, wenn die Dokumentation des verwendeten
+Servers **und Modells** `max_tokens` beziehungsweise `reasoning_effort` bestätigt;
+die Oberfläche verlangt diese Bestätigung. „Aus“ sendet `none`. Nicht jedes Modell
+unterstützt alle Stufen. Ein abgelehnter Parameter wird als Inferenzfehler sichtbar;
+es gibt keinen stillen zweiten Versuch mit geänderten Parametern.
+
+Originalquellen: [Ollama OpenAI-Kompatibilität](https://docs.ollama.com/api/openai-compatibility),
+[Thinking](https://docs.ollama.com/capabilities/thinking),
+[JSON-Ausgabe](https://docs.ollama.com/capabilities/structured-outputs).

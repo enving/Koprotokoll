@@ -44,14 +44,45 @@ gemacht; die Datei liegt nur während der Anfrage in `data/tmp` und wird danach 
 | Feld (multipart) | Bedeutung |
 |---|---|
 | `file` | Pflicht. WAV (16 kHz wird direkt gelesen), sonst alles, was ffmpeg kann (mp3, m4a, ogg, webm …) |
-| `response_format` | `json` (Standard, `{"text": …}`), `text`, `verbose_json` (mit `segments`, `start`/`end` in Sekunden), `srt`, `vtt` |
-| `language` | optional, wird in `verbose_json` zurückgegeben; Parakeet erkennt die Sprache selbst |
-| `model`, `prompt`, `temperature` | werden angenommen und ignoriert – es gibt die eine eingestellte Engine |
+| `response_format` | `json` (Standard, `{"text": …, "asr": …}`), `text`, `verbose_json` (mit `segments`, `start`/`end` in Sekunden), `srt`, `vtt` |
+| `language` | optional: `auto`, `de`, `en`; wählt tatsächlich das lokale Backend gemäß [Sprachwahl](einrichtung.md#sprachwahl-und-cpu-modelle); ohne Angabe gilt der Serverstandard |
+| `model`, `prompt`, `temperature` | Kompatibilitätsfelder ohne Wirkung; `model` überschreibt die Serverkonfiguration nicht |
 
 ```bash
 curl http://localhost:8000/v1/audio/transcriptions -H "Authorization: Bearer $KEY" \
-     -F file=@notiz.wav -F response_format=text
+     -F file=@notiz.wav -F language=auto -F response_format=verbose_json
 ```
+
+JSON-Antworten enthalten unter `asr` das ausgewählte `model`, `mode`, `backend`,
+`model_path`, `quantization`, den CPU-Provider und `language_forced: false`.
+Das Feld `language` in `verbose_json` bleibt leer: der verwendete Decoder liefert
+hier keinen verlässlichen erkannten Sprachcode. `asr.mode` ist die angeforderte
+Auswahl, keine Sprachmessung. Auch bei `language=en` entscheidet v3 selbst über
+die Ausgabesprache; es gibt keine Spracherzwingung und keine Übersetzung.
+
+Alle Erfolgsformate, auch Text/SRT/VTT, liefern die Header
+`X-Koprotokoll-ASR-Model`, `X-Koprotokoll-ASR-Mode` und
+`X-Koprotokoll-ASR-Backend`. Memo-Aufrufer können so das verwendete Modell
+pro Antwort prüfen. `GET /api/status` zeigt unter `asr` die konfigurierte
+Standardauswahl, ohne das Modell zu laden oder dessen Betriebsbereitschaft zu garantieren.
+Fehlende Modelle liefern `503`, unbekannte Sprachmodi `400`; kein Cloud-Fallback.
+
+### Meeting-Import mit Sprachwahl
+
+`POST /api/meetings` nimmt zusätzlich das Multipart-Feld `language` an.
+Es verwendet dieselben Modi und denselben Standard wie die Transkriptions-API:
+
+```bash
+curl http://localhost:8000/api/meetings -H "Authorization: Bearer $KEY" \
+     -F file=@besprechung.wav -F language=en -F title="Testbesprechung"
+```
+
+Die Queue speichert den Modus unter `meta.asr_language`, die ausgewählte Engine
+unter `meta.asr`. Sie stehen nach Verarbeitung über `GET /api/meetings/{id}` zur
+Verfügung, auch bei einem Modellfehler zusammen mit `status=error` und `error`.
+Sprechererkennung, Zeitmarken und Zusammenfassung laufen anschließend wie bisher.
+Bot und Hardwareaufnahme verwenden den Serverstandard; die Oberfläche erhält
+in dieser Änderung keine neue Sprachauswahl.
 
 `GET /api/tokens` antwortet mit `200`, wenn der Schlüssel gültig ist, sonst mit `401` – so prüft
 Kodiktat die Verbindung.
@@ -127,3 +158,19 @@ Alle Endpunkte nutzen die normale Authentifizierung. Unfertige Meetings liefern
 409. Exportiert wird ausschließlich in ein aktuell verbundenes Ziel. Bei einem
 unterbrochenen Export lassen sich dieselben Aufgaben erneut übergeben.
 Links `/#meeting={id}&t={Sekunden}` öffnen die zugehörige Player-Stelle.
+
+### Lokales Textmodell
+
+`GET /api/llm` liefert `models`, `model`, `url`, `enabled`, `server_reachable`,
+`model_present`, `available`, `inference`, `message`, `model_env_override`,
+`max_tokens` und `reasoning_effort`. `available` bedeutet ausschließlich: aktiviert
+und ausgewähltes Modell in der Serverliste vorhanden. `inference` bleibt bei dieser
+reinen Listenprüfung „nicht geprüft“. Das tatsächliche Ergebnis steht im Meeting
+unter `summary.engine` und bei Heuristik unter `summary.warning`.
+
+`PUT /api/llm` speichert zum Beispiel `{"model":"testmodell"}` lokal. Optionale
+Felder: `max_tokens` (1–32768 oder null), `reasoning_effort` (null, `none`, `low`,
+`medium`, `high`). Für gesetzte optionale Parameter muss
+`compatible_parameters: true` ihre Unterstützung bestätigen. Unbekannte Modelle
+oder ungültige Parameter ergeben 400; fehlerhafte Body-Typen 422.
+Alle Endpunkte verwenden die bestehende API-Authentifizierung. Keine Downloads.

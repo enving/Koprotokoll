@@ -39,7 +39,7 @@ def test_model_download_pins_revision_and_all_files(tmp_path, monkeypatch):
 
 
 def test_factory_preserves_v3_choice(tmp_path):
-    assert isinstance(create_transcriber(Settings(data_dir=tmp_path, asr_model="parakeet-primeline")),
+    assert isinstance(create_transcriber(Settings(data_dir=tmp_path, asr_model="parakeet-primeline", asr_language="de")),
                       SherpaParakeetTranscriber)
     assert isinstance(create_transcriber(Settings(data_dir=tmp_path, asr_model="nemo-parakeet-tdt-0.6b-v3")),
                       ParakeetTranscriber)

@@ -161,11 +161,15 @@ cd Koprotokoll
 python -m venv .venv && . .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 playwright install chromium                        # nur für den Meeting-Bot
+python scripts/download_models.py                  # Modelle einmalig vorbereiten
 python -m koprotokoll                                # → http://127.0.0.1:8000
 ```
 
-Beim ersten Transkribieren lädt Koprotokoll die Modelle (~700 MB) einmalig herunter. Wer danach
-komplett offline arbeiten will, lädt sie vorab: `python scripts/download_models.py`.
+Der Standard `auto` transkribiert Deutsch und Englisch mit Parakeet v3 lokal auf der CPU.
+Die ASR-Modelle werden vorab mit dem Download-Befehl vorbereitet, nicht während der
+Transkription. Für die deutsche Primeline-Wahl zusätzlich
+`python scripts/download_models.py --language de --asr-only` ausführen.
+Sprachwahl, lokale Modellpfade und Migration: [Konfiguration](docs/einrichtung.md#konfiguration).
 
 **Für richtig gute Zusammenfassungen** ein lokales Sprachmodell starten, z. B. mit
 [Ollama](https://ollama.com): `ollama pull qwen2.5:7b-instruct` – Koprotokoll findet es automatisch.
@@ -178,7 +182,7 @@ Ohne LLM gibt es eine einfache, rein lokale Auswertung.
 
 | Baustein | Projekt | Lizenz |
 |---|---|---|
-| Spracherkennung | Standard Deutsch: [Parakeet primeline](https://huggingface.co/primeline/parakeet-primeline) von primeline, auf Basis von NVIDIA Parakeet, über sherpa-onnx; optional [Parakeet v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) über onnx-asr | CC-BY-4.0 (Modelle; Namensnennung primeline und NVIDIA), Apache-2.0 / MIT (Laufzeit) |
+| Spracherkennung | Standard mehrsprachig: [NVIDIA Parakeet v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) über onnx-asr; gezielt Deutsch: [Parakeet primeline](https://huggingface.co/primeline/parakeet-primeline) von primeline, auf Basis von NVIDIA Parakeet, über sherpa-onnx | CC-BY-4.0 (Modelle; Namensnennung primeline und NVIDIA), Apache-2.0 / MIT (Laufzeit) |
 | Sprachaktivität | [Silero VAD](https://github.com/snakers4/silero-vad) | MIT |
 | Sprechererkennung | [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) mit pyannote-Segmentierung 3.0 und 3D-Speaker ERes2Net | Apache-2.0 / MIT |
 | Zusammenfassung | beliebiges lokales LLM mit OpenAI-kompatibler API (Ollama, llama.cpp, LM Studio, vLLM) | – |
@@ -193,7 +197,7 @@ Die Analyse des Vorbilds Fireflies.ai mit [REA](https://github.com/morluto/rea) 
 - [x] Transkription, Sprecher, Zusammenfassung, Suche, Export
 - [x] Meeting-Bot für Google Meet und Jitsi, Google Kalender & Gmail
 - [x] REST-API, Webhooks, MCP-Server
-- [x] Deutsches Modell **Parakeet primeline** als Standard; Parakeet v3 bleibt wählbar
+- [x] Mehrsprachiger CPU-Standard **Parakeet v3** für `auto`/`en`; **Primeline** gezielt für `de`
 - [ ] **Kostimme** als gemeinsamer Erkennungsdienst für **Kodiktat** (`/v1/audio/transcriptions`)
 - [x] Kalender aus **Outlook/Microsoft** (auch Privatkonten) – Termine der nächsten 7 Tage auf der Startseite
 - [x] **CalDAV** (Nextcloud, iCloud, Posteo, mailbox.org …) und **ICS-Abos** als weitere Kalenderquellen (nur lesen)

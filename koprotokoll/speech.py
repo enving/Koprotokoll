@@ -19,6 +19,10 @@ log = logging.getLogger(__name__)
 ProgressFn = Callable[[float], None]
 
 
+class ModelUnavailable(RuntimeError):
+    """Das angeforderte lokale Modell kann nicht verwendet werden."""
+
+
 @dataclass
 class Word:
     start: float
@@ -47,36 +51,100 @@ class Diarizer(Protocol):
 class ParakeetTranscriber:
     """NVIDIA Parakeet TDT (Standard: v3, 25 europäische Sprachen inkl. Deutsch)."""
 
-    def __init__(self, model: str, quantization: str | None, path: str | None = None):
+    def __init__(self, model: str, quantization: str | None, path: str | None = None,
+                 vad_path: Path | None = None):
         self._model_name, self._quant, self._path = model, quantization, path
+        self._vad_path = vad_path
         self._lock = threading.Lock()
+        self._inference_lock = threading.Lock()
         self._asr = None
 
     def _load(self):
         with self._lock:
             if self._asr is None:
                 import onnx_asr
+                import onnxruntime
 
+                require_model_files(Path(self._path) if self._path else None, v3_files(self._quant))
+                require_model_files(self._vad_path, ("silero_vad.onnx",))
+                options = onnxruntime.SessionOptions()
+                options.intra_op_num_threads = 4
                 log.info("Lade ASR-Modell %s (%s) …", self._model_name, self._quant or "fp32")
-                model = onnx_asr.load_model(self._model_name, self._path, quantization=self._quant)
-                vad = onnx_asr.load_vad("silero")
+                model = onnx_asr.load_model(self._model_name, self._path, quantization=self._quant,
+                                           providers=["CPUExecutionProvider"], sess_options=options)
+                vad = onnx_asr.load_vad("silero", self._vad_path,
+                                       providers=["CPUExecutionProvider"], sess_options=options)
                 self._asr = model.with_vad(vad, max_speech_duration_s=25).with_timestamps()
         return self._asr
 
     def transcribe(self, audio: np.ndarray, progress: ProgressFn) -> list[Word]:
+        if not len(audio):
+            progress(1.0)
+            return []
         asr = self._load()
         total = max(len(audio) / SAMPLE_RATE, 1e-6)
         words: list[Word] = []
-        for seg in asr.recognize(audio, sample_rate=SAMPLE_RATE):
-            words.extend(tokens_to_words(seg.tokens or [], seg.timestamps or [], seg.start, seg.end, seg.text))
-            progress(min(seg.end / total, 1.0))
+        with self._inference_lock:
+            # Silero benötigt mindestens ein Fenster samt Kontext (576 Samples).
+            waveform = audio if len(audio) >= 1024 else np.pad(audio, (0, 1024 - len(audio)))
+            for seg in asr.recognize(waveform, sample_rate=SAMPLE_RATE):
+                words.extend(tokens_to_words(seg.tokens or [], seg.timestamps or [], seg.start, seg.end, seg.text))
+                progress(min(seg.end / total, 1.0))
+        for word in words:
+            word.start = min(max(0.0, word.start), total)
+            word.end = min(max(word.start, word.end), total)
+        progress(1.0)
         return words
 
 
+V3_MODEL = "nemo-parakeet-tdt-0.6b-v3"
+V3_REPO = "istupakov/parakeet-tdt-0.6b-v3-onnx"
+V3_REVISION = "8f23f0c03c8761650bdb5b40aaf3e40d2c15f1ce"
+VAD_REPO = "istupakov/silero-vad-onnx"
+VAD_REVISION = "b3e3ee3cce4c11ceb63b1a0b229d916069c1ddf6"
 PRIMELINE_REPO = "flozen1981/parakeet-primeline-onnx"
 PRIMELINE_REVISION = "d548e25b9bfe559aa274f361892dc4ed5d64743a"
 PRIMELINE_FILES = ("encoder.int8.onnx", "encoder.int8.onnx.data", "decoder.int8.onnx",
                    "joiner.int8.onnx", "tokens.txt")
+
+
+def v3_files(quantization: str | None) -> tuple[str, ...]:
+    if quantization not in (None, "int8"):
+        raise ValueError("Parakeet v3 unterstützt hier ASR_QUANT=int8 oder leer (fp32).")
+    suffix = ".int8" if quantization else ""
+    return ("config.json", "vocab.txt", f"encoder-model{suffix}.onnx",
+            f"decoder_joint-model{suffix}.onnx", *(("encoder-model.onnx.data",) if not quantization else ()))
+
+
+def require_model_files(path: Path | None, files: tuple[str, ...]) -> None:
+    if path is None:
+        raise ModelUnavailable("Kein lokaler Modellpfad konfiguriert; bitte create_transcriber(Settings()) verwenden.")
+    missing = [name for name in files if not (path / name).is_file()]
+    if missing:
+        raise ModelUnavailable(f"Lokales Modell in {path} fehlt oder ist unvollständig ({', '.join(missing)}). "
+                           "Bitte python scripts/download_models.py mit derselben Konfiguration ausführen; "
+                           "kein automatischer Download während der Transkription.")
+
+
+def install_transcriber(transcriber: Transcriber) -> None:
+    """Nur der ausdrücklich gestartete Installer lädt Modelle aus dem Netz."""
+    from huggingface_hub import snapshot_download
+
+    if isinstance(transcriber, SherpaParakeetTranscriber):
+        ensure_primeline_model(transcriber.path)
+    elif isinstance(transcriber, ParakeetTranscriber):
+        files = v3_files(transcriber._quant)
+        if not all((Path(transcriber._path) / name).is_file() for name in files):
+            snapshot_download(V3_REPO, revision=V3_REVISION, local_dir=transcriber._path,
+                              allow_patterns=[*files, "README.md"])
+        if not (transcriber._vad_path / "silero_vad.onnx").is_file():
+            snapshot_download(VAD_REPO, revision=VAD_REVISION, local_dir=str(transcriber._vad_path),
+                              allow_patterns=["silero_vad.onnx", "config.json", "LICENSE.txt", "README.md"])
+        require_model_files(Path(transcriber._path), files)
+        require_model_files(transcriber._vad_path, ("silero_vad.onnx",))
+    else:
+        raise ValueError("Unbekanntes lokales Transkriptions-Backend.")
+    transcriber._load()
 
 
 def ensure_primeline_model(path: Path) -> Path:
@@ -121,12 +189,13 @@ class SherpaParakeetTranscriber:
         if self._recognizer is None:
             import sherpa_onnx
 
-            path = ensure_primeline_model(self.path)
+            path = self.path
+            require_model_files(path, PRIMELINE_FILES)
             self._recognizer = sherpa_onnx.OfflineRecognizer.from_transducer(
                 encoder=str(path / PRIMELINE_FILES[0]), decoder=str(path / PRIMELINE_FILES[2]),
                 joiner=str(path / PRIMELINE_FILES[3]), tokens=str(path / PRIMELINE_FILES[4]),
                 model_type="nemo_transducer", num_threads=self.threads,
-                decoding_method="greedy_search",
+                decoding_method="greedy_search", provider="cpu",
             )
         return self._recognizer
 
@@ -161,11 +230,53 @@ class SherpaParakeetTranscriber:
         return words
 
 
-def create_transcriber(settings) -> Transcriber:
-    if settings.asr_model == "parakeet-primeline":
-        path = Path(settings.asr_model_path) if settings.asr_model_path else settings.models_dir / "parakeet-primeline-onnx"
-        return SherpaParakeetTranscriber(path)
-    return ParakeetTranscriber(settings.asr_model, settings.asr_quantization, settings.asr_model_path)
+def language_mode(language: str | None, default: str = "auto") -> str:
+    mode = (default if language is None else language).strip().lower()
+    if mode not in ("auto", "de", "en"):
+        raise ValueError("language muss auto, de oder en sein.")
+    return mode
+
+
+def create_transcriber(settings, language: str | None = None) -> Transcriber:
+    mode = language_mode(language, settings.asr_language)
+    if settings.asr_model not in ("auto", "parakeet-primeline", V3_MODEL):
+        raise ValueError(f"Unbekanntes ASR_MODEL: {settings.asr_model}; erlaubt: auto, parakeet-primeline, {V3_MODEL}.")
+    model = "parakeet-primeline" if mode == "de" and settings.asr_model != V3_MODEL else V3_MODEL
+    explicit = settings.asr_primeline_path if model == "parakeet-primeline" else settings.asr_v3_path
+    path = Path(explicit).expanduser() if explicit else None
+    if path is None and settings.asr_model_path:
+        legacy = Path(settings.asr_model_path).expanduser()
+        # Dateistrukturen trennen: niemals Primeline als v3 oder umgekehrt laden.
+        primeline = (legacy / "tokens.txt").is_file() or (legacy / "joiner.int8.onnx").is_file()
+        v3 = (legacy / "vocab.txt").is_file() and (legacy / "config.json").is_file()
+        if primeline == v3:
+            raise ValueError("ASR_PATH ist nicht eindeutig als Primeline oder v3 erkennbar. "
+                             "Bitte ASR_PRIMELINE_PATH bzw. ASR_V3_PATH setzen.")
+        if primeline == (model == "parakeet-primeline"):
+            path = legacy
+    path = (path or settings.models_dir / ("parakeet-primeline-onnx" if model == "parakeet-primeline"
+                                         else "parakeet-tdt-0.6b-v3-onnx")).resolve()
+    wrong_layout = (path / "vocab.txt").exists() if model == "parakeet-primeline" else (path / "tokens.txt").exists()
+    if wrong_layout:
+        raise ValueError(f"Modellpfad {path} gehört zum anderen Parakeet-Backend; getrennte Modellordner verwenden.")
+    if model == "parakeet-primeline":
+        transcriber = SherpaParakeetTranscriber(path)
+    else:
+        v3_files(settings.asr_quantization)
+        transcriber = ParakeetTranscriber(model, settings.asr_quantization, str(path),
+                                          Path(settings.asr_vad_path).expanduser().resolve() if settings.asr_vad_path
+                                          else settings.models_dir / "silero-vad-onnx")
+    transcriber.asr_info = {"model": model, "mode": mode, "backend": "sherpa-onnx" if model == "parakeet-primeline" else "onnx-asr",
+                            "model_path": str(path), "provider": "CPUExecutionProvider", "language_forced": False,
+                            "quantization": "int8" if model == "parakeet-primeline" else settings.asr_quantization,
+                            "language_detection": "de-specialized" if model == "parakeet-primeline" else "automatic"}
+    return transcriber
+
+
+def transcription_info(transcriber: Transcriber, mode: str) -> dict:
+    """Metadaten beschreiben Auswahl, keine vorgetäuschte erkannte Sprache."""
+    return {**getattr(transcriber, "asr_info", {"model": "custom", "backend": type(transcriber).__name__}),
+            "mode": mode, "language_forced": False}
 
 
 def tokens_to_words(tokens: list[str], stamps: list[float], seg_start: float, seg_end: float,

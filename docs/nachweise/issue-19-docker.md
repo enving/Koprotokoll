@@ -51,8 +51,5 @@ wieder abrufen.
 Dies ist ein Funktionstest eines kurzen künstlichen Samples, keine Prüfung der
 Erkennungsqualität echter Meetings. Keine LLM-Gewichte wurden geladen; generative
 Ollama-Zusammenfassungen, GPU-Betrieb, AMD64 und echte Meeting-Bot-Beitritte wurden
-hier nicht geprüft. Die vorbereitete GitHub-Workflow-Datei (`docker.yml`: Image bauen,
-Start und Zugriffsschutz mit `scripts/docker_smoke.py` prüfen) ist **nicht** Teil dieses
-Pull Requests, weil das Token des umsetzenden Agenten keine Workflow-Dateien
-veröffentlichen darf. Sie muss von einem Maintainer mit `workflow`-Recht ergänzt werden;
-bis dahin gibt es keinen GitHub-CI-Lauf für das Image.
+hier nicht geprüft. Die GitHub-Workflow-Datei ist vorbereitet; ein GitHub-CI-Lauf
+kann erst nach einem autorisierten Push stattfinden.

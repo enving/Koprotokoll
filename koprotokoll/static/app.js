@@ -141,7 +141,7 @@ async function openMeeting(id, { keepTab = false, seekTo = null } = {}) {
   $("#m-meta").textContent = [created, m.duration ? fmt(m.duration) : null,
     Object.keys(m.speakers).length ? `${Object.keys(m.speakers).length} Sprecher` : null,
     diarizationText,
-    m.summary?.engine ? `Zusammenfassung: ${m.summary.engine}` : null].filter(Boolean).join(" · ");
+    m.summary?.engine ? `Zusammenfassung: ${m.summary.engine}` : null, m.summary?.warning].filter(Boolean).join(" · ");
 
   const done = m.status === "done";
   $("#m-progress").hidden = done;
@@ -1063,3 +1063,32 @@ window.addEventListener("hashchange", () => route());
   await loadMeetings();
   await route();
 })();
+
+async function renderLocalModel() {
+  const box = $("#local-model");
+  try {
+    const config = await api("/api/llm");
+    const model = h("select", { "aria-label": "Lokales Textmodell" },
+      h("option", { value: "" }, "Bitte Modell auswählen …"), ...config.models.map(id => h("option", { value: id }, id)));
+    model.value = config.models.includes(config.model) ? config.model : "";
+    const limit = h("input", { type: "number", min: "1", max: "32768", "aria-label": "Maximale Ausgabetokens", placeholder: "Serverstandard" });
+    limit.value = config.max_tokens || "";
+    const thinking = h("select", { "aria-label": "Thinking" }, ...[ ["", "Modellstandard"], ["none", "Aus"], ["low", "Niedrig"], ["medium", "Mittel"], ["high", "Hoch"] ].map(([value, label]) => h("option", { value }, label)));
+    thinking.value = config.reasoning_effort || "";
+    const compatible = h("input", { type: "checkbox" });
+    const message = h("p", { "aria-live": "polite" }, config.message);
+    const save = h("button", { type: "button" }, "Modellauswahl speichern");
+    save.onclick = async () => {
+      try {
+        await api("/api/llm", jsonOpts("PUT", { model: model.value, max_tokens: limit.value ? Number(limit.value) : null, reasoning_effort: thinking.value || null, compatible_parameters: compatible.checked }));
+        await renderLocalModel();
+      } catch (err) { message.textContent = err.message; }
+    };
+    box.replaceChildren(h("h2", {}, "Lokales Textmodell"), h("p", {}, config.url), message,
+      h("p", {}, config.model_env_override ? `KOPROTOKOLL_LLM_MODEL hat Vorrang: ${config.model}` : `Aktuelle Auswahl: ${config.model}`),
+      model, h("label", {}, "Maximale Ausgabetokens ", limit), h("label", {}, "Thinking ", thinking),
+      h("label", {}, compatible, " Server und Modell unterstützen diese optionalen Parameter (laut Dokumentation)."), save,
+      h("button", { type: "button", onclick: renderLocalModel }, "Modellliste aktualisieren"));
+  } catch (err) { box.textContent = err.message; }
+}
+renderLocalModel();

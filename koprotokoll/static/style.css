@@ -135,3 +135,10 @@ pre { background: var(--bg); padding: 8px 10px; border-radius: 8px; overflow-x: 
 #bot-live { display: flex; flex-direction: column; gap: 4px; }
 .switch { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 14px; }
 .switch input { width: auto; }
+
+#local-model { display: grid; gap: 12px; padding: 20px; min-width: 0; }
+#local-model select, #local-model input[type=number] { width: 100%; max-width: 100%; min-width: 0; min-height: 44px; }
+#local-model button { min-height: 44px; white-space: normal; }
+#local-model p { overflow-wrap: anywhere; }
+
+#local-model input[type=checkbox] { width: auto; margin-right: 8px; }

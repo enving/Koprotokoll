@@ -66,8 +66,10 @@ def main() -> None:
     sys.addaudithook(audit)
     proof = verify_network_block() if args.verify_network_block else {"verified": False}
     s = Settings(data_dir=args.output.resolve(), llm_enabled=False)
-    if s.asr_model == "parakeet-primeline" and not s.asr_model_path:
-        s.asr_model_path = str(args.models.resolve() / "parakeet-primeline-onnx")
+    if not s.asr_model_path:
+        s.asr_primeline_path = s.asr_primeline_path or str(args.models.resolve() / "parakeet-primeline-onnx")
+        s.asr_v3_path = s.asr_v3_path or str(args.models.resolve() / "parakeet-tdt-0.6b-v3-onnx")
+    s.asr_vad_path = s.asr_vad_path or str(args.models.resolve() / "silero-vad-onnx")
     asr = create_transcriber(s)
     diarizer = SherpaDiarizer(args.models.resolve(), s.diarization_threshold)
     timings = {}
@@ -114,7 +116,7 @@ def main() -> None:
               "total_wall_seconds": time.perf_counter() - started,
               "peak_rss_bytes_macos": peak_rss,
               "versions": {name: version(name) for name in ("onnx-asr", "onnxruntime", "sherpa-onnx")},
-              "model": s.asr_model, "quantization": s.asr_quantization,
+              "asr": result.get("meta", {}).get("asr", {}),
               "diarization_threshold": s.diarization_threshold, "requested_speakers": None,
               "diarization_models_sha256": model_hashes, "llm": "disabled; lokale Heuristik",
               "status": result["status"], "diarization": result.get("meta", {}).get("diarization", {})}

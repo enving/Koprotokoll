@@ -6,11 +6,12 @@ import logging
 import queue
 import threading
 from pathlib import Path
+from typing import Callable
 
 from .audio import SAMPLE_RATE, load_wav, to_wav16k
 from .db import Database
 from .events import EventBus
-from .speech import Diarizer, Transcriber, build_utterances
+from .speech import Diarizer, Transcriber, build_utterances, language_mode, transcription_info
 from .speaker_names import names_from_activity
 from .summarize import LLM, summarize
 
@@ -22,9 +23,12 @@ STEPS = {"converting": (0.0, 0.05), "transcribing": (0.05, 0.7), "diarizing": (0
 
 class Pipeline:
     def __init__(self, db: Database, media_dir: Path, transcriber: Transcriber,
-                 diarizer: Diarizer | None, llm: LLM | None, events: EventBus | None = None):
+                 diarizer: Diarizer | None, llm: LLM | None, events: EventBus | None = None,
+                 select_transcriber: Callable[[str], Transcriber] | None = None,
+                 default_language: str = "auto"):
         self.db, self.media_dir, self.events = db, media_dir, events
         self.transcriber, self.diarizer, self.llm = transcriber, diarizer, llm
+        self.select_transcriber, self.default_language = select_transcriber, default_language
         self._queue: queue.Queue[int] = queue.Queue()
         self._thread = threading.Thread(target=self._run, name="pipeline", daemon=True)
         self._thread.start()
@@ -72,7 +76,12 @@ class Pipeline:
         audio = load_wav(wav)
         self.db.update_meeting(meeting_id, duration=round(len(audio) / SAMPLE_RATE, 2))
 
-        words = self.transcriber.transcribe(audio, self._step(meeting_id, "transcribing"))
+        mode = language_mode(meeting["meta"].get("asr_language"), self.default_language)
+        transcriber = self.select_transcriber(mode) if self.select_transcriber else self.transcriber
+        current = self.db.get_meeting(meeting_id)
+        self.db.update_meeting(meeting_id, meta={**current["meta"], "asr_language": mode,
+                                               "asr": transcription_info(transcriber, mode)})
+        words = transcriber.transcribe(audio, self._step(meeting_id, "transcribing"))
 
         turns = []
         diarization: dict = {"status": "disabled" if self.diarizer is None else "skipped"}
