@@ -38,5 +38,5 @@ Nachweisanforderungen oben. Ist der Skill nicht verfügbar, dieselbe Erklärung
 mit einem Markdown-/Mermaid-Diagramm oder einer beschrifteten Abbildung liefern
 und die Einschränkung nennen.
 
-Lerneintrag #43 (2026-11-07): URL-Bestätigung muss auch Umleitungen begrenzen.
-Prüffall: Modellserver antwortet mit Redirect; weder Schlüssel noch Transkript an das Ziel senden.
+Lerneintrag #43 (2026-11-07): Umleitungen sperren und den Anbieter je Auswertung festhalten.
+Prüffälle: Redirect sendet nichts ans Ziel; Anbieterwechsel nach Empfang ändert keine Ergebniskennzeichnung.

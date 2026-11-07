@@ -118,3 +118,38 @@ def test_unavailable_external_server_has_no_transfer_label(tmp_path, server, mon
     result = summarize([dict(start=0, speaker="A", text="Erfundener Termin.")], {}, LLM(settings))
     assert "external_service" not in result
     assert state["requests"] == []
+
+
+@pytest.mark.parametrize("failure", [False, True])
+def test_running_summary_keeps_provider_when_settings_change(tmp_path, server, monkeypatch, failure):
+    from koprotokoll.summarize import LLM, summarize
+    url, state = server
+    settings = Settings(data_dir=tmp_path, llm_base_url=url, llm_model="testmodell")
+    settings.llm_external_confirmed = True
+    monkeypatch.setattr("koprotokoll.summarize.external_llm", lambda target: target == url)
+    state["fail"] = failure
+    state["on_request"] = lambda: settings.save_provider(dict(
+        url="http://127.0.0.1:1/v1", model="anderes-modell", confirmed_url=None))
+    segments = [dict(start=0, speaker="A", text="Erfundener Prüftext.")]
+    llm = LLM(settings)
+    result = summarize(segments, {}, llm)
+    assert state["requests"][0]["model"] == "testmodell"
+    assert result["external_service"] == url
+    assert result["engine"] == ("heuristik" if failure else "llm:testmodell")
+    assert settings.llm_model == "anderes-modell"
+    following = summarize(segments, {}, llm)
+    assert following["engine"] == "heuristik"
+    assert "external_service" not in following
+    assert len(state["requests"]) == 1
+
+
+def test_running_question_keeps_model_when_settings_change(tmp_path, server):
+    from koprotokoll.summarize import LLM, ask
+    url, state = server
+    settings = Settings(data_dir=tmp_path, llm_base_url=url, llm_model="testmodell")
+    state["on_request"] = lambda: settings.save_provider(dict(
+        url="http://127.0.0.1:1/v1", model="anderes-modell", confirmed_url=None))
+    result = ask("Was wurde besprochen?", [dict(start=0, speaker="A", text="Erfundener Prüftext.")],
+                 {}, LLM(settings), [])
+    assert result["engine"] == "llm:testmodell"
+    assert settings.llm_model == "anderes-modell"

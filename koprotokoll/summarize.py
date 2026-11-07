@@ -13,6 +13,7 @@ import re
 import urllib.error
 import urllib.request
 from collections import Counter
+from copy import copy
 
 from .config import Settings, external_llm
 
@@ -31,6 +32,10 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 class LLM:
     def __init__(self, settings: Settings):
         self.s = settings
+
+    def snapshot(self) -> LLM:
+        """Anbieter und Zugang für einen Auswertungslauf unverändert halten."""
+        return LLM(copy(self.s))
 
     def status(self) -> dict:
         state = dict(server_reachable=False, model_present=False, available=False,
@@ -143,6 +148,8 @@ def summarize(segments: list[dict], names: dict[str, str], llm: LLM | None) -> d
     if not segments:
         return {"engine": "none", "overview": "Kein gesprochener Inhalt erkannt.", "keywords": [],
                 "outline": [], "action_items": [], "decisions": [], "questions": []}
+    if isinstance(llm, LLM):
+        llm = llm.snapshot()
     failure = None
     if llm is not None and llm.available():
         try:
@@ -302,6 +309,8 @@ Nenne relevante Zeitmarken im Format [mm:ss]. Wenn die Antwort nicht im Transkri
 
 
 def ask(question: str, segments: list[dict], names: dict[str, str], llm: LLM | None, search_hits: list[dict]) -> dict:
+    if isinstance(llm, LLM):
+        llm = llm.snapshot()
     if llm is not None and llm.available():
         text = transcript_text(segments, names)
         if len(text) > MAX_CONTEXT_CHARS:

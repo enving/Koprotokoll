@@ -30,6 +30,8 @@ def server():
             if state.get("delay"):
                 time.sleep(state["delay"])
             state["requests"].append(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
+            if state.get("on_request"):
+                state["on_request"]()
             self.send_response(500 if state["fail"] else 200)
             self.end_headers()
             try:

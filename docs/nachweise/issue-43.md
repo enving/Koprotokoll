@@ -56,3 +56,11 @@ Prüffälle decken HTTP 500, Timeout und den Gegenfall ohne Übertragung bei feh
 Modell ab. Gesamtlauf nach Korrektur: **309 passed in 91.22s**, keine Skips.
 Die unabhängige Prüfung von `2060663` hatte diesen Befund beanstandet und keine
 Freigabe erteilt; die Korrektur benötigt eine Freigabe für ihren neuen Commit.
+
+Weitere unabhängige Gegenprobe: Ein Anbieterwechsel während einer laufenden
+Auswertung entfernte die Kennzeichnung erneut oder schrieb das neue Modell an
+eine alte Antwort. Die Auswertung und „Frag das Meeting“ halten nun ihren
+Anbieterstand fest; gespeicherte Änderungen wirken auf den nächsten Lauf.
+Drei Regressionstests schlugen vor der Korrektur fehl; danach bestanden alle
+19 Anbieter-/Modelltests. Der anschließende Gesamtlauf bestand mit **312 passed
+in 94.69s**, ohne Skips. Eine neue unabhängige Freigabe bleibt erforderlich.
