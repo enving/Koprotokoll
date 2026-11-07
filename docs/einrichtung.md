@@ -501,6 +501,29 @@ die Oberfläche verlangt diese Bestätigung. „Aus“ sendet `none`. Nicht jede
 unterstützt alle Stufen. Ein abgelehnter Parameter wird als Inferenzfehler sichtbar;
 es gibt keinen stillen zweiten Versuch mit geänderten Parametern.
 
+Bei einem Wechsel der Adresse oder des Modells werden diese Zusatzparameter
+zurückgesetzt. Aktiviere sie für die neue Verbindung nur, wenn sie dort unterstützt
+werden. Laufende Auswertungen verwenden ihren bisherigen Anbieterstand; Änderungen
+wirken auf die nächste Auswertung.
+
 Originalquellen: [Ollama OpenAI-Kompatibilität](https://docs.ollama.com/api/openai-compatibility),
 [Thinking](https://docs.ollama.com/capabilities/thinking),
 [JSON-Ausgabe](https://docs.ollama.com/capabilities/structured-outputs).
+
+### Eigenen Sprachmodell-Anbieter einrichten
+
+Unter **Sprachmodell** eine Vorlage wählen, Basis-URL (einschließlich `/v1`),
+Modellname, optional API-Schlüssel und Timeout eintragen. Die Modellliste kann einen
+Namen übernehmen. Zuerst speichern, dann den gespeicherten Anbieter testen.
+Für externe Adressen die Übertragung von Transkripttext ausdrücklich bestätigen;
+ohne Bestätigung bleibt die Auswertung gesperrt. Externe Auswertungen tragen am
+Meeting-Ergebnis die verwendete Dienstadresse. Lokale Defaults bleiben erhalten.
+
+Die Werte liegen in `llm-settings.json` im Datenordner (Dateirechte 0600, Schlüssel
+im Klartext auf dem Server; Datenordner schützen). Schlüssel werden nicht zurückgegeben;
+leer lassen behält sie, die Löschoption entfernt sie. Die Umgebungsvariablen
+`KOPROTOKOLL_LLM_URL`, `KOPROTOKOLL_LLM_API_KEY`, `KOPROTOKOLL_LLM_MODEL` und
+`KOPROTOKOLL_LLM_TIMEOUT` haben jeweils Vorrang, auch beim Löschen eines gespeicherten
+Schlüssels. Die Oberfläche nennt diese Felder als vom Server vorgegeben.
+Adresswechsel benötigen eine erneute externe Bestätigung. Als lokal gelten localhost,
+Loopback, private IPv4-Netze und IPv6-ULA; andere Hostnamen gelten vorsorglich als extern.

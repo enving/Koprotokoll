@@ -155,6 +155,15 @@ class TaskExportIn(BaseModel):
     target: str
 
 
+class ProviderIn(BaseModel):
+    provider: str
+    url: str
+    api_key: str | None = None
+    model: str
+    timeout: float = 300
+    external_confirmed: bool = False
+
+
 class LocalModelIn(BaseModel):
     model: str
     max_tokens: int | None = None
@@ -256,7 +265,7 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request: Request, error: RequestValidationError):
-        if request.url.path in ("/api/integrations/email", "/api/integrations/microsoft/client", "/api/integrations/google/client"):
+        if request.url.path in ("/api/llm/provider", "/api/integrations/email", "/api/integrations/microsoft/client", "/api/integrations/google/client"):
             details = [{key: value for key, value in item.items() if key not in ("input", "ctx")}
                        for item in error.errors()]
             return JSONResponse(status_code=422, content={"detail": details})
@@ -346,10 +355,56 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
             raise HTTPException(400, str(e)) from e
         return {"ok": True}
 
+    @api.put("/api/llm/provider")
+    def save_provider(body: ProviderIn):
+        from urllib.parse import urlsplit
+        from .config import external_llm
+        import math
+        url = body.url.strip().rstrip("/")
+        try:
+            parsed = urlsplit(url)
+            parsed.port
+        except ValueError:
+            raise HTTPException(400, "Ungültige Basis-URL.")
+        if (parsed.scheme not in ("http", "https") or not parsed.hostname or parsed.username
+                or parsed.password or parsed.query or parsed.fragment):
+            raise HTTPException(400, "Bitte eine HTTP(S)-Basis-URL ohne Zugangsdaten eingeben.")
+        if body.provider not in ("ollama", "openai", "other") or not body.model.strip():
+            raise HTTPException(400, "Anbieter und Modellname prüfen.")
+        if not math.isfinite(body.timeout) or not 0.01 <= body.timeout <= 3600:
+            raise HTTPException(400, "Timeout muss zwischen 0,01 und 3600 Sekunden liegen.")
+        effective = os.environ.get("KOPROTOKOLL_LLM_URL", url)
+        if external_llm(effective) and not body.external_confirmed:
+            raise HTTPException(400, "Transkripttext wird an diesen Dienst gesendet. Bitte ausdrücklich bestätigen.")
+        values = dict(provider=body.provider, url=url, model=body.model.strip(), timeout=body.timeout,
+                      confirmed_url=effective if body.external_confirmed else None)
+        if body.api_key is not None:
+            if any(ord(c) < 32 or ord(c) > 126 for c in body.api_key):
+                raise HTTPException(400, "API-Schlüssel enthält ungültige Zeichen.")
+            values["api_key"] = body.api_key
+        s.save_provider(values)
+        return {"ok": True}
+
+    @api.post("/api/llm/test")
+    def test_provider():
+        state = local_model()
+        if state.get("model_present"):
+            try:
+                llm.chat("Antworte kurz.", "Antworte mit OK.")
+                state["inference"] = "erfolgreich"
+            except Exception:
+                state["inference"] = "fehlgeschlagen (Antwort, Zugang oder Timeout prüfen)"
+        return state
+
     @api.get("/api/llm")
     def local_model():
         state = llm.status() if isinstance(llm, LLM) else dict(models=[], model=s.llm_model, url=s.llm_base_url, available=llm.available(), message="Modellstatus nicht verfügbar.")
-        return {**state, "model_env_override": "KOPROTOKOLL_LLM_MODEL" in os.environ,
+        from .config import external_llm
+        return {**state, "provider": s.llm_provider, "timeout": s.llm_timeout,
+                "api_key_set": bool(s.llm_api_key), "external": external_llm(s.llm_base_url),
+                "external_confirmed": s.llm_external_confirmed,
+                "env_overrides": [key for key, attr, env in s.llm_fields() if env in os.environ],
+                "model_env_override": "KOPROTOKOLL_LLM_MODEL" in os.environ,
                 "max_tokens": s.llm_max_tokens, "reasoning_effort": s.llm_reasoning_effort}
 
     @api.put("/api/llm")

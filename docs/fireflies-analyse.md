@@ -71,3 +71,6 @@ Aus den Accessibility-Texten der Seite ergibt sich das beworbene Kern-Feature-Se
 | Selbst gehosteter Betrieb | ✔ Docker-Image ohne Modelle, Compose mit Ollama und Schlüsselpflicht | [Prüfung mit echtem Upload](nachweise/issue-19-docker.md) |
 | Bot für Zoom | ✘ Links werden erkannt, Beitritt noch nicht umgesetzt | – |
 | CRM/Slack-Integrationen, Team-Freigaben, Sentiment | ✘ nicht Teil der Grundfunktionen (über Webhooks/API anbindbar) | – |
+
+✔ #43: Eigene OpenAI-kompatible Anbieter in den Einstellungen, lokale Defaults,
+Schlüssel-Maskierung und explizite Bestätigung externer Transkriptübertragung.

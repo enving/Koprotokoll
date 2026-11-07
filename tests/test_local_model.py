@@ -21,7 +21,8 @@ def server():
             pass
 
         def do_GET(self):
-            self.send_response(200)
+            state["authorization"] = self.headers.get("Authorization")
+            self.send_response(state.get("status", 200))
             self.end_headers()
             self.wfile.write(json.dumps({"data": [{"id": m} for m in state["models"]]}).encode())
 
@@ -29,7 +30,11 @@ def server():
             if state.get("delay"):
                 time.sleep(state["delay"])
             state["requests"].append(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
-            self.send_response(500 if state["fail"] else 200)
+            if state.get("on_request"):
+                state["on_request"]()
+            unsupported = state.get("reject_optional") and any(
+                key in state["requests"][-1] for key in ("max_tokens", "reasoning_effort"))
+            self.send_response(400 if unsupported else 500 if state["fail"] else 200)
             self.end_headers()
             try:
                 self.wfile.write(json.dumps({"choices": [{"message": {"content": '{"overview":"Erfundener Testdialog."}'}}]}).encode())
