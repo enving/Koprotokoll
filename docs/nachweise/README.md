@@ -38,5 +38,5 @@ Nachweisanforderungen oben. Ist der Skill nicht verfügbar, dieselbe Erklärung
 mit einem Markdown-/Mermaid-Diagramm oder einer beschrifteten Abbildung liefern
 und die Einschränkung nennen.
 
-Lerneintrag #43 (2026-11-07): Umleitungen sperren und den Anbieter je Auswertung festhalten.
-Prüffälle: Redirect sendet nichts ans Ziel; Anbieterwechsel nach Empfang ändert keine Ergebniskennzeichnung.
+Lerneintrag #43 (2026-11-07): Umleitungen sperren, Anbieter je Lauf festhalten, Zusatzparameter an Adresse/Modell binden.
+Prüffälle: Redirect sendet nichts ans Ziel; Wechsel erhält alte Kennzeichnung und setzt fremde Parameter zurück.

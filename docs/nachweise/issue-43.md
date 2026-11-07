@@ -64,3 +64,12 @@ Anbieterstand fest; gespeicherte Änderungen wirken auf den nächsten Lauf.
 Drei Regressionstests schlugen vor der Korrektur fehl; danach bestanden alle
 19 Anbieter-/Modelltests. Der anschließende Gesamtlauf bestand mit **312 passed
 in 94.69s**, ohne Skips. Eine neue unabhängige Freigabe bleibt erforderlich.
+
+Die nächste unabhängige Prüfung fand übernommene Zusatzparameter eines alten
+Anbieters. Beim Adress-/Modellwechsel werden sie jetzt in Speicher und Datei
+zurückgesetzt. Tests prüfen Wechsel, Neustart und einen Fake-Anbieter, der fremde
+Parameter ablehnt, außerdem unveränderte Verbindungen, neu bestätigte Parameter,
+eine andere Umgebungsadresse und Altdateien ohne Anbieterbindung.
+Drei Gegenfälle schlugen vor der Korrektur fehl; anschließend bestanden alle
+24 Anbieter-/Modelltests. Gesamtlauf: **317 passed in 96.06s**, ohne Skips.
+Die Freigabe bleibt an den neuen Commit gebunden.

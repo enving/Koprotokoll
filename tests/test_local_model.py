@@ -32,7 +32,9 @@ def server():
             state["requests"].append(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
             if state.get("on_request"):
                 state["on_request"]()
-            self.send_response(500 if state["fail"] else 200)
+            unsupported = state.get("reject_optional") and any(
+                key in state["requests"][-1] for key in ("max_tokens", "reasoning_effort"))
+            self.send_response(400 if unsupported else 500 if state["fail"] else 200)
             self.end_headers()
             try:
                 self.wfile.write(json.dumps({"choices": [{"message": {"content": '{"overview":"Erfundener Testdialog."}'}}]}).encode())

@@ -501,6 +501,11 @@ die Oberfläche verlangt diese Bestätigung. „Aus“ sendet `none`. Nicht jede
 unterstützt alle Stufen. Ein abgelehnter Parameter wird als Inferenzfehler sichtbar;
 es gibt keinen stillen zweiten Versuch mit geänderten Parametern.
 
+Bei einem Wechsel der Adresse oder des Modells werden diese Zusatzparameter
+zurückgesetzt. Aktiviere sie für die neue Verbindung nur, wenn sie dort unterstützt
+werden. Laufende Auswertungen verwenden ihren bisherigen Anbieterstand; Änderungen
+wirken auf die nächste Auswertung.
+
 Originalquellen: [Ollama OpenAI-Kompatibilität](https://docs.ollama.com/api/openai-compatibility),
 [Thinking](https://docs.ollama.com/capabilities/thinking),
 [JSON-Ausgabe](https://docs.ollama.com/capabilities/structured-outputs).

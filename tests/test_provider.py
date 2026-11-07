@@ -153,3 +153,66 @@ def test_running_question_keeps_model_when_settings_change(tmp_path, server):
                  {}, LLM(settings), [])
     assert result["engine"] == "llm:testmodell"
     assert settings.llm_model == "anderes-modell"
+
+
+@pytest.mark.parametrize("change", ["url", "model"])
+def test_provider_change_clears_old_parameters_before_next_summary(tmp_path, server, change):
+    import json
+    from koprotokoll.summarize import LLM, summarize
+    url, state = server
+    previous_model = "altes-modell" if change == "model" else "testmodell"
+    settings = Settings(data_dir=tmp_path, llm_base_url=url, llm_model=previous_model)
+    settings.save_provider(dict(url=url, model=previous_model))
+    settings.save_llm(previous_model, 200, "high")
+    following_url = url + "/anderer-anbieter" if change == "url" else url
+    with TestClient(create_app(settings)) as client:
+        response = client.put("/api/llm/provider", json=dict(
+            provider="other", url=following_url, model="testmodell", timeout=2))
+        assert response.status_code == 200
+    reloaded = Settings(data_dir=tmp_path)
+    for config in (settings, reloaded):
+        assert config.llm_max_tokens is None
+        assert config.llm_reasoning_effort is None
+    saved = json.loads((tmp_path / "llm-settings.json").read_text())
+    assert saved.get("max_tokens") is None and saved.get("reasoning_effort") is None
+    state["reject_optional"] = True
+    result = summarize([dict(start=0, speaker="A", text="Erfundener Prüftext.")], {}, LLM(reloaded))
+    assert result["engine"] == "llm:testmodell"
+    assert "max_tokens" not in state["requests"][-1]
+    assert "reasoning_effort" not in state["requests"][-1]
+
+
+def test_provider_same_connection_keeps_confirmed_parameters(tmp_path, server):
+    url, _ = server
+    settings = Settings(data_dir=tmp_path, llm_base_url=url, llm_model="testmodell")
+    settings.save_provider(dict(url=url, model="testmodell"))
+    settings.save_llm("testmodell", 200, "high")
+    settings.save_provider(dict(url=url, model="testmodell", timeout=5))
+    for config in (settings, Settings(data_dir=tmp_path)):
+        assert (config.llm_max_tokens, config.llm_reasoning_effort) == (200, "high")
+    settings.save_llm("neues-modell", 300, "low")
+    for config in (settings, Settings(data_dir=tmp_path)):
+        assert (config.llm_max_tokens, config.llm_reasoning_effort) == (300, "low")
+
+
+def test_changed_url_from_environment_does_not_inherit_saved_parameters(tmp_path, server, monkeypatch):
+    url, _ = server
+    settings = Settings(data_dir=tmp_path, llm_base_url=url, llm_model="testmodell")
+    settings.save_provider(dict(url=url, model="testmodell"))
+    settings.save_llm("testmodell", 200, "high")
+    monkeypatch.setenv("KOPROTOKOLL_LLM_URL", url + "/anderer-anbieter")
+    reloaded = Settings(data_dir=tmp_path)
+    assert reloaded.llm_max_tokens is None
+    assert reloaded.llm_reasoning_effort is None
+
+
+def test_legacy_parameters_without_provider_are_not_rebound(tmp_path, server):
+    import json
+    url, _ = server
+    (tmp_path / "llm-settings.json").write_text(json.dumps(dict(
+        model="testmodell", max_tokens=200, reasoning_effort="high")))
+    settings = Settings(data_dir=tmp_path, llm_base_url=url)
+    assert settings.llm_max_tokens is None and settings.llm_reasoning_effort is None
+    settings.save_provider(dict(url=url, model="testmodell"))
+    reloaded = Settings(data_dir=tmp_path)
+    assert reloaded.llm_max_tokens is None and reloaded.llm_reasoning_effort is None
