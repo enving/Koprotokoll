@@ -151,6 +151,8 @@ def summarize(segments: list[dict], names: dict[str, str], llm: LLM | None) -> d
             failure = "Modellaufruf fehlgeschlagen (Fehler oder Timeout); Heuristik verwendet."
             log.warning("LLM-Zusammenfassung fehlgeschlagen, nutze Heuristik.")
     result = heuristic_summary(segments, names)
+    if failure and external_llm(llm.s.llm_base_url):
+        result["external_service"] = llm.s.llm_base_url
     result["warning"] = failure or "Heuristik verwendet: LLM deaktiviert, Modell fehlt oder Server nicht erreichbar."
     return result
 

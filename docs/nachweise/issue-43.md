@@ -49,3 +49,10 @@ Prüfergebnis vor dem Review: `python -m pytest -q` → **306 passed in 90.15s**
 keine übersprungenen Tests. Separater Backendlauf: 9 passed; Browserdemo: 2 passed.
 Ein früherer Gesamtlauf fand ein Rennen im Browser-Test zwischen Speichern und
 Neuladen; die Demo wartet jetzt ausdrücklich auf die neue Konfigurationsantwort.
+
+Review-Nachbesserung: Bei HTTP-Fehlern oder Timeout nach externem Modellaufruf
+bleibt die Dienstkennzeichnung auch am Heuristik-Ergebnis erhalten. Drei neue
+Prüffälle decken HTTP 500, Timeout und den Gegenfall ohne Übertragung bei fehlendem
+Modell ab. Gesamtlauf nach Korrektur: **309 passed in 91.22s**, keine Skips.
+Die unabhängige Prüfung von `2060663` hatte diesen Befund beanstandet und keine
+Freigabe erteilt; die Korrektur benötigt eine Freigabe für ihren neuen Commit.

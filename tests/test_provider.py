@@ -88,3 +88,33 @@ def test_redirect_does_not_forward_credentials(tmp_path):
         httpd.shutdown()
         httpd.server_close()
         thread.join()
+
+
+@pytest.mark.parametrize("failure", ["http", "timeout"])
+def test_external_fallback_keeps_service_label(tmp_path, server, monkeypatch, failure):
+    from koprotokoll.summarize import LLM, summarize
+    url, state = server
+    settings = Settings(data_dir=tmp_path, llm_base_url=url, llm_model="testmodell")
+    settings.llm_external_confirmed = True
+    monkeypatch.setattr("koprotokoll.summarize.external_llm", lambda _: True)
+    if failure == "http":
+        state["fail"] = True
+    else:
+        state["delay"] = 0.1
+        settings.llm_timeout = 0.01
+    result = summarize([dict(start=0, speaker="A", text="Erfundener Termin.")], {}, LLM(settings))
+    assert result["engine"] == "heuristik"
+    assert result["external_service"] == url
+    assert "fehlgeschlagen" in result["warning"]
+
+
+def test_unavailable_external_server_has_no_transfer_label(tmp_path, server, monkeypatch):
+    from koprotokoll.summarize import LLM, summarize
+    url, state = server
+    state["models"] = []
+    settings = Settings(data_dir=tmp_path, llm_base_url=url, llm_model="testmodell")
+    settings.llm_external_confirmed = True
+    monkeypatch.setattr("koprotokoll.summarize.external_llm", lambda _: True)
+    result = summarize([dict(start=0, speaker="A", text="Erfundener Termin.")], {}, LLM(settings))
+    assert "external_service" not in result
+    assert state["requests"] == []
