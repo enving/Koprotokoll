@@ -56,6 +56,7 @@ Aus den Accessibility-Texten der Seite ergibt sich das beworbene Kern-Feature-Se
 | Aufnahme ohne Bot | Browser-Aufnahme: Mikrofon **oder** Mikrofon + Tab-/Bildschirmton | `MediaRecorder` + `getDisplayMedia` |
 | Datei-Upload (MP3, MP4, WAV, M4A …) | ✔ | ffmpeg → 16 kHz Mono |
 | Transkription | ✔ Standard: deutsches **Parakeet primeline**; optional NVIDIA **Parakeet TDT 0.6B v3** (25 Sprachen) | `sherpa-onnx`; v3 über `onnx-asr` + Silero-VAD |
+| Transkript nachbessern | ✔ Optionales eigenes Sprachmodell, Wortliste, getrenntes Original und markierte Korrektur | Schutzgrenzen und Vergleich: [#44](nachweise/issue-44.md) |
 | Sprechererkennung | ✔ automatisch oder feste Sprecheranzahl, Namen umbenennbar | `sherpa-onnx` (pyannote-Segmentierung + ERes2Net-Embeddings) |
 | Sprechernamen aus der Plattform | Google-Meet-Zeitreihe und konservative Zuordnung implementiert; Live-Prüfung offen | `bot/capture.js`, `speaker_names.py`; manuelle Namen geschützt |
 | AI Summary (Überblick, Stichwörter, Gliederung, Action Items, Entscheidungen, Fragen) | ✔ lokales LLM; Offline-Heuristik mit deutschen Aufgaben, Zuständigkeit und Frist als Fallback | OpenAI-kompatible API (Ollama, llama.cpp, LM Studio) |

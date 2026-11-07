@@ -1,0 +1,288 @@
+{
+  "source": [
+    {
+      "start": 0,
+      "end": 1,
+      "speaker": "A",
+      "text": "Willkommen zu unserem Testgespräch. Wir sind zwei künstliche Stimmen und planen ein fiktives Nachbarschafts fest. Es kommen keine echten Personen oder vertraulichen Informationen vor. Hast du den Ablauf schon vorbereitet?"
+    },
+    {
+      "start": 1,
+      "end": 2,
+      "speaker": "B",
+      "text": "Ja, ich habe einen ersten Vorschlag. Wir treffen uns am Samstag um zehn Uhr im Gemeinschaftsgarten. Zuerst stellen wir die Tische auf, danach kümmern wir uns um Getrenke und die kleine Bühne."
+    },
+    {
+      "start": 2,
+      "end": 3,
+      "speaker": "A",
+      "text": "Das klingt gut. Für den Aufbau brauchen wir allerdings genügend Zeit. Ich würde die Helfer schon eine halbe Stunde früher einladen. Außerdem fehlt noch eine Lösung, falls es regnet."
+    },
+    {
+      "start": 3,
+      "end": 4,
+      "speaker": "B",
+      "text": "Stimmt."
+    },
+    {
+      "start": 4,
+      "end": 5,
+      "speaker": "A",
+      "text": "Bei schlechtem Wetter könnten wir in den großen Raum neben dem Garten wechseln. Ich werde morgen nachfragen, ob er frei ist, und die Antwort bis Donerstag in unsere Liste eintragen."
+    },
+    {
+      "start": 5,
+      "end": 6,
+      "speaker": "B",
+      "text": "Eine andere Frage: Wie viele Gäste erwarten wir? Für zwanzig Personen reichen die vorhandenen Tassen. Wenn es deutlich mehr werden, sollten alle einen eigenen Becher mitbringen. Das spart auch Müll."
+    },
+    {
+      "start": 6,
+      "end": 7,
+      "speaker": "A",
+      "text": "Im Moment rechnen wir mit dreißig Gästen. Auf der Einladung steht bereits, dass jeder einen Becher mitbringen soll. Für Kinder stellen wir Wasser und Apfelsaft bereit. Kaffee können wir vor Ort kochen."
+    },
+    {
+      "start": 7,
+      "end": 8,
+      "speaker": "B",
+      "text": "Dann übernehme ich die Getrenke. Ich kaufe Wasser und Saft ein und bringe zusätzlich eine Kanne Tee mit. Für die Musik brauchen wir noch eine kleine Box und ein langes Kabel."
+    },
+    {
+      "start": 8,
+      "end": 9,
+      "speaker": "A",
+      "text": "Das Kabel habe ich schon!"
+    },
+    {
+      "start": 9,
+      "end": 10,
+      "speaker": "B",
+      "text": "Prima, dann fehlt nur die Box. Ich frage im Haus nach. Die Musik soll leise bleiben, damit wir uns unterhalten können und niemand in der Nachbarschaft gestört wird."
+    },
+    {
+      "start": 10,
+      "end": 11,
+      "speaker": "A",
+      "text": "Einverstanden."
+    },
+    {
+      "start": 11,
+      "end": 12,
+      "speaker": "B",
+      "text": "Halten wir die Aufgaben fest. Du klärst den Ausweichraum und bringst das Kabel mit. Ich besorge die Getrenke und frage nach der Box. Die Tische bauen wir am Samstag gemeinsam auf."
+    },
+    {
+      "start": 12,
+      "end": 13,
+      "speaker": "A",
+      "text": "Genau. Wir treffen uns um halb zehn, die Gäste kommen um zehn. Am Donerstag prüfen wir noch einmal die Wettervorhersage. Damit sind wir fertig. Danke für das Gespräch und bis Samstag."
+    },
+    {
+      "start": 13,
+      "end": 14,
+      "speaker": "B",
+      "text": "Bis Samstag!"
+    }
+  ],
+  "reference": [
+    {
+      "start": 0,
+      "end": 1,
+      "speaker": "A",
+      "text": "Willkommen zu unserem Testgespräch. Wir sind zwei künstliche Stimmen und planen ein fiktives Nachbarschaftsfest. Es kommen keine echten Personen oder vertraulichen Informationen vor. Hast du den Ablauf schon vorbereitet?"
+    },
+    {
+      "start": 1,
+      "end": 2,
+      "speaker": "B",
+      "text": "Ja, ich habe einen ersten Vorschlag. Wir treffen uns am Samstag um zehn Uhr im Gemeinschaftsgarten. Zuerst stellen wir die Tische auf, danach kümmern wir uns um Getränke und die kleine Bühne."
+    },
+    {
+      "start": 2,
+      "end": 3,
+      "speaker": "A",
+      "text": "Das klingt gut. Für den Aufbau brauchen wir allerdings genügend Zeit. Ich würde die Helfer schon eine halbe Stunde früher einladen. Außerdem fehlt noch eine Lösung, falls es regnet."
+    },
+    {
+      "start": 3,
+      "end": 4,
+      "speaker": "B",
+      "text": "Stimmt."
+    },
+    {
+      "start": 4,
+      "end": 5,
+      "speaker": "A",
+      "text": "Bei schlechtem Wetter könnten wir in den großen Raum neben dem Garten wechseln. Ich werde morgen nachfragen, ob er frei ist, und die Antwort bis Donnerstag in unsere Liste eintragen."
+    },
+    {
+      "start": 5,
+      "end": 6,
+      "speaker": "B",
+      "text": "Eine andere Frage: Wie viele Gäste erwarten wir? Für zwanzig Personen reichen die vorhandenen Tassen. Wenn es deutlich mehr werden, sollten alle einen eigenen Becher mitbringen. Das spart auch Müll."
+    },
+    {
+      "start": 6,
+      "end": 7,
+      "speaker": "A",
+      "text": "Im Moment rechnen wir mit dreißig Gästen. Auf der Einladung steht bereits, dass jeder einen Becher mitbringen soll. Für Kinder stellen wir Wasser und Apfelsaft bereit. Kaffee können wir vor Ort kochen."
+    },
+    {
+      "start": 7,
+      "end": 8,
+      "speaker": "B",
+      "text": "Dann übernehme ich die Getränke. Ich kaufe Wasser und Saft ein und bringe zusätzlich eine Kanne Tee mit. Für die Musik brauchen wir noch eine kleine Box und ein langes Kabel."
+    },
+    {
+      "start": 8,
+      "end": 9,
+      "speaker": "A",
+      "text": "Das Kabel habe ich schon!"
+    },
+    {
+      "start": 9,
+      "end": 10,
+      "speaker": "B",
+      "text": "Prima, dann fehlt nur die Box. Ich frage im Haus nach. Die Musik soll leise bleiben, damit wir uns unterhalten können und niemand in der Nachbarschaft gestört wird."
+    },
+    {
+      "start": 10,
+      "end": 11,
+      "speaker": "A",
+      "text": "Einverstanden."
+    },
+    {
+      "start": 11,
+      "end": 12,
+      "speaker": "B",
+      "text": "Halten wir die Aufgaben fest. Du klärst den Ausweichraum und bringst das Kabel mit. Ich besorge die Getränke und frage nach der Box. Die Tische bauen wir am Samstag gemeinsam auf."
+    },
+    {
+      "start": 12,
+      "end": 13,
+      "speaker": "A",
+      "text": "Genau. Wir treffen uns um halb zehn, die Gäste kommen um zehn. Am Donnerstag prüfen wir noch einmal die Wettervorhersage. Damit sind wir fertig. Danke für das Gespräch und bis Samstag."
+    },
+    {
+      "start": 13,
+      "end": 14,
+      "speaker": "B",
+      "text": "Bis Samstag!"
+    }
+  ],
+  "before": {
+    "reference_words": 312,
+    "hypothesis_words": 313,
+    "insertions": 1,
+    "deletions": 0,
+    "substitutions": 6,
+    "wer": 0.022435897435897436
+  },
+  "runs": [
+    {
+      "model": "qwen3:4b",
+      "seconds": 44.97,
+      "temperature": 0.2,
+      "max_tokens": 700,
+      "reasoning_effort": "none",
+      "after": {
+        "reference_words": 312,
+        "hypothesis_words": 312,
+        "insertions": 0,
+        "deletions": 0,
+        "substitutions": 0,
+        "wer": 0.0
+      },
+      "unexpected_words": {},
+      "unexpected_count": 0,
+      "report": {
+        "model": "qwen3:4b",
+        "service": "http://localhost:11434/v1",
+        "external": false,
+        "status": "completed",
+        "rejected": []
+      },
+      "texts": [
+        "Willkommen zu unserem Testgespräch. Wir sind zwei künstliche Stimmen und planen ein fiktives Nachbarschaftsfest. Es kommen keine echten Personen oder vertraulichen Informationen vor. Hast du den Ablauf schon vorbereitet?",
+        "Ja, ich habe einen ersten Vorschlag. Wir treffen uns am Samstag um zehn Uhr im Gemeinschaftsgarten. Zuerst stellen wir die Tische auf, danach kümmern wir uns um Getränke und die kleine Bühne.",
+        "Das klingt gut. Für den Aufbau brauchen wir allerdings genügend Zeit. Ich würde die Helfer schon eine halbe Stunde früher einladen. Außerdem fehlt noch eine Lösung, falls es regnet.",
+        "Stimmt.",
+        "Bei schlechtem Wetter könnten wir in den großen Raum neben dem Garten wechseln. Ich werde morgen nachfragen, ob er frei ist, und die Antwort bis Donnerstag in unsere Liste eintragen.",
+        "Eine andere Frage: Wie viele Gäste erwarten wir? Für zwanzig Personen reichen die vorhandenen Tassen. Wenn es deutlich mehr werden, sollten alle einen eigenen Becher mitbringen. Das spart auch Müll.",
+        "Im Moment rechnen wir mit dreißig Gästen. Auf der Einladung steht bereits, dass jeder einen Becher mitbringen soll. Für Kinder stellen wir Wasser und Apfelsaft bereit. Kaffee können wir vor Ort kochen.",
+        "Dann übernehme ich die Getränke. Ich kaufe Wasser und Saft ein und bringe zusätzlich eine Kanne Tee mit. Für die Musik brauchen wir noch eine kleine Box und ein langes Kabel.",
+        "Das Kabel habe ich schon!",
+        "Prima, dann fehlt nur die Box. Ich frage im Haus nach. Die Musik soll leise bleiben, damit wir uns unterhalten können und niemand in der Nachbarschaft gestört wird.",
+        "Einverstanden.",
+        "Halten wir die Aufgaben fest. Du klärst den Ausweichraum und bringst das Kabel mit. Ich besorge die Getränke und frage nach der Box. Die Tische bauen wir am Samstag gemeinsam auf.",
+        "Genau. Wir treffen uns um halb zehn, die Gäste kommen um zehn. Am Donnerstag prüfen wir noch einmal die Wettervorhersage. Damit sind wir fertig. Danke für das Gespräch und bis Samstag.",
+        "Bis Samstag!"
+      ],
+      "invented_words": {},
+      "invented_count": 0
+    },
+    {
+      "model": "qwen3-vl:4b",
+      "seconds": 46.82,
+      "temperature": 0.2,
+      "max_tokens": 700,
+      "reasoning_effort": "none",
+      "after": {
+        "reference_words": 312,
+        "hypothesis_words": 313,
+        "insertions": 1,
+        "deletions": 0,
+        "substitutions": 6,
+        "wer": 0.022435897435897436
+      },
+      "unexpected_words": {
+        "nachbarschafts": 1,
+        "fest": 1,
+        "getrenke": 3,
+        "donerstag": 2
+      },
+      "unexpected_count": 7,
+      "report": {
+        "model": "qwen3-vl:4b",
+        "service": "http://localhost:11434/v1",
+        "external": false,
+        "status": "fallback",
+        "rejected": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13
+        ]
+      },
+      "texts": [
+        "Willkommen zu unserem Testgespräch. Wir sind zwei künstliche Stimmen und planen ein fiktives Nachbarschafts fest. Es kommen keine echten Personen oder vertraulichen Informationen vor. Hast du den Ablauf schon vorbereitet?",
+        "Ja, ich habe einen ersten Vorschlag. Wir treffen uns am Samstag um zehn Uhr im Gemeinschaftsgarten. Zuerst stellen wir die Tische auf, danach kümmern wir uns um Getrenke und die kleine Bühne.",
+        "Das klingt gut. Für den Aufbau brauchen wir allerdings genügend Zeit. Ich würde die Helfer schon eine halbe Stunde früher einladen. Außerdem fehlt noch eine Lösung, falls es regnet.",
+        "Stimmt.",
+        "Bei schlechtem Wetter könnten wir in den großen Raum neben dem Garten wechseln. Ich werde morgen nachfragen, ob er frei ist, und die Antwort bis Donerstag in unsere Liste eintragen.",
+        "Eine andere Frage: Wie viele Gäste erwarten wir? Für zwanzig Personen reichen die vorhandenen Tassen. Wenn es deutlich mehr werden, sollten alle einen eigenen Becher mitbringen. Das spart auch Müll.",
+        "Im Moment rechnen wir mit dreißig Gästen. Auf der Einladung steht bereits, dass jeder einen Becher mitbringen soll. Für Kinder stellen wir Wasser und Apfelsaft bereit. Kaffee können wir vor Ort kochen.",
+        "Dann übernehme ich die Getrenke. Ich kaufe Wasser und Saft ein und bringe zusätzlich eine Kanne Tee mit. Für die Musik brauchen wir noch eine kleine Box und ein langes Kabel.",
+        "Das Kabel habe ich schon!",
+        "Prima, dann fehlt nur die Box. Ich frage im Haus nach. Die Musik soll leise bleiben, damit wir uns unterhalten können und niemand in der Nachbarschaft gestört wird.",
+        "Einverstanden.",
+        "Halten wir die Aufgaben fest. Du klärst den Ausweichraum und bringst das Kabel mit. Ich besorge die Getrenke und frage nach der Box. Die Tische bauen wir am Samstag gemeinsam auf.",
+        "Genau. Wir treffen uns um halb zehn, die Gäste kommen um zehn. Am Donerstag prüfen wir noch einmal die Wettervorhersage. Damit sind wir fertig. Danke für das Gespräch und bis Samstag.",
+        "Bis Samstag!"
+      ],
+      "invented_words": {},
+      "invented_count": 0
+    }
+  ]
+}

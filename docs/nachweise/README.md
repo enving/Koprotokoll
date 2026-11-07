@@ -40,3 +40,6 @@ und die Einschränkung nennen.
 
 Lerneintrag #43 (2026-11-07): Umleitungen sperren, Anbieter je Lauf festhalten, Zusatzparameter an Adresse/Modell binden.
 Prüffälle: Redirect sendet nichts ans Ziel; Wechsel erhält alte Kennzeichnung und setzt fremde Parameter zurück.
+
+Lerneintrag #44 (2026-11-07): Wortliste vom Antwortobjekt trennen; kleine Modelle können Eingabefelder mitkopieren.
+Prüffälle: zusätzliche Struktur verwerfen, Original samt Wortzeiten bei Neuverarbeitung erhalten.
