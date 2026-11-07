@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -93,6 +94,31 @@ class Settings:
     )
     bbb_hosts: tuple[str, ...] = field(default_factory=lambda: tuple(
         host.strip().lower() for host in _env("KOPROTOKOLL_BBB_HOSTS", "").split(",") if host.strip()))
+
+    llm_max_tokens: int | None = None
+    llm_reasoning_effort: str | None = None
+
+    def __post_init__(self) -> None:
+        path = self.data_dir / "llm-settings.json"
+        if path.exists():
+            saved = json.loads(path.read_text())
+            if "KOPROTOKOLL_LLM_MODEL" not in os.environ:
+                self.llm_model = saved.get("model", self.llm_model)
+            if saved.get("model") == self.llm_model:
+                self.llm_max_tokens = saved.get("max_tokens", self.llm_max_tokens)
+                self.llm_reasoning_effort = saved.get("reasoning_effort", self.llm_reasoning_effort)
+
+    def save_llm(self, model: str, max_tokens: int | None, reasoning_effort: str | None) -> None:
+        self.ensure_dirs()
+        path = self.data_dir / "llm-settings.json"
+        temporary = path.with_suffix(".tmp")
+        temporary.write_text(json.dumps(dict(model=model, max_tokens=max_tokens,
+                                             reasoning_effort=reasoning_effort)))
+        temporary.replace(path)
+        if "KOPROTOKOLL_LLM_MODEL" not in os.environ:
+            self.llm_model = model
+        self.llm_max_tokens = max_tokens if model == self.llm_model else None
+        self.llm_reasoning_effort = reasoning_effort if model == self.llm_model else None
 
     @property
     def db_path(self) -> Path:

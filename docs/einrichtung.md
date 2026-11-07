@@ -477,3 +477,30 @@ Qualitätstest mit echten Meetings, Akzenten und überlappender Sprache.
 | `KOPROTOKOLL_BOT_ADMIT_MINUTES` | `10` | Wartezeit auf Einlass |
 | `KOPROTOKOLL_JITSI_HOSTS` | – | Eigene Jitsi-Instanzen (kommagetrennte Hostnames) |
 | `KOPROTOKOLL_BBB_HOSTS` | – | Eigene BigBlueButton-Instanzen (kommagetrennte Hostnamen) |
+
+### Lokales Textmodell auswählen
+
+Unter „Integrationen & API → Lokales Textmodell“ die Modellliste aktualisieren und
+bewusst ein installiertes Modell auswählen. Koprotokoll ruft dazu `/v1/models`
+über die bestehende LLM-Verbindung ab. Es lädt keine Modelle herunter und wechselt
+nicht automatisch. „Modell vorhanden“ bestätigt die Liste, keinen erfolgreichen
+Inferenzaufruf. Erst die Zusammenfassung nennt `llm:<Modell>`; bei einem Fehler
+oder Timeout zeigt sie eine Warnung und verwendet die Heuristik.
+
+Die Auswahl liegt in `KOPROTOKOLL_DATA/llm-settings.json` und gilt auch für die
+Auswertung nach dem ausdrücklichen Hardwareaufnahme-Stopp. Während der Aufnahme
+findet darüber keine Inferenz statt. `KOPROTOKOLL_LLM_MODEL` hat Vorrang vor der
+gespeicherten Auswahl; dieser Vorrang wird angezeigt. URL, Aktivierung und Timeout
+bleiben über `KOPROTOKOLL_LLM_URL`, `KOPROTOKOLL_LLM` und
+`KOPROTOKOLL_LLM_TIMEOUT` konfiguriert.
+
+Ausgabelimit (1–32768 Tokens) und Thinking sind optional. Leere Werte senden keinen
+zusätzlichen Parameter. Nur aktivieren, wenn die Dokumentation des verwendeten
+Servers **und Modells** `max_tokens` beziehungsweise `reasoning_effort` bestätigt;
+die Oberfläche verlangt diese Bestätigung. „Aus“ sendet `none`. Nicht jedes Modell
+unterstützt alle Stufen. Ein abgelehnter Parameter wird als Inferenzfehler sichtbar;
+es gibt keinen stillen zweiten Versuch mit geänderten Parametern.
+
+Originalquellen: [Ollama OpenAI-Kompatibilität](https://docs.ollama.com/api/openai-compatibility),
+[Thinking](https://docs.ollama.com/capabilities/thinking),
+[JSON-Ausgabe](https://docs.ollama.com/capabilities/structured-outputs).

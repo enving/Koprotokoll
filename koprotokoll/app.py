@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 import secrets
 import shutil
@@ -152,6 +153,13 @@ class EmailSettingsIn(BaseModel):
 
 class TaskExportIn(BaseModel):
     target: str
+
+
+class LocalModelIn(BaseModel):
+    model: str
+    max_tokens: int | None = None
+    reasoning_effort: str | None = None
+    compatible_parameters: bool = False
 
 
 def create_app(settings: Settings | None = None, transcriber: Transcriber | None = None,
@@ -338,13 +346,32 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
             raise HTTPException(400, str(e)) from e
         return {"ok": True}
 
+    @api.get("/api/llm")
+    def local_model():
+        state = llm.status() if isinstance(llm, LLM) else dict(models=[], model=s.llm_model, url=s.llm_base_url, available=llm.available(), message="Modellstatus nicht verfügbar.")
+        return {**state, "model_env_override": "KOPROTOKOLL_LLM_MODEL" in os.environ,
+                "max_tokens": s.llm_max_tokens, "reasoning_effort": s.llm_reasoning_effort}
+
+    @api.put("/api/llm")
+    def select_local_model(body: LocalModelIn):
+        if body.model not in llm.status()["models"]:
+            raise HTTPException(400, "Bitte ein vorhandenes Modell auswählen.")
+        if body.max_tokens is not None and not 1 <= body.max_tokens <= 32768:
+            raise HTTPException(400, "Ausgabelimit muss zwischen 1 und 32768 liegen.")
+        if body.reasoning_effort not in (None, "none", "low", "medium", "high"):
+            raise HTTPException(400, "Ungültige Thinking-Einstellung.")
+        if (body.max_tokens is not None or body.reasoning_effort is not None) and not body.compatible_parameters:
+            raise HTTPException(400, "Unterstützung der optionalen Parameter für Server und Modell bestätigen.")
+        s.save_llm(body.model, body.max_tokens, body.reasoning_effort)
+        return local_model()
+
     @api.get("/api/status")
     def status():
         return {
             "asr_model": transcription_info(transcriber, default_mode)["model"],
             "asr": transcription_info(transcriber, default_mode),
             "diarization": diarizer is not None,
-            "llm": {"available": llm.available(), "model": s.llm_model, "url": s.llm_base_url},
+            "llm": llm.status() if isinstance(llm, LLM) else {"available": llm.available(), "model": s.llm_model, "url": s.llm_base_url},
         }
 
     @api.get("/api/meetings")

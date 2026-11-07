@@ -26,15 +26,29 @@ class LLM:
     def __init__(self, settings: Settings):
         self.s = settings
 
-    def available(self) -> bool:
+    def status(self) -> dict:
+        state = dict(server_reachable=False, model_present=False, available=False,
+                     inference="nicht geprüft", model=self.s.llm_model, url=self.s.llm_base_url,
+                     models=[], enabled=self.s.llm_enabled)
         if not self.s.llm_enabled:
-            return False
+            state["message"] = "LLM deaktiviert; Heuristik wird verwendet."
+            return state
         try:
             req = urllib.request.Request(self.s.llm_base_url.rstrip("/") + "/models", headers=self._headers())
-            with urllib.request.urlopen(req, timeout=2) as r:
-                return r.status == 200
-        except (urllib.error.URLError, OSError, ValueError):
-            return False
+            with urllib.request.urlopen(req, timeout=2) as response:
+                data = json.load(response)
+            state["models"] = sorted({m["id"] for m in data["data"] if isinstance(m.get("id"), str)})
+            state["server_reachable"] = True
+            state["model_present"] = self.s.llm_model in state["models"]
+            state["available"] = state["model_present"]
+            state["message"] = ("Modell vorhanden; Inferenz noch nicht geprüft." if state["model_present"]
+                                else "Ausgewähltes Modell fehlt; bitte ein vorhandenes Modell wählen.")
+        except (urllib.error.URLError, OSError, ValueError, KeyError, TypeError):
+            state["message"] = "Modellliste nicht abrufbar; Server oder Antwort prüfen."
+        return state
+
+    def available(self) -> bool:
+        return self.status()["available"]
 
     def _headers(self) -> dict:
         return {"Content-Type": "application/json", "Authorization": f"Bearer {self.s.llm_api_key}"}
@@ -45,6 +59,10 @@ class LLM:
             "temperature": 0.2,
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
         }
+        if self.s.llm_max_tokens is not None:
+            body["max_tokens"] = self.s.llm_max_tokens
+        if self.s.llm_reasoning_effort is not None:
+            body["reasoning_effort"] = self.s.llm_reasoning_effort
         if json_mode:
             body["response_format"] = {"type": "json_object"}
         req = urllib.request.Request(
@@ -117,12 +135,16 @@ def summarize(segments: list[dict], names: dict[str, str], llm: LLM | None) -> d
     if not segments:
         return {"engine": "none", "overview": "Kein gesprochener Inhalt erkannt.", "keywords": [],
                 "outline": [], "action_items": [], "decisions": [], "questions": []}
+    failure = None
     if llm is not None and llm.available():
         try:
             return _llm_summary(segments, names, llm)
         except Exception as e:  # noqa: BLE001 – LLM-Fehler dürfen die Verarbeitung nicht abbrechen
+            failure = "Modellaufruf fehlgeschlagen (Fehler oder Timeout); Heuristik verwendet."
             log.warning("LLM-Zusammenfassung fehlgeschlagen, nutze Heuristik: %s", e)
-    return heuristic_summary(segments, names)
+    result = heuristic_summary(segments, names)
+    result["warning"] = failure or "Heuristik verwendet: LLM deaktiviert, Modell fehlt oder Server nicht erreichbar."
+    return result
 
 
 def _llm_summary(segments: list[dict], names: dict[str, str], llm: LLM) -> dict:

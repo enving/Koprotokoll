@@ -158,3 +158,19 @@ Alle Endpunkte nutzen die normale Authentifizierung. Unfertige Meetings liefern
 409. Exportiert wird ausschließlich in ein aktuell verbundenes Ziel. Bei einem
 unterbrochenen Export lassen sich dieselben Aufgaben erneut übergeben.
 Links `/#meeting={id}&t={Sekunden}` öffnen die zugehörige Player-Stelle.
+
+### Lokales Textmodell
+
+`GET /api/llm` liefert `models`, `model`, `url`, `enabled`, `server_reachable`,
+`model_present`, `available`, `inference`, `message`, `model_env_override`,
+`max_tokens` und `reasoning_effort`. `available` bedeutet ausschließlich: aktiviert
+und ausgewähltes Modell in der Serverliste vorhanden. `inference` bleibt bei dieser
+reinen Listenprüfung „nicht geprüft“. Das tatsächliche Ergebnis steht im Meeting
+unter `summary.engine` und bei Heuristik unter `summary.warning`.
+
+`PUT /api/llm` speichert zum Beispiel `{"model":"testmodell"}` lokal. Optionale
+Felder: `max_tokens` (1–32768 oder null), `reasoning_effort` (null, `none`, `low`,
+`medium`, `high`). Für gesetzte optionale Parameter muss
+`compatible_parameters: true` ihre Unterstützung bestätigen. Unbekannte Modelle
+oder ungültige Parameter ergeben 400; fehlerhafte Body-Typen 422.
+Alle Endpunkte verwenden die bestehende API-Authentifizierung. Keine Downloads.
