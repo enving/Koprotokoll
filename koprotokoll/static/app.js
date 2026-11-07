@@ -295,6 +295,18 @@ function renderSummary() {
 
 function renderTranscript() {
   const m = state.current;
+  let controls = $("#transcript-version");
+  if (!controls) { controls = h("div", { id: "transcript-version" }); $("#transcript").before(controls); }
+  const version = h("select", { "aria-label": "Transkriptfassung" },
+    h("option", { value: "original" }, "Original"), h("option", { value: "corrected" }, "Nachgebessert"));
+  version.value = m.meta.transcript_version || "original";
+  version.onchange = async () => {
+    try { await api(`/api/meetings/${m.id}/transcript-version`, jsonOpts("PUT", { version: version.value })); await openMeeting(m.id, { keepTab: true }); }
+    catch (err) { controls.append(h("p", { role: "alert" }, err.message)); }
+  };
+  const report = m.meta.correction;
+  controls.replaceChildren(h("label", {}, "Fassung für Anzeige, Suche und Export ", version),
+    h("p", { class: "muted" }, report ? `${report.external ? "Externer Dienst" : "Lokaler Dienst"}: ${report.service} · ${report.model} · ${report.status === "completed" ? "abgeschlossen" : "Original als Ersatz verwendet"} · ${report.rejected.length} Äußerungen unverändert belassen. Änderungen bitte prüfen.` : "Keine Nachbesserung vorhanden."));
   const q = $("#t-filter").value.trim().toLowerCase();
   const box = $("#transcript");
   if (!m.segments.length) {
@@ -303,7 +315,7 @@ function renderTranscript() {
     return;
   }
   state.segEls = m.segments.map((s) => {
-    let text = [s.text];
+    let text = s.text !== s.original_text ? [h("del", {}, s.original_text), " ", h("mark", {}, s.text)] : [s.text];
     if (q) {
       const idx = s.text.toLowerCase().indexOf(q);
       if (idx < 0) return null;
@@ -1068,6 +1080,15 @@ async function renderLocalModel() {
   const box = $("#local-model");
   try {
     const config = await api("/api/llm");
+    const correction = await api("/api/transcript-correction");
+    const enabled = h("input", { type: "checkbox" }); enabled.checked = correction.enabled;
+    const correctionModel = h("input", { value: correction.model, list: "correction-models" });
+    const vocabulary = h("textarea", { rows: "3" }); vocabulary.value = correction.vocabulary.join("\n");
+    const correctionMessage = h("p", { "aria-live": "polite" });
+    const correctionSave = h("button", { type: "button", onclick: async () => {
+      try { await api("/api/transcript-correction", jsonOpts("PUT", { enabled: enabled.checked, model: correctionModel.value, vocabulary: vocabulary.value.split("\n").map(s => s.trim()).filter(Boolean) })); correctionMessage.textContent = "Gespeichert. Gilt bei der nächsten Verarbeitung."; }
+      catch (err) { correctionMessage.textContent = err.message; }
+    } }, "Nachbesserung speichern");
     const model = h("select", { "aria-label": "Lokales Textmodell" },
       h("option", { value: "" }, "Bitte Modell auswählen …"), ...config.models.map(id => h("option", { value: id }, id)));
     model.value = config.models.includes(config.model) ? config.model : "";
@@ -1115,7 +1136,12 @@ async function renderLocalModel() {
       h("p", {}, config.model_env_override ? `KOPROTOKOLL_LLM_MODEL hat Vorrang: ${config.model}` : `Aktuelle Auswahl: ${config.model}`),
       model, h("label", {}, "Maximale Ausgabetokens ", limit), h("label", {}, "Thinking ", thinking),
       h("label", {}, compatible, " Server und Modell unterstützen diese optionalen Parameter (laut Dokumentation)."), save,
-      h("button", { type: "button", onclick: renderLocalModel }, "Modellliste aktualisieren"));
+      h("button", { type: "button", onclick: renderLocalModel }, "Modellliste aktualisieren"),
+      h("h3", {}, "Transkript nachbessern"), h("label", {}, enabled, " Optional aktivieren"),
+      h("p", {}, "Verwendet denselben Anbieter und dessen externe Freigabe. Original bleibt erhalten. Kleine Textänderungen können trotzdem falsch sein."),
+      h("label", {}, "Eigenes Korrekturmodell ", correctionModel),
+      h("datalist", { id: "correction-models" }, ...config.models.map(id => h("option", { value: id }))),
+      h("label", {}, "Wortliste (ein Begriff je Zeile) ", vocabulary), correctionSave, correctionMessage);
   } catch (err) { box.textContent = err.message; }
 }
 renderLocalModel();

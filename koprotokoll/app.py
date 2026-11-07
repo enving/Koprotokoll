@@ -35,6 +35,7 @@ from .ics_source import IcsCalendarSource, IcsError
 from .microsoft import MicrosoftCalendarSource, MicrosoftClient, MicrosoftError
 from .mail import MailError, MailService
 from .outlook import OutlookComCalendarSource, OutlookError, outlook_available
+from typing import Literal
 from .pipeline import Pipeline
 from .recap import RecapMailer
 from .scheduler import CalendarScheduler
@@ -49,6 +50,16 @@ STATIC = Path(__file__).parent / "static"
 ALLOWED_EXT = {".mp3", ".mp4", ".wav", ".m4a", ".webm", ".ogg", ".oga", ".opus", ".flac", ".aac", ".mov", ".mkv"}
 # Zusätzliche Endungen, die OpenAI bei /v1/audio/transcriptions annimmt.
 TRANSCRIBE_EXT = ALLOWED_EXT | {".mpeg", ".mpga"}
+
+
+class CorrectionIn(BaseModel):
+    enabled: bool = False
+    model: str = ""
+    vocabulary: list[str] = []
+
+
+class TranscriptVersionIn(BaseModel):
+    version: Literal["original", "corrected"]
 
 
 class MeetingPatch(BaseModel):
@@ -353,6 +364,26 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
             open_draft(ziel, finished_meeting(meeting_id), s.public_url, s.data_dir)
         except MailError as e:
             raise HTTPException(400, str(e)) from e
+        return {"ok": True}
+
+    @api.get("/api/transcript-correction")
+    def correction_settings():
+        return db.correction_settings()
+
+    @api.put("/api/transcript-correction")
+    def save_correction_settings(body: CorrectionIn):
+        if (body.enabled and not body.model.strip()) or len(body.model) > 200:
+            raise HTTPException(400, "Bitte ein Korrekturmodell angeben.")
+        if len(body.vocabulary) > 200 or any(not word.strip() or len(word) > 100 for word in body.vocabulary):
+            raise HTTPException(400, "Wortliste: höchstens 200 Begriffe mit je 100 Zeichen.")
+        db.set_kv("transcript_correction", {**body.model_dump(), "model": body.model.strip()})
+        return db.correction_settings()
+
+    @api.put("/api/meetings/{meeting_id}/transcript-version")
+    def select_transcript(meeting_id: int, body: TranscriptVersionIn):
+        if db.get_meeting(meeting_id) is None:
+            raise HTTPException(404, "Meeting nicht gefunden.")
+        db.select_transcript(meeting_id, body.version)
         return {"ok": True}
 
     @api.put("/api/llm/provider")

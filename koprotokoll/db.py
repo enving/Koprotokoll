@@ -103,8 +103,35 @@ class Database:
         with self._lock:
             self._conn.executescript(SCHEMA)
             cols = {r[1] for r in self._conn.execute("PRAGMA table_info(meetings)")}
+            segment_cols = {r[1] for r in self._conn.execute("PRAGMA table_info(segments)")}
+            for column, definition in (("corrected_text", "TEXT"), ("word_times", "TEXT NOT NULL DEFAULT '[]'")):
+                if column not in segment_cols:
+                    self._conn.execute(f"ALTER TABLE segments ADD COLUMN {column} {definition}")
             if "meta" not in cols:  # Migration von Version 1
                 self._conn.execute("ALTER TABLE meetings ADD COLUMN meta TEXT NOT NULL DEFAULT '{}'")
+
+    def correction_settings(self) -> dict:
+        return self.get_kv("transcript_correction", {"enabled": False, "model": "", "vocabulary": []})
+
+    def save_correction(self, meeting_id: int, texts: list[str], report: dict) -> None:
+        with self._lock, self._conn:
+            segments = self.get_segments(meeting_id)
+            if len(texts) != len(segments):
+                raise ValueError("Korrektur passt nicht zum Original.")
+            for segment, text in zip(segments, texts):
+                self._conn.execute("UPDATE segments SET corrected_text = ? WHERE id = ?", (text, segment["id"]))
+            meeting = self.get_meeting(meeting_id)
+            self.update_meeting(meeting_id, meta={**meeting["meta"], "correction": report})
+            self.select_transcript(meeting_id, meeting["meta"].get("transcript_version", "corrected"))
+
+    def select_transcript(self, meeting_id: int, version: str) -> None:
+        with self._lock, self._conn:
+            meeting = self.get_meeting(meeting_id)
+            self.update_meeting(meeting_id, meta={**meeting["meta"], "transcript_version": version})
+            self._conn.execute("DELETE FROM segments_fts WHERE meeting_id = ?", (meeting_id,))
+            for segment in self.get_segments(meeting_id):
+                self._conn.execute("INSERT INTO segments_fts (text, meeting_id, segment_id) VALUES (?, ?, ?)",
+                                   (segment["text"], meeting_id, segment["id"]))
 
     # -- Meetings ---------------------------------------------------------
     def create_meeting(self, title: str, source_name: str | None, num_speakers: int | None = None,
@@ -177,21 +204,28 @@ class Database:
             self._conn.execute("DELETE FROM segments WHERE meeting_id = ?", (meeting_id,))
             for i, s in enumerate(segments):
                 cur = self._conn.execute(
-                    "INSERT INTO segments (meeting_id, idx, start, end, speaker, text) VALUES (?, ?, ?, ?, ?, ?)",
-                    (meeting_id, i, s["start"], s["end"], s["speaker"], s["text"]),
+                    "INSERT INTO segments (meeting_id, idx, start, end, speaker, text, word_times) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (meeting_id, i, s["start"], s["end"], s["speaker"], s["text"], json.dumps(s.get("word_times", []))),
                 )
                 self._conn.execute(
                     "INSERT INTO segments_fts (text, meeting_id, segment_id) VALUES (?, ?, ?)",
                     (s["text"], meeting_id, cur.lastrowid),
                 )
 
-    def get_segments(self, meeting_id: int) -> list[dict]:
+    def get_segments(self, meeting_id: int, original: bool = False) -> list[dict]:
         with self._lock:
             rows = self._conn.execute(
-                "SELECT id, idx, start, end, speaker, text FROM segments WHERE meeting_id = ? ORDER BY idx",
+                "SELECT id, idx, start, end, speaker, text, corrected_text, word_times FROM segments WHERE meeting_id = ? ORDER BY idx",
                 (meeting_id,),
             ).fetchall()
-        return [dict(r) for r in rows]
+        selected = self.get_meeting(meeting_id)["meta"].get("transcript_version") == "corrected" and not original
+        result = [dict(r) for r in rows]
+        for segment in result:
+            segment["original_text"] = segment["text"]
+            segment["word_times"] = json.loads(segment["word_times"])
+            if selected and segment["corrected_text"] is not None:
+                segment["text"] = segment["corrected_text"]
+        return result
 
     def search(self, query: str, meeting_id: int | None = None, limit: int = 50,
                any_word: bool = False) -> list[dict]:

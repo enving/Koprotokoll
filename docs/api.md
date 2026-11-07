@@ -184,3 +184,21 @@ Alle Endpunkte verwenden die bestehende API-Authentifizierung. Keine Downloads.
 Ein fehlender/null Schlüssel bleibt erhalten, `""` löscht ihn. Externe URLs erfordern
 `external_confirmed: true`. `POST /api/llm/test` prüft den gespeicherten Anbieter:
 Erreichbarkeit, Modell vorhanden, kurzer Probeaufruf als getrennte Felder.
+
+### Transkript-Nachbesserung
+
+- `GET /api/transcript-correction`: gespeicherte Einstellungen; standardmäßig
+  `{"enabled":false,"model":"","vocabulary":[]}`.
+- `PUT /api/transcript-correction`: dieselben Felder speichern; bei Aktivierung ist ein
+  Modellname erforderlich. Maximal 200 Wortlisteneinträge à 100 Zeichen, Modellname maximal
+  200 Zeichen. Gilt beim nächsten Verarbeitungslauf, nutzt die bestehende Anbieterfreigabe.
+- `PUT /api/meetings/{id}/transcript-version` mit `{"version":"original"}` oder
+  `{"version":"corrected"}` wählt Anzeige-, Such- und Exportfassung. Ohne Korrektur wird
+  Originaltext angezeigt. Unbekanntes Meeting: 404; ungültige Fassung: 422.
+
+Meetingsegmente enthalten zusätzlich `original_text`, `corrected_text` (nullable) und
+`word_times` (unveränderte ASR-Wörter; bei alten Daten leere Liste). `text` ist die gewählte
+Fassung. `meta.transcript_version` speichert die Auswahl; `meta.correction` nennt Modell,
+Dienstadresse, `external`, `status` (`completed`/`fallback`) und nullbasierte Indizes der
+verworfenen Äußerungen in `rejected`. Es werden keine Modellfehlermeldungen mit möglicherweise
+vertraulichen Antworten gespeichert. Die Schnittstellen unterliegen der vorhandenen API-Authentifizierung.

@@ -527,3 +527,29 @@ leer lassen behält sie, die Löschoption entfernt sie. Die Umgebungsvariablen
 Schlüssels. Die Oberfläche nennt diese Felder als vom Server vorgegeben.
 Adresswechsel benötigen eine erneute externe Bestätigung. Als lokal gelten localhost,
 Loopback, private IPv4-Netze und IPv6-ULA; andere Hostnamen gelten vorsorglich als extern.
+
+### Optionale Transkript-Nachbesserung
+
+Unter Einstellungen → Sprachmodell → Transkript nachbessern aktivieren (Voreinstellung: aus).
+Ein eigenes Modell beim gespeicherten Anbieter eintragen oder aus dessen Vorschlägen wählen;
+die Wortliste enthält einen Begriff je Zeile. Es gibt keinen Modelldownload. Der Schritt
+verwendet URL, Schlüssel, Timeout und externe Übertragungsbestätigung des Anbieters.
+Die Wortliste wird ebenfalls an diesen Anbieter übertragen. Für ein anderes Modell gelten
+keine Zusatzparameter des Zusammenfassungsmodells. Nicht unterstützte Antworten führen
+zum Original zurück, auch bei Ausfall oder fehlender Cloudbestätigung.
+
+Bei der nächsten Verarbeitung wird nur Text nachgebessert. Die erste Erkennung, Sprecher,
+Zeitstempel und rohe Wortzeiten bleiben erhalten; Neuverarbeitung erkennt ein vorhandenes
+Original nicht erneut. Leere Ersttranskripte werden ebenfalls erhalten. Für vorhandene alte
+Transkripte werden keine Wortzeiten erfunden. Korrekturen stehen in einer eigenen Spalte.
+Die erste Korrektur wählt die nachgebesserte Fassung, spätere Läufe erhalten deine Auswahl.
+Im Transkript kannst du auf Original umschalten. Geänderte Äußerungen zeigen den alten Text
+durchgestrichen und den neuen markiert; ein Textfilter zeigt stattdessen seine Suchtreffer.
+Die Auswahl gilt für Anzeige, Volltextsuche und Export. Eine bestehende Zusammenfassung
+wird durch Umschalten nicht geändert; bei Bedarf erneut zusammenfassen.
+
+Die Prüfung akzeptiert nur ein JSON-Textfeld je Äußerung, mindestens 80 % Zeichenähnlichkeit
+und höchstens 30 % mehr Zeichen (bei kurzen Texten bis fünf zusätzliche Zeichen).
+Das verhindert keine plausibel klingenden falschen Namen oder Zahlen. Änderungen immer
+prüfen. Dienst, Modell und verworfene Äußerungen stehen am Ergebnis, auch bei Fehlern.
+Messung und reproduzierbare Demo: [Nachweis #44](nachweise/issue-44.md).

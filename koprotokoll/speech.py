@@ -404,10 +404,11 @@ def build_utterances(words: list[Word], turns: list[Turn], max_len: float = 30.0
         if new:
             if cur:
                 out.append(cur)
-            cur = {"start": w.start, "end": w.end, "speaker": spk, "text": w.text}
+            cur = {"start": w.start, "end": w.end, "speaker": spk, "text": w.text, "word_times": []}
         else:
             cur["text"] += " " + w.text
             cur["end"] = max(cur["end"], w.end)
+        cur["word_times"].append({"start": w.start, "end": w.end, "text": w.text})
     if cur:
         out.append(cur)
     for u in out:
