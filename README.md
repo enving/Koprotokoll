@@ -173,7 +173,9 @@ Sprachwahl, lokale Modellpfade und Migration: [Konfiguration](docs/einrichtung.m
 
 **Für richtig gute Zusammenfassungen** ein lokales Sprachmodell starten, z. B. mit
 [Ollama](https://ollama.com): `ollama pull qwen2.5:7b-instruct` – Koprotokoll findet es automatisch.
-Ohne LLM gibt es eine einfache, rein lokale Auswertung.
+Ohne LLM gibt es eine einfache, rein lokale Auswertung. Unter **Integrationen & API → Sprachmodell**
+kannst du deinen eigenen lokalen oder ausdrücklich bestätigten externen Anbieter eintragen
+([Einrichtung](docs/einrichtung.md#eigenen-sprachmodell-anbieter-einrichten)).
 
 ➡️ Alles Weitere – Meeting-Bot, Google Kalender & Gmail, Konfiguration – steht in
 **[docs/einrichtung.md](docs/einrichtung.md)**, die API in **[docs/api.md](docs/api.md)**.

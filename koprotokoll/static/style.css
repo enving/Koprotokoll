@@ -142,3 +142,5 @@ pre { background: var(--bg); padding: 8px 10px; border-radius: 8px; overflow-x: 
 #local-model p { overflow-wrap: anywhere; }
 
 #local-model input[type=checkbox] { width: auto; margin-right: 8px; }
+#local-model input:not([type=checkbox]) { width: 100%; min-width: 0; max-width: 100%; }
+#local-model label { min-width: 0; overflow-wrap: anywhere; }

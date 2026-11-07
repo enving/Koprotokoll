@@ -21,7 +21,8 @@ def server():
             pass
 
         def do_GET(self):
-            self.send_response(200)
+            state["authorization"] = self.headers.get("Authorization")
+            self.send_response(state.get("status", 200))
             self.end_headers()
             self.wfile.write(json.dumps({"data": [{"id": m} for m in state["models"]]}).encode())
 

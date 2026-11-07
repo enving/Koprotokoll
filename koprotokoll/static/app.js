@@ -141,7 +141,7 @@ async function openMeeting(id, { keepTab = false, seekTo = null } = {}) {
   $("#m-meta").textContent = [created, m.duration ? fmt(m.duration) : null,
     Object.keys(m.speakers).length ? `${Object.keys(m.speakers).length} Sprecher` : null,
     diarizationText,
-    m.summary?.engine ? `Zusammenfassung: ${m.summary.engine}` : null, m.summary?.warning].filter(Boolean).join(" · ");
+    m.summary?.engine ? `Zusammenfassung: ${m.summary.engine}` : null, m.summary?.warning, m.summary?.external_service ? `Auswertung durch externen Dienst: ${m.summary.external_service}` : null].filter(Boolean).join(" · ");
 
   const done = m.status === "done";
   $("#m-progress").hidden = done;
@@ -1084,7 +1084,34 @@ async function renderLocalModel() {
         await renderLocalModel();
       } catch (err) { message.textContent = err.message; }
     };
-    box.replaceChildren(h("h2", {}, "Lokales Textmodell"), h("p", {}, config.url), message,
+    const provider = h("select", { "aria-label": "Anbieter" }, ...[["ollama", "Ollama lokal"], ["openai", "OpenAI"], ["other", "Anderer OpenAI-kompatibler Server"]].map(([value, label]) => h("option", { value }, label)));
+    provider.value = config.provider;
+    const url = h("input", { "aria-label": "Basis-URL", value: config.url });
+    const name = h("input", { "aria-label": "Modellname", value: config.model });
+    const key = h("input", { type: "password", "aria-label": "API-Schlüssel", autocomplete: "new-password", placeholder: config.api_key_set ? "Gesetzt – leer lassen zum Beibehalten" : "Nicht gesetzt" });
+    const remove = h("input", { type: "checkbox" });
+    const timeout = h("input", { type: "number", "aria-label": "Timeout in Sekunden", value: config.timeout, min: "0.01", max: "3600", step: "any" });
+    const confirm = h("input", { type: "checkbox" });
+    provider.onchange = () => { if (provider.value === "openai") url.value = "https://api.openai.com/v1"; if (provider.value === "ollama") url.value = "http://localhost:11434/v1"; confirm.checked = false; };
+    url.oninput = () => { confirm.checked = false; };
+    model.onchange = () => { name.value = model.value; };
+    const providerSave = h("button", { type: "button" }, "Anbieter speichern");
+    providerSave.onclick = async () => {
+      try {
+        await api("/api/llm/provider", jsonOpts("PUT", { provider: provider.value, url: url.value, model: name.value, timeout: Number(timeout.value), api_key: remove.checked ? "" : key.value || null, external_confirmed: confirm.checked }));
+        key.value = "";
+        await renderLocalModel();
+      } catch (err) { key.value = ""; message.textContent = err.message; }
+    };
+    const test = h("button", { type: "button" }, "Gespeicherten Anbieter testen");
+    test.onclick = async () => { try { const result = await api("/api/llm/test", { method: "POST" }); message.textContent = `Server: ${result.server_reachable ? "erreichbar" : "nicht erreichbar"} · Modell: ${result.model_present ? "vorhanden" : "fehlt"} · Probeaufruf: ${result.inference}`; } catch (err) { message.textContent = err.message; } };
+    box.replaceChildren(h("h2", {}, "Sprachmodell"),
+      h("p", {}, config.external ? `Externer Dienst: ${config.url} (${config.external_confirmed ? "bestätigt" : "Übertragung gesperrt"})` : "Lokaler Dienst"),
+      h("p", {}, config.env_overrides.length ? `Vom Server vorgegeben: ${config.env_overrides.join(", ")}` : "Eigene Einstellungen"),
+      h("label", {}, "Anbieter ", provider), h("label", {}, "Basis-URL ", url),
+      h("label", {}, "Modellname ", name), h("label", {}, "API-Schlüssel ", key),
+      h("label", {}, remove, " Gespeicherten Schlüssel löschen"), h("label", {}, "Timeout in Sekunden ", timeout),
+      h("label", {}, confirm, " Transkripttext wird an diesen Dienst gesendet. Ich bestätige die externe Übertragung."), providerSave, test, h("p", {}, config.url), message,
       h("p", {}, config.model_env_override ? `KOPROTOKOLL_LLM_MODEL hat Vorrang: ${config.model}` : `Aktuelle Auswahl: ${config.model}`),
       model, h("label", {}, "Maximale Ausgabetokens ", limit), h("label", {}, "Thinking ", thinking),
       h("label", {}, compatible, " Server und Modell unterstützen diese optionalen Parameter (laut Dokumentation)."), save,

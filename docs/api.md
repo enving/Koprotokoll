@@ -174,3 +174,13 @@ Felder: `max_tokens` (1–32768 oder null), `reasoning_effort` (null, `none`, `l
 `compatible_parameters: true` ihre Unterstützung bestätigen. Unbekannte Modelle
 oder ungültige Parameter ergeben 400; fehlerhafte Body-Typen 422.
 Alle Endpunkte verwenden die bestehende API-Authentifizierung. Keine Downloads.
+
+### Sprachmodell-Anbieter
+
+`GET /api/llm` liefert Status, Modellliste, `provider`, `timeout`, `api_key_set`,
+`env_overrides`, `external` und `external_confirmed`, niemals den Schlüssel.
+`PUT /api/llm/provider` speichert `provider` (`ollama`, `openai`, `other`), `url`,
+`model`, `timeout` (0,01–3600 Sekunden), optional `api_key` und `external_confirmed`.
+Ein fehlender/null Schlüssel bleibt erhalten, `""` löscht ihn. Externe URLs erfordern
+`external_confirmed: true`. `POST /api/llm/test` prüft den gespeicherten Anbieter:
+Erreichbarkeit, Modell vorhanden, kurzer Probeaufruf als getrennte Felder.

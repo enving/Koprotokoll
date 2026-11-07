@@ -14,7 +14,7 @@ import urllib.error
 import urllib.request
 from collections import Counter
 
-from .config import Settings
+from .config import Settings, external_llm
 
 log = logging.getLogger(__name__)
 
@@ -22,6 +22,12 @@ log = logging.getLogger(__name__)
 # --------------------------------------------------------------------------
 # LLM-Client
 # --------------------------------------------------------------------------
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Keine Schlüssel oder Transkripttexte an umgeleitete Ziele senden."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
 class LLM:
     def __init__(self, settings: Settings):
         self.s = settings
@@ -30,12 +36,12 @@ class LLM:
         state = dict(server_reachable=False, model_present=False, available=False,
                      inference="nicht geprüft", model=self.s.llm_model, url=self.s.llm_base_url,
                      models=[], enabled=self.s.llm_enabled)
-        if not self.s.llm_enabled:
+        if not self.s.llm_enabled or (external_llm(self.s.llm_base_url) and not self.s.llm_external_confirmed):
             state["message"] = "LLM deaktiviert; Heuristik wird verwendet."
             return state
         try:
             req = urllib.request.Request(self.s.llm_base_url.rstrip("/") + "/models", headers=self._headers())
-            with urllib.request.urlopen(req, timeout=2) as response:
+            with urllib.request.build_opener(NoRedirect).open(req, timeout=2) as response:
                 data = json.load(response)
             state["models"] = sorted({m["id"] for m in data["data"] if isinstance(m.get("id"), str)})
             state["server_reachable"] = True
@@ -54,6 +60,8 @@ class LLM:
         return {"Content-Type": "application/json", "Authorization": f"Bearer {self.s.llm_api_key}"}
 
     def chat(self, system: str, user: str, json_mode: bool = False) -> str:
+        if external_llm(self.s.llm_base_url) and not self.s.llm_external_confirmed:
+            raise ValueError("Externe Übertragung nicht bestätigt.")
         body: dict = {
             "model": self.s.llm_model,
             "temperature": 0.2,
@@ -69,7 +77,7 @@ class LLM:
             self.s.llm_base_url.rstrip("/") + "/chat/completions",
             data=json.dumps(body).encode(), headers=self._headers(), method="POST",
         )
-        with urllib.request.urlopen(req, timeout=self.s.llm_timeout) as r:
+        with urllib.request.build_opener(NoRedirect).open(req, timeout=self.s.llm_timeout) as r:
             data = json.load(r)
         return data["choices"][0]["message"]["content"]
 
@@ -141,7 +149,7 @@ def summarize(segments: list[dict], names: dict[str, str], llm: LLM | None) -> d
             return _llm_summary(segments, names, llm)
         except Exception as e:  # noqa: BLE001 – LLM-Fehler dürfen die Verarbeitung nicht abbrechen
             failure = "Modellaufruf fehlgeschlagen (Fehler oder Timeout); Heuristik verwendet."
-            log.warning("LLM-Zusammenfassung fehlgeschlagen, nutze Heuristik: %s", e)
+            log.warning("LLM-Zusammenfassung fehlgeschlagen, nutze Heuristik.")
     result = heuristic_summary(segments, names)
     result["warning"] = failure or "Heuristik verwendet: LLM deaktiviert, Modell fehlt oder Server nicht erreichbar."
     return result
@@ -157,6 +165,7 @@ def _llm_summary(segments: list[dict], names: dict[str, str], llm: LLM) -> dict:
     result = {k: data.get(k) or [] for k in ("keywords", "outline", "action_items", "decisions", "questions")}
     result["overview"] = data.get("overview") or ""
     result["title"] = data.get("title") or None
+    result["external_service"] = llm.s.llm_base_url if external_llm(llm.s.llm_base_url) else None
     result["engine"] = f"llm:{llm.s.llm_model}"
     return result
 
