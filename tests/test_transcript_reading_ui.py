@@ -1,4 +1,4 @@
-"""Lesetext verbindet technische Segmente, während die zeitbasierte Ansicht erhalten bleibt."""
+"""Lesetext ohne technische Aufteilung, auch bei gespeicherter alter Zeitansicht."""
 
 import os
 from pathlib import Path
@@ -15,7 +15,7 @@ from test_koprotokoll import FakeTranscriber, NoLLM
 
 
 @pytest.mark.parametrize('width,multiple', [(1280, False), (390, False), (1280, True)])
-def test_reading_view_joins_segments_and_keeps_timed_tools(tmp_path, width, multiple):
+def test_reading_view_ignores_old_timed_preference_and_preserves_data(tmp_path, width, multiple):
     app = create_app(Settings(data_dir=tmp_path, diarization=False),
                      transcriber=FakeTranscriber(), llm=NoLLM(), background=False)
     db = app.state.db
@@ -30,6 +30,7 @@ def test_reading_view_joins_segments_and_keeps_timed_tools(tmp_path, width, mult
     with TestClient(app) as client, sync_playwright() as pw:
         browser = pw.chromium.launch(executable_path=_chrome_path(), headless=True)
         page = browser.new_page(viewport={'width': width, 'height': 1000}, color_scheme='dark')
+        page.add_init_script("localStorage.setItem('koprotokoll-transcript-layout', 'timed')")
         errors = []
         page.on('pageerror', lambda error: errors.append(str(error)))
 
@@ -42,7 +43,7 @@ def test_reading_view_joins_segments_and_keeps_timed_tools(tmp_path, width, mult
         page.route('**/*', serve)
         page.goto(f'http://127.0.0.1/#meeting={mid}')
         page.get_by_role('tab', name='Transkript', exact=True).click()
-        expect(page.get_by_label('Transkriptansicht', exact=True)).to_have_value('read')
+        expect(page.locator('#t-layout')).to_have_count(0)
         expect(page.locator('#transcript .ts')).to_have_count(0)
         expect(page.locator('#transcript .who')).to_have_count(0)
         if multiple:
@@ -62,15 +63,15 @@ def test_reading_view_joins_segments_and_keeps_timed_tools(tmp_path, width, mult
         if os.environ.get('KOPROTOKOLL_UI_ARTIFACTS'):
             folder = Path(os.environ['KOPROTOKOLL_UI_ARTIFACTS']); folder.mkdir(parents=True, exist_ok=True)
             page.screenshot(path=str(folder / f'lesetext-{width}-{multiple}.png'))
-        page.get_by_label('Transkriptansicht', exact=True).select_option('timed')
-        expect(page.locator('#transcript .seg')).to_have_count(3)
-        expect(page.locator('#transcript .ts')).to_have_text(['00:00', '00:05', '00:10'])
-        page.locator('#transcript .seg').first.hover()
-        page.locator('#transcript .mark').first.click()
-        expect(page.locator('#transcript .seg')).to_have_count(3)
+        page.get_by_role('tab', name='Markierungen', exact=True).click()
+        page.locator('#bm-kind').select_option('soundbite')
+        page.locator('#bm-note').fill('Merken')
+        with page.expect_response(lambda response: response.url.endswith('/bookmarks') and response.request.method == 'POST'):
+            page.locator('#bm-form').get_by_role('button', name='Markieren', exact=True).click()
         page.reload()
         page.get_by_role('tab', name='Transkript', exact=True).click()
-        expect(page.get_by_label('Transkriptansicht', exact=True)).to_have_value('timed')
+        expect(page.locator('#transcript .ts')).to_have_count(0)
+        expect(page.locator('#transcript .reading-segment')).to_have_count(3)
         assert db.get_segments(mid) == before
         assert len(db.list_bookmarks(mid)) == 1
         assert errors == []

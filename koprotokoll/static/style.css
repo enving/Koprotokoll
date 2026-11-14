@@ -77,8 +77,6 @@ audio { width: 100%; margin: 16px 0 8px; position: sticky; top: -24px; z-index: 
 .talk div { height: 100%; border-radius: 3px; }
 .swatch { width: 10px; height: 10px; border-radius: 50%; flex: none; }
 #transcript { margin-top: 12px; }
-.transcript-layout { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
-.transcript-layout select { min-height: 44px; }
 #transcript.reading { max-width: 72ch; font-size: 16px; line-height: 1.7; overflow-wrap: anywhere; }
 .reading-paragraph { margin: 0 0 1em; }
 .reading-speaker { margin: 1.5em 0 .25em; font-size: 14px; font-weight: 600; }
@@ -88,13 +86,6 @@ audio { width: 100%; margin: 16px 0 8px; position: sticky; top: -24px; z-index: 
 .transcription-actions select { min-width: 0; max-width: 100%; }
 .transcription-actions select, .transcription-actions button { min-height: 44px; }
 .transcription-controls p { margin: 6px 0; }
-.seg { display: grid; grid-template-columns: 150px 1fr auto; gap: 12px; padding: 8px 10px; border-radius: 8px; }
-.seg:hover { background: var(--panel); }
-.seg.current { background: var(--accent-soft); }
-.seg .who { font-weight: 600; font-size: 13px; }
-.seg .who .ts { display: block; font-weight: 400; }
-.seg .mark { visibility: hidden; padding: 2px 8px; font-size: 12px; }
-.seg:hover .mark { visibility: visible; }
 .row { display: flex; gap: 8px; }
 .row select { flex: none; }
 #ask-answer { white-space: pre-wrap; margin-top: 16px; }
@@ -113,7 +104,6 @@ dialog menu { display: flex; justify-content: flex-end; gap: 8px; padding: 0; ma
   body { grid-template-columns: 1fr; grid-template-rows: auto 1fr; height: auto; }
   #sidebar { max-height: 45vh; }
   #main { padding: 16px; }
-  .seg { grid-template-columns: 1fr; gap: 2px; }
   .meeting-head { flex-direction: column; }
   .meeting-head h1 { font-size: 20px; }
 }

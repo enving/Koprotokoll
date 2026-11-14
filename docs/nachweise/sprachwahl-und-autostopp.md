@@ -119,3 +119,27 @@ Gesamtprüfung: `.venv/bin/pytest -q` – **354 bestanden in 124,99 s**, keine S
 Auch am laufenden lokalen Server geprüft: Lesetext ohne Zeitmarken, alle bestehenden
 Textabschnitte vollständig und gespeicherte Meeting-Daten unverändert. Nur statische
 Oberflächendateien geändert; kein Serverneustart erforderlich.
+
+## Endgültige Ansicht: keine technische Aufteilung
+
+Die frühere Umschaltvariante wurde auf ausdrücklichen Wunsch entfernt. Der Tab
+Transkript rendert ausschließlich fortlaufenden Lesetext. Alte gespeicherte
+Zeitansichten werden nicht mehr ausgewertet. Namen erscheinen nur bei tatsächlichem
+Sprecherwechsel. TXT und der Transkriptteil des Markdown-Exports verbinden ebenfalls
+die bisherigen Erkennungsfragmente ohne Zeit-/Sprecherwiederholungen. Soundbites
+werden über den Tab Markierungen angelegt; Untertitel und JSON behalten ihre Zeiten.
+
+Die drei Browserfälle prüfen jetzt ausdrücklich eine gespeicherte alte Zeitansicht:
+Lesetext bleibt auch nach Neuladen aktiv, ohne Umschalter oder technische Zeilen.
+Suche, Audiohervorhebung, reale Sprecherwechsel, Markierungen und unveränderte Daten
+bleiben geprüft. `tests/test_plain_transcript.py` ergänzt TXT/Markdown/SRT-Prüfungen
+sowie eine Gegenprobe für den Browsercache: Nach einer Dateiänderung ändern sich
+die Asset-Adressen bereits in derselben Serverinstanz. HTML und Assets werden
+beim Neuladen beim Server abgeglichen. Diese Cacheprüfung belegt die Absicherung,
+nicht rückwirkend die Ursache einer bestimmten früheren Nutzeransicht.
+
+Gesamtprüfung des endgültigen Stands: **356 Tests in 124,85 s bestanden**, keine
+Skips. Laufender Server anschließend aktualisiert. Dort HTML ohne Umschalter,
+versionierte Skriptadresse und Cache-Abgleich geprüft; der TXT-Export der lokalen
+Aufnahme entspricht exakt dem fortlaufenden Transkript. Gespeicherte Meeting-Daten
+vorher/nachher unverändert.

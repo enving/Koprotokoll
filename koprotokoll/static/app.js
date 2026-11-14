@@ -385,35 +385,13 @@ function renderTranscript() {
     h("p", { class: "muted" }, report ? `${report.external ? "Externer Dienst" : "Lokaler Dienst"}: ${report.service} · ${report.model} · ${report.status === "completed" ? "abgeschlossen" : "Original als Ersatz verwendet"} · ${report.rejected.length} Äußerungen unverändert belassen. Änderungen bitte prüfen.` : "Keine Nachbesserung vorhanden."));
   const q = $("#t-filter").value.trim().toLowerCase();
   const box = $("#transcript");
-  const reading = $("#t-layout").value === "read";
-  box.classList.toggle("reading", reading);
+  box.classList.add("reading");
   if (!m.segments.length) {
     box.replaceChildren(h("p", { class: "muted" }, m.status === "done" ? "Keine Sprache erkannt." : "Transkript wird erstellt …"));
     state.segEls = [];
     return;
   }
-  if (reading) {
-    renderReadingTranscript(m, q, box);
-    return;
-  }
-  state.segEls = m.segments.map((s) => {
-    let text = s.text !== s.original_text ? [h("del", {}, s.original_text), " ", h("mark", {}, s.text)] : [s.text];
-    if (q) {
-      const idx = s.text.toLowerCase().indexOf(q);
-      if (idx < 0) return null;
-      text = [s.text.slice(0, idx), h("mark", {}, s.text.slice(idx, idx + q.length)), s.text.slice(idx + q.length)];
-    }
-    const el = h("div", { class: "seg", "data-start": s.start, "data-end": s.end },
-      h("div", { class: "who", style: `color:${color(s.speaker)}` }, speakerName(s.speaker), tsLink(s.start)),
-      h("div", {}, text),
-      h("button", { class: "mark", title: "Als Soundbite markieren", onclick: async () => {
-        await api(`/api/meetings/${m.id}/bookmarks`, jsonOpts("POST",
-          { start: s.start, end: s.end, kind: "soundbite", note: `${speakerName(s.speaker)}: ${s.text}` }));
-        await openMeeting(m.id, { keepTab: true });
-      } }, "★"));
-    return el;
-  }).filter(Boolean);
-  box.replaceChildren(...state.segEls);
+  renderReadingTranscript(m, q, box);
 }
 
 function renderBookmarks() {
@@ -424,7 +402,7 @@ function renderBookmarks() {
     h("button", { title: "Entfernen", onclick: async () => {
       await api(`/api/meetings/${m.id}/bookmarks/${b.id}`, { method: "DELETE" });
       await openMeeting(m.id, { keepTab: true });
-    } }, "✕"))) : [h("li", { class: "muted" }, "Noch keine Markierungen. In der Transkriptansicht „Mit Zeitmarken“ auf ★ klicken oder oben eine Notiz zur Abspielposition anlegen.")]));
+    } }, "✕"))) : [h("li", { class: "muted" }, "Noch keine Markierungen. Oben eine Notiz oder einen Soundbite zur aktuellen Abspielposition anlegen.")]));
 }
 
 // Aktuelles Segment beim Abspielen hervorheben.
@@ -442,13 +420,6 @@ $("#player").addEventListener("timeupdate", () => {
 // ---------------------------------------------------------- Events
 document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
 $("#t-filter").addEventListener("input", renderTranscript);
-try { $("#t-layout").value = localStorage.getItem("koprotokoll-transcript-layout") === "timed" ? "timed" : "read"; }
-catch { /* Ohne Browserspeicher bleibt der Lesetext voreingestellt. */ }
-$("#t-layout").addEventListener("change", () => {
-  try { localStorage.setItem("koprotokoll-transcript-layout", $("#t-layout").value); }
-  catch { /* Der Ansichtswechsel funktioniert auch ohne Browserspeicher. */ }
-  if (state.current) renderTranscript();
-});
 
 $("#m-title").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); e.target.blur(); } });
 $("#m-title").addEventListener("blur", async () => {

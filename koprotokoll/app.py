@@ -10,13 +10,14 @@ import shutil
 import time
 import threading
 import urllib.parse
+from hashlib import sha256
 from dataclasses import asdict
 from pathlib import Path
 
 import numpy as np
 
 from fastapi import APIRouter, Depends, FastAPI, File, Form, HTTPException, UploadFile, Request
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
 from fastapi.exception_handlers import request_validation_exception_handler
@@ -50,6 +51,15 @@ from .tasks import TaskError, TaskExporter, meeting_tasks, tasks_ics
 
 log = logging.getLogger(__name__)
 STATIC = Path(__file__).parent / "static"
+
+
+class FreshStaticFiles(StaticFiles):
+    """Oberflächendateien beim erneuten Laden stets beim Server abgleichen."""
+
+    async def get_response(self, path: str, scope: dict) -> Response:
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
 ALLOWED_EXT = {".mp3", ".mp4", ".wav", ".m4a", ".webm", ".ogg", ".oga", ".opus", ".flac", ".aac", ".mov", ".mkv"}
 # Zusätzliche Endungen, die OpenAI bei /v1/audio/transcriptions annimmt.
 TRANSCRIBE_EXT = ALLOWED_EXT | {".mpeg", ".mpga"}
@@ -1122,9 +1132,19 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
         out.sort(key=lambda x: x["start"])
         return out
 
+    @public.get("/", include_in_schema=False)
+    @public.get("/index.html", include_in_schema=False)
+    def index_html():
+        """Inhaltsabhängige Asset-Adressen verhindern eine veraltete Browseransicht."""
+        content = (STATIC / "index.html").read_text(encoding="utf-8")
+        for filename in ("app.js", "style.css"):
+            version = sha256((STATIC / filename).read_bytes()).hexdigest()[:12]
+            content = content.replace(f'"{filename}"', f'"{filename}?v={version}"')
+        return HTMLResponse(content, headers={"Cache-Control": "no-cache"})
+
     app.include_router(public)
     app.include_router(api)
-    app.mount("/", StaticFiles(directory=STATIC, html=True), name="static")
+    app.mount("/", FreshStaticFiles(directory=STATIC, html=True), name="static")
     return app
 
 
