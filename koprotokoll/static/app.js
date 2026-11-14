@@ -323,6 +323,52 @@ function renderSummary() {
   box.replaceChildren(h("div", { class: "grid2" }, h("div", {}, left), h("div", {}, speakers, tools)));
 }
 
+function renderReadingTranscript(meeting, query, box) {
+  const paragraphs = [];
+  let paragraph = null;
+  for (const segment of meeting.segments) {
+    const previous = paragraph?.segments.at(-1);
+    if (!paragraph || paragraph.speaker !== segment.speaker ||
+        (paragraph.length >= 650 && /[.!?…]["“”»]?$/u.test(previous.text))) {
+      paragraph = { speaker: segment.speaker, segments: [], length: 0 };
+      paragraphs.push(paragraph);
+    }
+    paragraph.segments.push(segment);
+    paragraph.length += segment.text.length + 1;
+  }
+  const multiple = new Set(meeting.segments.map((segment) => segment.speaker)).size > 1;
+  const nodes = [];
+  state.segEls = [];
+  let previousSpeaker = null;
+  for (const paragraph of paragraphs) {
+    const plain = paragraph.segments.map((segment) => segment.text).join(" ");
+    const match = query ? plain.toLowerCase().indexOf(query) : -1;
+    if (query && match < 0) continue;
+    if (multiple && (query || previousSpeaker !== paragraph.speaker)) {
+      nodes.push(h("p", { class: "reading-speaker", style: `color:${color(paragraph.speaker)}` }, speakerName(paragraph.speaker)));
+    }
+    previousSpeaker = paragraph.speaker;
+    const node = h("p", { class: "reading-paragraph" });
+    let offset = 0;
+    for (const segment of paragraph.segments) {
+      let text = segment.text !== segment.original_text
+        ? [h("del", {}, segment.original_text), " ", h("mark", {}, segment.text)] : [segment.text];
+      if (query) {
+        const begin = Math.max(0, match - offset), end = Math.min(segment.text.length, match + query.length - offset);
+        text = begin < end
+          ? [segment.text.slice(0, begin), h("mark", {}, segment.text.slice(begin, end)), segment.text.slice(end)] : [segment.text];
+      }
+      const span = h("span", { class: "reading-segment", "data-start": segment.start, "data-end": segment.end }, text);
+      if (node.childNodes.length) node.append(" ");
+      node.append(span);
+      state.segEls.push(span);
+      offset += segment.text.length + 1;
+    }
+    nodes.push(node);
+  }
+  box.replaceChildren(...(nodes.length ? nodes : [h("p", { class: "muted" }, "Keine passenden Textstellen.")]));
+}
+
 function renderTranscript() {
   const m = state.current;
   let controls = $("#transcript-version");
@@ -339,9 +385,15 @@ function renderTranscript() {
     h("p", { class: "muted" }, report ? `${report.external ? "Externer Dienst" : "Lokaler Dienst"}: ${report.service} · ${report.model} · ${report.status === "completed" ? "abgeschlossen" : "Original als Ersatz verwendet"} · ${report.rejected.length} Äußerungen unverändert belassen. Änderungen bitte prüfen.` : "Keine Nachbesserung vorhanden."));
   const q = $("#t-filter").value.trim().toLowerCase();
   const box = $("#transcript");
+  const reading = $("#t-layout").value === "read";
+  box.classList.toggle("reading", reading);
   if (!m.segments.length) {
     box.replaceChildren(h("p", { class: "muted" }, m.status === "done" ? "Keine Sprache erkannt." : "Transkript wird erstellt …"));
     state.segEls = [];
+    return;
+  }
+  if (reading) {
+    renderReadingTranscript(m, q, box);
     return;
   }
   state.segEls = m.segments.map((s) => {
@@ -372,7 +424,7 @@ function renderBookmarks() {
     h("button", { title: "Entfernen", onclick: async () => {
       await api(`/api/meetings/${m.id}/bookmarks/${b.id}`, { method: "DELETE" });
       await openMeeting(m.id, { keepTab: true });
-    } }, "✕"))) : [h("li", { class: "muted" }, "Noch keine Markierungen. Im Transkript auf ★ klicken oder oben eine Notiz zur Abspielposition anlegen.")]));
+    } }, "✕"))) : [h("li", { class: "muted" }, "Noch keine Markierungen. In der Transkriptansicht „Mit Zeitmarken“ auf ★ klicken oder oben eine Notiz zur Abspielposition anlegen.")]));
 }
 
 // Aktuelles Segment beim Abspielen hervorheben.
@@ -390,6 +442,13 @@ $("#player").addEventListener("timeupdate", () => {
 // ---------------------------------------------------------- Events
 document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
 $("#t-filter").addEventListener("input", renderTranscript);
+try { $("#t-layout").value = localStorage.getItem("koprotokoll-transcript-layout") === "timed" ? "timed" : "read"; }
+catch { /* Ohne Browserspeicher bleibt der Lesetext voreingestellt. */ }
+$("#t-layout").addEventListener("change", () => {
+  try { localStorage.setItem("koprotokoll-transcript-layout", $("#t-layout").value); }
+  catch { /* Der Ansichtswechsel funktioniert auch ohne Browserspeicher. */ }
+  if (state.current) renderTranscript();
+});
 
 $("#m-title").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); e.target.blur(); } });
 $("#m-title").addEventListener("blur", async () => {

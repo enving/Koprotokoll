@@ -99,3 +99,23 @@ Bei einer vorhandenen Aufnahme wurden die Labels zusammengeführt und Text,
 Wortzeiten, Markierungen sowie Zusammenfassung unverändert gegengeprüft. Die
 frühere Aufteilung ist gesichert. Keine neue ASR- oder automatische
 Sprechererkennung für diese Korrektur ausgeführt.
+
+## Nachtrag: Lesetext ohne wiederholte Zeitmarken
+
+Standardansicht ist jetzt **Lesetext**. Direkt aufeinanderfolgende Segmente derselben
+Person werden in lesbare Absätze verbunden. Bei einer Person entfallen die
+wiederholten Sprecherlabels vollständig. Bei mehreren Personen erscheinen Namen
+beim tatsächlichen Sprecherwechsel. **Mit Zeitmarken** stellt die bisherige
+segmentweise Ansicht samt Audiolinks und Soundbite-Markierung wieder her.
+
+`tests/test_transcript_reading_ui.py`: drei Browserfälle bei 1280/390 Pixeln prüfen
+Voreinstellung, vollständigen zusammenhängenden Text, fehlende Zeitmarken,
+Suche über Segmentgrenzen, leeres Suchergebnis, Wiedergabehervorhebung,
+echte Sprecherwechsel, Umschalten, gespeicherte Ansicht, Soundbite-Anlage sowie
+unveränderte gespeicherte Segmente. Alle drei Fälle bestanden. Die Bilder nutzen
+erfundene Texte; es wurde kein privates Transkript als Bild gespeichert.
+
+Gesamtprüfung: `.venv/bin/pytest -q` – **354 bestanden in 124,99 s**, keine Skips.
+Auch am laufenden lokalen Server geprüft: Lesetext ohne Zeitmarken, alle bestehenden
+Textabschnitte vollständig und gespeicherte Meeting-Daten unverändert. Nur statische
+Oberflächendateien geändert; kein Serverneustart erforderlich.

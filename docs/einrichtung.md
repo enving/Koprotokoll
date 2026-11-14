@@ -377,6 +377,12 @@ bleiben erhalten; die frühere Sprecheraufteilung lässt sich wiederherstellen.
 Die automatische Erkennung kann bei Stimm-, Pegel- oder Aufnahmewechseln dieselbe
 Person mehrfach einordnen. Die feste Vorgabe umgeht diese Aufteilung.
 
+Im Tab **Transkript** ist **Lesetext** voreingestellt: zusammenhängende Absätze ohne
+Zeitmarken und ohne wiederholte Sprecherlabels bei einer Person. Über
+**Transkriptansicht → Mit Zeitmarken** lassen sich die einzelnen Audiostellen und
+Soundbite-Schaltflächen einblenden. Der Browser merkt sich die Ansicht. Die Auswahl
+ändert nur die Anzeige; gespeicherte Zeiten und Exportformate bleiben erhalten.
+
 Bei deutschen Aufnahmen mit englischen Fehldeutungen gezielt **Deutsch** wählen.
 Das deutsche Modell muss vorher installiert sein:
 
