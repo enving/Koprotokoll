@@ -106,6 +106,29 @@ unbekannte Sprachmodi `400`. Fehlende Modelle werden wie beim Import als
 Verarbeitungsfehler gemeldet. Die Oberfläche bietet den Vorgang im Tab **Transkript**
 unter **Transkriptionssprache → Erneut transkribieren** an.
 
+### Eine Stimme wurde irrtümlich als mehrere Sprecher erkannt
+
+`POST /api/meetings/{id}/single-speaker` ordnet alle vorhandenen Äußerungen `S1`
+zu und setzt `num_speakers=1`. Text, Wortzeiten, Äußerungs-IDs, Nachbesserungen,
+Markierungen und Suchindex bleiben erhalten. Die bisherige Aufteilung samt Namen
+wird als `meta.speaker_correction` gesichert. Wiederholte Aufrufe überschreiben
+diese Sicherung nicht. `DELETE` auf demselben Pfad stellt die gesicherte Aufteilung
+wieder her. Laufende Verarbeitung oder ein nicht mehr passendes Transkript liefern
+`409`, fehlende Meetings `404`.
+
+Die Übersicht bietet dafür unter **Sprecher & Redeanteil** „Alle als eine Person
+zusammenführen“ und anschließend „Frühere Sprecheraufteilung wiederherstellen“ an.
+Die Änderung löst keine neue Transkription oder Zusammenfassung aus. Ein Hinweis
+erinnert daran, die Zusammenfassung bei Bedarf neu zu erstellen. Die Sicherung
+der Sprecheraufteilung wird nicht in Webhooks versendet.
+
+Bei neuen Aufnahmen mit `num_speakers=1` wird die automatische Sprechertrennung
+übersprungen. Das Transkript erhält genau ein Sprecherlabel; Metadaten nennen
+`diarization.status="fixed"` und `source="setting"`. Eine nachträgliche Korrektur
+nennt `source="manual"`. Beide sind eine Vorgabe, keine gemessene Sprecherzahl.
+Die Mac-Menüleisten-App speichert die Auswahl **Anzahl Sprecher** für Aufnahmen
+per Tastenkürzel; Vorgabe bleibt Automatisch.
+
 ### Automatischer Stopp nach fünf Minuten ohne Sprache
 
 Hardwareaufnahmen (einschließlich Mac-Tastenkürzel) überwacht der Server unabhängig

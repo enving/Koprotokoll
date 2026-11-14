@@ -22,7 +22,7 @@ def test_alt_double_tap_rejects_combinations_and_holds(tmp_path):
     subprocess.run(["swiftc", str(source / "koprotokoll/macos_hotkey.swift"),
                     str(source / "tests/fixtures/hotkey_macos_test.swift"), "-o", str(binary)], check=True)
     result = subprocess.run([str(binary)], capture_output=True, text=True, check=True)
-    assert "17 Tastenkürzel- und Einstellungsfälle bestanden" in result.stdout
+    assert "20 Tastenkürzel- und Einstellungsfälle bestanden" in result.stdout
 
 
 def test_app_bundle_points_to_local_backend_without_extra_python_packages(tmp_path, monkeypatch):

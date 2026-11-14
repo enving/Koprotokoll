@@ -675,6 +675,24 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
                 p.unlink(missing_ok=True)
         return {"ok": True, "id": m["id"]}
 
+    @api.post("/api/meetings/{meeting_id}/single-speaker")
+    def single_speaker(meeting_id: int):
+        meeting_or_404(meeting_id)
+        try:
+            db.set_single_speaker(meeting_id)
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        return {"ok": True}
+
+    @api.delete("/api/meetings/{meeting_id}/single-speaker")
+    def restore_speakers(meeting_id: int):
+        meeting_or_404(meeting_id)
+        try:
+            db.set_single_speaker(meeting_id, restore=True)
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        return {"ok": True}
+
     @api.get("/api/meetings/{meeting_id}/audio")
     def audio(meeting_id: int):
         m = meeting_or_404(meeting_id)

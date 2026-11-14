@@ -192,6 +192,51 @@ class Database:
             rows = self._conn.execute("SELECT * FROM meetings ORDER BY created_at DESC").fetchall()
         return [_meeting(r) for r in rows]
 
+    def set_single_speaker(self, meeting_id: int, *, restore: bool = False) -> None:
+        """Nur Sprecherlabels ändern; Texte, Wortzeiten und Suchindex bleiben erhalten."""
+        keys = ("diarization", "manual_speakers", "automatic_speakers")
+        with self._lock, self._conn:
+            meeting = self.get_meeting(meeting_id)
+            if meeting["status"] not in ("done", "error"):
+                raise ValueError("Die Aufnahme wird noch verarbeitet. Bitte warten.")
+            rows = self._conn.execute("SELECT id, speaker FROM segments WHERE meeting_id = ? ORDER BY idx",
+                                      (meeting_id,)).fetchall()
+            meta = meeting["meta"]
+            saved = meta.get("speaker_correction")
+            if restore:
+                if not saved:
+                    raise ValueError("Keine frühere Sprecheraufteilung zum Wiederherstellen vorhanden.")
+                if {str(row["id"]) for row in rows} != set(saved["segments"]):
+                    raise ValueError("Das Transkript hat sich geändert; die frühere Aufteilung passt nicht mehr.")
+                self._conn.executemany("UPDATE segments SET speaker = ? WHERE meeting_id = ? AND id = ?",
+                                       [(label, meeting_id, int(sid)) for sid, label in saved["segments"].items()])
+                names, count = saved["speakers"], saved["num_speakers"]
+                for key in keys:
+                    if key in saved["meta"]:
+                        meta[key] = saved["meta"][key]
+                    else:
+                        meta.pop(key, None)
+                meta.pop("speaker_correction")
+            else:
+                if saved:
+                    return  # Wiederholter Klick darf die Sicherung nicht überschreiben.
+                if not rows:
+                    raise ValueError("Die Aufnahme enthält noch kein Transkript.")
+                meta["speaker_correction"] = {
+                    "segments": {str(row["id"]): row["speaker"] for row in rows},
+                    "speakers": meeting["speakers"], "num_speakers": meeting["num_speakers"],
+                    "meta": {key: meta[key] for key in keys if key in meta},
+                }
+                named = [name for label, name in meeting["speakers"].items() if name != f"Sprecher {label[1:]}"]
+                names, count = {"S1": named[0] if named else "Sprecher 1"}, 1
+                self._conn.execute("UPDATE segments SET speaker = ? WHERE meeting_id = ?", ("S1", meeting_id))
+                meta["manual_speakers"], meta["automatic_speakers"] = names, {}
+                meta["diarization"] = {"status": "fixed", "speaker_count": 1,
+                                       "requested_speakers": 1, "source": "manual"}
+            meta["summary_speakers_changed"] = True
+            self._conn.execute("UPDATE meetings SET speakers = ?, num_speakers = ?, meta = ? WHERE id = ?",
+                               (json.dumps(names, ensure_ascii=False), count, json.dumps(meta, ensure_ascii=False), meeting_id))
+
     def delete_meeting(self, meeting_id: int) -> None:
         with self._lock, self._conn:
             self._conn.execute("DELETE FROM segments_fts WHERE meeting_id = ?", (meeting_id,))

@@ -35,6 +35,14 @@ enum TranscriptionLanguage: String, CaseIterable {
 struct DesktopPreferences {
     let defaults: UserDefaults
 
+    var speakerCount: Int {
+        get {
+            let count = defaults.integer(forKey: "speakerCount")
+            return (0...20).contains(count) ? count : 0
+        }
+        nonmutating set { defaults.set(newValue, forKey: "speakerCount") }
+    }
+
     var language: TranscriptionLanguage {
         get { TranscriptionLanguage(rawValue: defaults.string(forKey: "transcriptionLanguage") ?? "") ?? .german }
         nonmutating set { defaults.set(newValue.rawValue, forKey: "transcriptionLanguage") }

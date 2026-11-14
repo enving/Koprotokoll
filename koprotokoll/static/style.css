@@ -71,6 +71,7 @@ audio { width: 100%; margin: 16px 0 8px; position: sticky; top: -24px; z-index: 
 .list li .grow { flex: 1; }
 .tag { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
 .speaker-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+#speaker-single { min-height: 44px; max-width: 100%; }
 .speaker-row input { flex: 1; padding: 4px 8px; }
 .talk { height: 6px; border-radius: 3px; background: var(--line); margin-top: 2px; }
 .talk div { height: 100%; border-radius: 3px; }

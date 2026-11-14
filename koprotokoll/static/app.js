@@ -133,6 +133,8 @@ async function openMeeting(id, { keepTab = false, seekTo = null } = {}) {
   if (diarization?.status === "completed") {
     diarizationText = `Sprechererkennung: ${diarization.speaker_count} Sprecher`;
     if (diarization.warning) diarizationText += ` (${diarization.warning})`;
+  } else if (diarization?.status === "fixed") {
+    diarizationText = diarization.source === "manual" ? "Sprecherzuordnung: auf eine Person korrigiert" : "Sprecherzahl: 1 vorgegeben";
   } else if (diarization?.status === "failed" || diarization?.status === "empty") {
     diarizationText = "Sprechererkennung fehlgeschlagen – Transkript ohne Sprecherzuordnung.";
   } else if (diarization?.status === "disabled") {
@@ -254,6 +256,9 @@ function renderSummary() {
     h("div", { class: "card" }, h("h3", {}, "Zusammenfassung"), h("p", {}, s.overview || "–"),
       s.keywords?.length ? h("div", { class: "chips" }, s.keywords.map((k) => h("span", { class: "chip" }, k))) : null),
   ];
+  if (m.meta.summary_speakers_changed) {
+    left.unshift(h("p", { role: "status", class: "muted" }, "Die Sprecherzuordnung wurde geändert. Die vorhandene Zusammenfassung bei Bedarf über „Zusammenfassung neu erstellen“ aktualisieren."));
+  }
   if (s.action_items?.length) {
     left.push(h("div", { class: "card" }, h("h3", {}, `Action Items (${s.action_items.length})`),
       h("ul", { class: "list" }, s.action_items.map((a) => h("li", {},
@@ -291,6 +296,23 @@ function renderSummary() {
         h("div", { class: "talk" }, h("div", { style: `width:${pct}%;background:${color(spk)}` })));
     }),
     h("p", { class: "muted", style: "font-size:12px" }, "Namen ändern: Feld bearbeiten und Enter drücken."));
+  const speakerError = h("p", { role: "alert" });
+  if (m.meta.speaker_correction || Object.keys(m.speakers).length > 1) {
+    const restore = Boolean(m.meta.speaker_correction);
+    speakers.append(h("button", { id: "speaker-single", disabled: !["done", "error"].includes(m.status), onclick: async (event) => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      speakerError.textContent = "";
+      try {
+        await api(`/api/meetings/${m.id}/single-speaker`, { method: restore ? "DELETE" : "POST" });
+        await openMeeting(m.id, { keepTab: true });
+      } catch (err) {
+        speakerError.textContent = err.message;
+        button.disabled = false;
+      }
+    } }, restore ? "Frühere Sprecheraufteilung wiederherstellen" : "Alle als eine Person zusammenführen"),
+    h("p", { class: "small muted" }, restore ? "Die frühere Aufteilung ist gespeichert." : "Wenn überall dieselbe Person spricht. Die Änderung lässt sich rückgängig machen."), speakerError);
+  }
   const tools = h("div", { class: "card" }, h("h3", {}, "Werkzeuge"),
     h("button", { onclick: async (e) => {
       e.target.disabled = true; e.target.textContent = "Erstelle …";

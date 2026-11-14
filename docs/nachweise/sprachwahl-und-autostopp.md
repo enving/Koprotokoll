@@ -70,3 +70,32 @@ kein manueller Accessibility-Durchlauf der nativen Einstellungen, kein
 Spracherkennungs-Benchmark. Musik und sehr leise Sprache können VAD beeinflussen.
 Ein suspendierter Browser kann die Browseraufnahme nicht zuverlässig überwachen;
 die serverseitige Hardwareüberwachung ist davon unabhängig.
+
+## Nachtrag: Eine Person wurde mehrfach zugeordnet
+
+Folgeänderung vom 14.11.2026: Die Übersicht kann alle Sprecherlabels als eine Person
+zusammenführen und die gesicherte frühere Aufteilung wiederherstellen. Die bestehende
+Erkennung wird dabei nicht erneut ausgeführt. Explizit `num_speakers=1` überspringt
+bei neuen Aufnahmen die automatische Aufteilung. Die Mac-App bietet dafür eine
+gespeicherte Auswahl von Automatisch oder 1–20 Personen.
+
+`tests/test_single_speaker.py` prüft den festen Ein-Sprecher-Weg, Zusammenführen,
+Erhalt von Text, Wortzeiten, Nachbesserungen, Segment-IDs, Markierungen und Suche,
+Schutz der Sicherung bei wiederholtem Aufruf und Wiederherstellung nach erneuter
+Verarbeitung. Noch laufende Erkennung wird abgewiesen. Zwei Browserfälle bei 1280
+und 390 Pixeln führen die Korrektur und Wiederherstellung über die tatsächlichen
+Schaltflächen aus, ohne Seitenfehler oder horizontalen Überlauf.
+
+Gezielte Prüfung: 27 Tests bestanden (`test_single_speaker.py`, `test_desktop.py`,
+`test_speaker_names.py`). Native Einstellungen: nun 20 Fälle einschließlich
+gespeicherter Sprecherzahl. Die komplette Swift-App wurde erfolgreich gebaut.
+Keine allgemeine Verbesserung der automatischen Sprecherzählung behauptet; deren
+Schwelle wurde nicht anhand einer einzelnen Aufnahme verändert. Bei vorgegebener
+oder manuell korrigierter Sprecherzahl kennzeichnet die Oberfläche diese Herkunft.
+
+Gesamtprüfung nach dieser Folgeänderung: `.venv/bin/pytest -q` – **351 bestanden
+in 124,15 s**, keine Skips. Lokaler Server und Mac-App anschließend aktualisiert.
+Bei einer vorhandenen Aufnahme wurden die Labels zusammengeführt und Text,
+Wortzeiten, Markierungen sowie Zusammenfassung unverändert gegengeprüft. Die
+frühere Aufteilung ist gesichert. Keine neue ASR- oder automatische
+Sprechererkennung für diese Korrektur ausgeführt.

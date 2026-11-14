@@ -74,6 +74,7 @@ final class DesktopApp: NSObject, NSApplicationDelegate {
     private var settingsWindow: NSWindow?
     private let sourcePicker = NSPopUpButton()
     private let languagePicker = NSPopUpButton()
+    private let speakerPicker = NSPopUpButton()
     private let modifierPicker = NSPopUpButton()
     private let shortcutToggle = NSButton(checkboxWithTitle: "Globales Tastenkürzel aktivieren", target: nil, action: nil)
     private let permissionLabel = NSTextField(wrappingLabelWithString: "")
@@ -127,7 +128,7 @@ final class DesktopApp: NSObject, NSApplicationDelegate {
     }
 
     private func buildSettingsWindow() {
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 570, height: 700),
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 570, height: 760),
                               styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
         window.title = "Koprotokoll – Einstellungen"
         window.isReleasedWhenClosed = false
@@ -174,6 +175,13 @@ final class DesktopApp: NSObject, NSApplicationDelegate {
         languagePicker.setAccessibilityLabel("Transkriptionssprache")
         stack.addArrangedSubview(languagePicker)
         languagePicker.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        label("Anzahl Sprecher", heading: true)
+        speakerPicker.addItems(withTitles: ["Automatisch"] + (1...20).map { $0 == 1 ? "1 Sprecher" : "\($0) Sprecher" })
+        speakerPicker.target = self
+        speakerPicker.action = #selector(changeSpeakerCount)
+        speakerPicker.setAccessibilityLabel("Anzahl Sprecher")
+        stack.addArrangedSubview(speakerPicker)
+        speakerPicker.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         label("Nach 5 Minuten ohne erkannte Sprache wird die Aufnahme automatisch gestoppt und ausgewertet.")
         label("Tastenkürzel", heading: true)
         shortcutToggle.target = self
@@ -232,6 +240,8 @@ final class DesktopApp: NSObject, NSApplicationDelegate {
         let languageIndex = TranscriptionLanguage.allCases.firstIndex(of: preferences.language) ?? 0
         languagePicker.selectItem(at: languageIndex)
         languagePicker.isEnabled = !active && !busy
+        speakerPicker.selectItem(at: preferences.speakerCount)
+        speakerPicker.isEnabled = !active && !busy
         refreshButton.isEnabled = !busy && !sourcesLoading
         shortcutToggle.state = preferences.shortcutEnabled ? .on : .off
         shortcutToggle.isEnabled = !active && !busy
@@ -255,6 +265,11 @@ final class DesktopApp: NSObject, NSApplicationDelegate {
     @objc private func changeLanguage() {
         guard !active && !busy else { return }
         preferences.language = TranscriptionLanguage.allCases[languagePicker.indexOfSelectedItem]
+    }
+
+    @objc private func changeSpeakerCount() {
+        guard !active && !busy else { return }
+        preferences.speakerCount = speakerPicker.indexOfSelectedItem
     }
 
     @objc private func changeShortcut() {
@@ -450,8 +465,9 @@ final class DesktopApp: NSObject, NSApplicationDelegate {
                     return
                 }
                 stateItem.title = "Aufnahme wird gestartet …"
-                _ = try await request("/api/capture/start", body: ["device": source.id, "title": "",
-                                                                "language": preferences.language.rawValue])
+                var body: [String: Any] = ["device": source.id, "title": "", "language": preferences.language.rawValue]
+                if preferences.speakerCount > 0 { body["num_speakers"] = preferences.speakerCount }
+                _ = try await request("/api/capture/start", body: body)
                 active = true
                 item.button?.title = "● Aufnahme"
             }

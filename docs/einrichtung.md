@@ -369,6 +369,14 @@ gespeichert und ausgewertet. Hardwareaufnahmen überwacht der Server auch ohne
 offenen Browser. Bei Browseraufnahmen muss der Tab weiterlaufen. Bei einem Fehler
 der lokalen Sprachaktivitätserkennung erscheint eine Warnung; dann manuell stoppen.
 
+Spricht nur eine Person, **Anzahl Sprecher → 1** wählen, auch in den Einstellungen
+der Mac-Menüleisten-App. Dann wird diese Stimme nicht automatisch aufgeteilt.
+Bei einer bereits falsch aufgeteilten Aufnahme in der Übersicht unter **Sprecher &
+Redeanteil** auf **Alle als eine Person zusammenführen** klicken. Text und Zeiten
+bleiben erhalten; die frühere Sprecheraufteilung lässt sich wiederherstellen.
+Die automatische Erkennung kann bei Stimm-, Pegel- oder Aufnahmewechseln dieselbe
+Person mehrfach einordnen. Die feste Vorgabe umgeht diese Aufteilung.
+
 Bei deutschen Aufnahmen mit englischen Fehldeutungen gezielt **Deutsch** wählen.
 Das deutsche Modell muss vorher installiert sein:
 
