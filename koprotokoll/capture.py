@@ -12,6 +12,7 @@ import sys
 import signal
 import subprocess
 import threading
+import struct
 import time
 import wave
 from dataclasses import dataclass
@@ -164,6 +165,41 @@ class ActiveCapture:
     error: str | None = None
 
 
+def pcm_tail(path: Path, channels: int, sample_rate: int):
+    """PCM-Ende auch bei noch unvollständigem WAV-Header lesen; Ausgabe: 16-kHz-Mono."""
+    import numpy as np
+
+    try:
+        with path.open('rb') as stream:
+            header = stream.read(12)
+            if header[:4] != b'RIFF' or header[8:] != b'WAVE':
+                return None
+            for _ in range(32):
+                chunk = stream.read(8)
+                if len(chunk) != 8:
+                    return None
+                name, size = struct.unpack('<4sI', chunk)
+                if name == b'data':
+                    start = stream.tell()
+                    stream.seek(0, 2)
+                    end = stream.tell()
+                    frame_bytes = channels * 2
+                    count = min((end - start) // frame_bytes, sample_rate * 2)
+                    if count < sample_rate // 2:
+                        return None
+                    stream.seek(start + ((end - start) // frame_bytes - count) * frame_bytes)
+                    samples = np.frombuffer(stream.read(count * frame_bytes), dtype='<i2')
+                    mono = samples.reshape(-1, channels).mean(axis=1).astype(np.float32) / 32768
+                    # Die Aufnahmewege liefern 48 kHz; andere ganzzahlige Raten ebenfalls zulassen.
+                    if sample_rate % 16000:
+                        return None
+                    step = sample_rate // 16000
+                    return mono[:len(mono) // step * step].reshape(-1, step).mean(axis=1)
+                stream.seek(size + (size % 2), 1)
+    except (OSError, ValueError):
+        return None
+
+
 class HardwareRecorder:
     """Eine exklusive, lokale Hardwareaufnahme pro Koprotokoll-Instanz."""
 
@@ -194,6 +230,15 @@ class HardwareRecorder:
                 return {"active": False}
             return {"active": active.process.poll() is None, "device": active.device,
                     "started_at": active.started_at, "level_db": active.level_db, "error": active.error}
+
+    def speech_audio(self):
+        """Die letzten zwei Sekunden beider Spuren lesen, ohne die Aufnahme zu verändern."""
+        with self._lock:
+            active = self._active
+            if active is None:
+                return []
+            paths = [active.system_path, active.mic_path] if active.system_path else [active.path]
+            return [pcm_tail(path, active.channels, active.sample_rate) for path in paths]
 
     def start(self, device: str, channels: int = 2, sample_rate: int = 48_000) -> dict:
         with self._lock:

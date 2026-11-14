@@ -81,8 +81,52 @@ Die Queue speichert den Modus unter `meta.asr_language`, die ausgewählte Engine
 unter `meta.asr`. Sie stehen nach Verarbeitung über `GET /api/meetings/{id}` zur
 Verfügung, auch bei einem Modellfehler zusammen mit `status=error` und `error`.
 Sprechererkennung, Zeitmarken und Zusammenfassung laufen anschließend wie bisher.
-Bot und Hardwareaufnahme verwenden den Serverstandard; die Oberfläche erhält
-in dieser Änderung keine neue Sprachauswahl.
+Die Oberfläche bietet beim Hochladen und Aufnehmen `de`, `auto` und `en` an und
+merkt sich die letzte Auswahl im Browser. Ohne gespeicherte Auswahl ist dort
+Deutsch voreingestellt. API-Aufrufe ohne `language` und Bot-Aufnahmen verwenden
+weiterhin den Serverstandard.
+
+`POST /api/capture/start` akzeptiert das optionale JSON-Feld `language` mit denselben
+Werten. Die Auswahl wird vor dem Aufnahmestart validiert und beim Stopp in die
+Meeting-Metadaten übernommen. Die Mac-Menüleisten-App bietet dafür eine gespeicherte
+Auswahl „Transkriptionssprache“ in ihren Einstellungen (Vorgabe: Deutsch).
+
+### Bestehende Aufnahme erneut transkribieren
+
+`POST /api/meetings/{id}/retranscribe` mit `{"language":"de"}` erstellt eine neue
+Meeting-Fassung samt eigener Audiokopie und antwortet mit `201` und dem neuen Meeting.
+Die Queue führt die Erkennung, Sprecherzuordnung und Zusammenfassung erneut aus.
+`meta.retranscribed_from` verweist auf die bisherige Fassung. Deren Transkript,
+Markierungen und manuelle Sprechernamen bleiben erhalten; sie werden nicht in die
+neue Fassung übernommen. Auch nach dem Löschen der bisherigen Fassung bleibt die
+neue Audiokopie verfügbar. Ein Verarbeitungsfehler betrifft nur die neue Fassung.
+
+Noch laufende Aufnahmen liefern `409`, fehlende Meetings oder Audiodateien `404`,
+unbekannte Sprachmodi `400`. Fehlende Modelle werden wie beim Import als
+Verarbeitungsfehler gemeldet. Die Oberfläche bietet den Vorgang im Tab **Transkript**
+unter **Transkriptionssprache → Erneut transkribieren** an.
+
+### Automatischer Stopp nach fünf Minuten ohne Sprache
+
+Hardwareaufnahmen (einschließlich Mac-Tastenkürzel) überwacht der Server unabhängig
+vom Browser. Lokales Silero-VAD prüft die laufenden Audiospuren. Nach fünf Minuten
+ohne erkannte Sprache stoppt und sichert der Server die Aufnahme und startet die
+Auswertung. `GET /api/capture` liefert danach `active=false`, `meeting_id` und
+`stop_reason="silence"`; das Meeting erhält ebenfalls `meta.stop_reason="silence"`.
+Eine neue Aufnahme setzt den Zustand zurück. Ein manueller Stopp bleibt jederzeit möglich.
+
+Browseraufnahmen schicken kurze Ausschnitte an `POST /api/capture/activity`:
+Multipart-Feld `file`, 0,5–2 Sekunden rohes PCM16-Mono, little endian, 16 kHz.
+Antwort: `{"speech":false,"silence_seconds":300}`. Diese Ausschnitte werden nicht
+gespeichert und an keinen externen Dienst gesendet. Beim automatischen Stopp lädt
+der Browser die Aufnahme über `/api/meetings` mit `stop_reason=silence` hoch.
+
+Fehlende/unlesbare Samples oder Detektorfehler zählen nicht als bestätigte Stille;
+die Aufnahme läuft weiter und meldet bei Detektorfehlern eine Warnung. Silero-VAD
+muss lokal installiert sein (Standardinstaller bzw. `--all-asr`). Browseraufnahme
+braucht einen weiterlaufenden Tab; nach längerer Unterbrechung zählt die Wartezeit
+neu. Musik, Rauschen oder sehr leise Sprache können die Erkennung beeinflussen.
+Die Meeting-Bots behalten ihre eigene konfigurierte Stillegrenze.
 
 `GET /api/tokens` antwortet mit `200`, wenn der Schlüssel gültig ist, sonst mit `401` – so prüft
 Kodiktat die Verbindung.

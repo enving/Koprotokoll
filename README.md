@@ -171,6 +171,13 @@ Transkription. Für die deutsche Primeline-Wahl zusätzlich
 `python scripts/download_models.py --language de --asr-only` ausführen.
 Sprachwahl, lokale Modellpfade und Migration: [Konfiguration](docs/einrichtung.md#konfiguration).
 
+Bei deutschen Aufnahmen **Transkriptionssprache → Deutsch** wählen, auch in den
+Einstellungen der Mac-Menüleisten-App. Bestehende Aufnahmen lassen sich im Tab
+**Transkript** mit anderer Sprachwahl erneut transkribieren; die bisherige Fassung
+bleibt erhalten. Für Gespräche mit mehreren Sprachen **Automatisch** wählen.
+Aufnahmen stoppen und speichern sich nach **5 Minuten ohne erkannte Sprache**
+automatisch; anschließend beginnt die Auswertung.
+
 **Für richtig gute Zusammenfassungen** ein lokales Sprachmodell starten, z. B. mit
 [Ollama](https://ollama.com): `ollama pull qwen2.5:7b-instruct` – Koprotokoll findet es automatisch.
 Ohne LLM gibt es eine einfache, rein lokale Auswertung. Unter **Integrationen & API → Sprachmodell**

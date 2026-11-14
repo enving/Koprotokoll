@@ -20,8 +20,25 @@ enum ShortcutModifier: String, CaseIterable {
     }
 }
 
+enum TranscriptionLanguage: String, CaseIterable {
+    case german = "de", automatic = "auto", english = "en"
+
+    var title: String {
+        switch self {
+        case .german: return "Deutsch"
+        case .automatic: return "Automatisch (mehrsprachig)"
+        case .english: return "Englisch"
+        }
+    }
+}
+
 struct DesktopPreferences {
     let defaults: UserDefaults
+
+    var language: TranscriptionLanguage {
+        get { TranscriptionLanguage(rawValue: defaults.string(forKey: "transcriptionLanguage") ?? "") ?? .german }
+        nonmutating set { defaults.set(newValue.rawValue, forKey: "transcriptionLanguage") }
+    }
 
     var sourceName: String? {
         get { defaults.string(forKey: "audioSourceName") }

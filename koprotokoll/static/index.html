@@ -181,6 +181,19 @@
       <div id="tab-summary" class="tab"></div>
       <div id="tab-transcript" class="tab" hidden>
         <input id="t-filter" type="search" placeholder="Im Transkript suchen …">
+        <form id="t-language-form" class="transcription-controls">
+          <label for="t-language">Transkriptionssprache</label>
+          <div class="transcription-actions">
+            <select id="t-language" aria-describedby="t-language-help">
+              <option value="de">Deutsch</option>
+              <option value="auto">Automatisch (mehrsprachig)</option>
+              <option value="en">Englisch</option>
+            </select>
+            <button id="t-retranscribe" type="submit">Erneut transkribieren</button>
+          </div>
+          <p id="t-language-help" class="small muted">Erstellt aus der Aufnahme eine neue Fassung. Das bisherige Transkript bleibt erhalten.</p>
+          <p id="t-language-error" role="alert" hidden></p>
+        </form>
         <div id="transcript"></div>
       </div>
       <div id="tab-bookmarks" class="tab" hidden>
@@ -212,6 +225,14 @@
         accept=".mp3,.mp4,.wav,.m4a,.webm,.ogg,.opus,.flac,.aac,.mov,.mkv,audio/*,video/*"></label>
       <label>Titel <input id="up-title" placeholder="optional"></label>
       <label>Anzahl Sprecher <input id="up-speakers" type="number" min="1" max="20" placeholder="automatisch"></label>
+      <label>Transkriptionssprache
+        <select id="up-language">
+          <option value="de">Deutsch</option>
+          <option value="auto">Automatisch (mehrsprachig)</option>
+          <option value="en">Englisch</option>
+        </select>
+      </label>
+      <p class="small muted">Für deutsche Aufnahmen „Deutsch“ wählen, bei mehreren Sprachen „Automatisch“.</p>
       <menu><button value="cancel" formnovalidate>Abbrechen</button><button class="primary" value="ok">Hochladen</button></menu>
     </form>
   </dialog>
@@ -221,6 +242,14 @@
       <h2>Aufnahme</h2>
       <label>Titel <input id="rec-title" placeholder="z. B. Team-Weekly"></label>
       <label>Anzahl Sprecher <input id="rec-speakers" type="number" min="1" max="20" placeholder="automatisch"></label>
+      <label>Transkriptionssprache
+        <select id="rec-language">
+          <option value="de">Deutsch</option>
+          <option value="auto">Automatisch (mehrsprachig)</option>
+          <option value="en">Englisch</option>
+        </select>
+      </label>
+      <p class="small muted">Für deutsche Aufnahmen „Deutsch“ wählen, bei mehreren Sprachen „Automatisch“.</p>
       <label>Aufnahmeweg
         <select id="rec-method">
           <option value="hardware">Audioeingang dieses Rechners</option>
@@ -239,6 +268,7 @@
       </label>
       <div class="rec-state"><span id="rec-dot" class="dot"></span> <span id="rec-time">00:00</span>
         <canvas id="rec-level" width="200" height="24"></canvas></div>
+      <p id="rec-silence-status" class="small muted" role="status">Stoppt nach 5 Minuten ohne erkannte Sprache und wertet die Aufnahme aus.</p>
       <menu>
         <button value="cancel" id="rec-cancel" formnovalidate>Abbrechen</button>
         <button type="button" id="rec-start" class="primary">Start</button>

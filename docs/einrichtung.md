@@ -357,6 +357,29 @@ Nextcloud-Betrieb und der Import in konkrete Aufgabenprogramme sind hier nicht g
 
 ### Sprachwahl und CPU-Modelle
 
+In der Weboberfläche lässt sich die **Transkriptionssprache** beim Hochladen und
+Aufnehmen auswählen. Vorgabe ist Deutsch; die letzte Auswahl wird im Browser
+gespeichert. In der Mac-Menüleisten-App steht die Auswahl in den Einstellungen
+und gilt auch für Aufnahmen per Tastenkürzel. Für ein bestehendes Meeting im Tab
+**Transkript** die Sprache wählen und **Erneut transkribieren** drücken. Das erzeugt
+eine eigene Fassung und erhält die bisherige Aufnahme samt Transkript.
+
+Aufnahmen stoppen automatisch nach **5 Minuten ohne erkannte Sprache** und werden
+gespeichert und ausgewertet. Hardwareaufnahmen überwacht der Server auch ohne
+offenen Browser. Bei Browseraufnahmen muss der Tab weiterlaufen. Bei einem Fehler
+der lokalen Sprachaktivitätserkennung erscheint eine Warnung; dann manuell stoppen.
+
+Bei deutschen Aufnahmen mit englischen Fehldeutungen gezielt **Deutsch** wählen.
+Das deutsche Modell muss vorher installiert sein:
+
+```bash
+python scripts/download_models.py --language de --asr-only
+```
+
+Eine Sprachauswahl garantiert kein fehlerfreies Transkript. Bei mehrsprachigen
+Gesprächen **Automatisch** wählen; Englisch verwendet ebenfalls die automatische
+mehrsprachige Erkennung. Die Auswahl ist keine Messung der gesprochenen Sprache.
+
 Der Standardmodus `auto` verwendet **NVIDIA Parakeet TDT 0.6B v3**. Das
 [Modell](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) unterstützt 25 Sprachen,
 darunter Deutsch und Englisch, und bestimmt die Ausgabesprache selbst. Die vorhandene

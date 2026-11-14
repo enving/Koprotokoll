@@ -76,6 +76,11 @@ audio { width: 100%; margin: 16px 0 8px; position: sticky; top: -24px; z-index: 
 .talk div { height: 100%; border-radius: 3px; }
 .swatch { width: 10px; height: 10px; border-radius: 50%; flex: none; }
 #transcript { margin-top: 12px; }
+.transcription-controls { margin: 16px 0; }
+.transcription-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.transcription-actions select { min-width: 0; max-width: 100%; }
+.transcription-actions select, .transcription-actions button { min-height: 44px; }
+.transcription-controls p { margin: 6px 0; }
 .seg { display: grid; grid-template-columns: 150px 1fr auto; gap: 12px; padding: 8px 10px; border-radius: 8px; }
 .seg:hover { background: var(--panel); }
 .seg.current { background: var(--accent-soft); }

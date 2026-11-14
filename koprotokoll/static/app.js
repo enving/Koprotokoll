@@ -140,10 +140,18 @@ async function openMeeting(id, { keepTab = false, seekTo = null } = {}) {
   }
   $("#m-meta").textContent = [created, m.duration ? fmt(m.duration) : null,
     Object.keys(m.speakers).length ? `${Object.keys(m.speakers).length} Sprecher` : null,
+    m.meta?.asr_language ? `Transkriptionsmodus: ${LANGUAGE_LABELS[m.meta.asr_language] || m.meta.asr_language}` : null,
+    m.meta?.stop_reason === "silence" ? "Automatisch nach 5 Minuten ohne Sprache gestoppt" : null,
     diarizationText,
     m.summary?.engine ? `Zusammenfassung: ${m.summary.engine}` : null, m.summary?.warning, m.summary?.external_service ? `Auswertung durch externen Dienst: ${m.summary.external_service}` : null].filter(Boolean).join(" · ");
 
   const done = m.status === "done";
+  if (changedMeeting) {
+    $("#t-language").value = m.meta?.asr_language || preferredLanguage();
+    $("#t-language-error").hidden = true;
+  }
+  $("#t-retranscribe").disabled = !["done", "error"].includes(m.status);
+  $("#t-language").disabled = !["done", "error"].includes(m.status);
   $("#m-progress").hidden = done;
   if (!done) {
     $("#m-progress-bar").style.transform = `scaleX(${Math.max(0, Math.min(1, m.progress))})`;
@@ -426,28 +434,109 @@ $("#global-search").addEventListener("input", (e) => {
 });
 
 // ---------------------------------------------------------- Upload
-async function uploadBlob(blob, filename, title, numSpeakers) {
+const LANGUAGE_LABELS = { de: "Deutsch", auto: "Automatisch (mehrsprachig)", en: "Englisch" };
+
+function preferredLanguage() {
+  const saved = localStorage.getItem("koprotokoll-language");
+  return Object.hasOwn(LANGUAGE_LABELS, saved) ? saved : "de";
+}
+
+for (const id of ["up-language", "rec-language"]) {
+  $(`#${id}`).addEventListener("change", (event) => {
+    localStorage.setItem("koprotokoll-language", event.target.value);
+  });
+}
+
+$("#t-language-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const button = $("#t-retranscribe"), error = $("#t-language-error");
+  if (button.disabled) return;
+  button.disabled = true;
+  button.textContent = "Transkription wird gestartet …";
+  error.hidden = true;
+  try {
+    const m = await api(`/api/meetings/${state.current.id}/retranscribe`, jsonOpts("POST", { language: $("#t-language").value }));
+    await loadMeetings();
+    await openMeeting(m.id);
+    showTab("transcript");
+  } catch (err) {
+    error.textContent = err.message;
+    error.hidden = false;
+    button.disabled = false;
+  } finally {
+    button.textContent = "Erneut transkribieren";
+  }
+});
+
+async function uploadBlob(blob, filename, title, numSpeakers, language, stopReason) {
   const fd = new FormData();
   fd.append("file", blob, filename);
   fd.append("title", title || "");
   if (numSpeakers) fd.append("num_speakers", numSpeakers);
+  if (language) fd.append("language", language);
+  if (stopReason) fd.append("stop_reason", stopReason);
   const m = await api("/api/meetings", { method: "POST", body: fd });
   await loadMeetings();
   await openMeeting(m.id);
 }
 
-$("#btn-upload").addEventListener("click", () => $("#dlg-upload").showModal());
+$("#btn-upload").addEventListener("click", () => {
+  $("#up-language").value = preferredLanguage();
+  $("#dlg-upload").showModal();
+});
 $("#upload-form").addEventListener("submit", async (e) => {
   if (e.submitter?.value !== "ok") return;
   const file = $("#up-file").files[0];
   if (!file) return;
-  try { await uploadBlob(file, file.name, $("#up-title").value, $("#up-speakers").value); }
+  try { await uploadBlob(file, file.name, $("#up-title").value, $("#up-speakers").value, $("#up-language").value); }
   catch (err) { alert(`Upload fehlgeschlagen: ${err.message}`); }
   e.target.reset();
 });
 
 // ---------------------------------------------------------- Aufnahme
-const rec = { recorder: null, streams: [], chunks: [], start: 0, timer: null, ctx: null, raf: null, hardware: false };
+const rec = { recorder: null, streams: [], chunks: [], start: 0, timer: null, ctx: null, raf: null, hardware: false,
+  speechTimer: null, speechSession: 0, autoStopped: false };
+
+function watchBrowserSpeech(analyser) {
+  const session = ++rec.speechSession;
+  let lastSpeech = performance.now(), lastCheck = lastSpeech;
+  async function check() {
+    if (session !== rec.speechSession || !rec.recorder) return;
+    const now = performance.now();
+    // Ein angehaltener Browser hat die Zwischenzeit nicht beobachtet.
+    if (now - lastCheck > 2000) lastSpeech = now;
+    lastCheck = now;
+    const samples = new Float32Array(analyser.fftSize);
+    analyser.getFloatTimeDomainData(samples);
+    const ratio = rec.ctx.sampleRate / 16000;
+    const pcm = new Int16Array(Math.floor(samples.length / ratio));
+    for (let i = 0; i < pcm.length; i++) {
+      const begin = Math.floor(i * ratio), end = Math.floor((i + 1) * ratio);
+      let sum = 0;
+      for (let j = begin; j < end; j++) sum += samples[j];
+      pcm[i] = Math.max(-32768, Math.min(32767, sum / (end - begin) * 32768));
+    }
+    const data = new FormData();
+    data.append("file", new Blob([pcm.buffer]), "activity.pcm");
+    try {
+      const result = await api("/api/capture/activity", { method: "POST", body: data });
+      if (session !== rec.speechSession) return;
+      $("#rec-silence-status").textContent = "Stoppt nach 5 Minuten ohne erkannte Sprache und wertet die Aufnahme aus.";
+      if (result.speech) lastSpeech = now;
+      if (!result.speech && now - lastSpeech >= result.silence_seconds * 1000) {
+        rec.autoStopped = true;
+        $("#rec-stop").click();
+        return;
+      }
+    } catch (err) {
+      if (session !== rec.speechSession) return;
+      lastSpeech = performance.now();
+      $("#rec-silence-status").textContent = `Automatischer Stopp nicht verfügbar: ${err.message}`;
+    }
+    if (session === rec.speechSession) rec.speechTimer = setTimeout(check, 500);
+  }
+  rec.speechTimer = setTimeout(check, 500);
+}
 
 function drawCaptureLevel(levelDb) {
   const c = $("#rec-level"), g = c.getContext("2d");
@@ -461,6 +550,15 @@ async function pollCaptureLevel() {
   if (!rec.hardware) return;
   try {
     const status = await api("/api/capture");
+    if (!rec.hardware) return;
+    if (!status.active && status.meeting_id) {
+      cleanupRecording();
+      $("#dlg-record").close();
+      await loadMeetings();
+      await openMeeting(status.meeting_id);
+      return;
+    }
+    if (status.warning) $("#rec-silence-status").textContent = status.warning;
     drawCaptureLevel(status.level_db ?? -120);
   } catch { /* Aufnahme läuft unabhängig von der Pegelanzeige weiter. */ }
   if (rec.hardware) rec.raf = setTimeout(pollCaptureLevel, 250);
@@ -502,6 +600,8 @@ $("#rec-method").addEventListener("change", selectRecordingMethod);
 $("#rec-device").addEventListener("change", updateCaptureHelp);
 
 async function startRecording() {
+  rec.autoStopped = false;
+  $("#rec-silence-status").textContent = "Stoppt nach 5 Minuten ohne erkannte Sprache und wertet die Aufnahme aus.";
   if ($("#rec-method").value === "hardware") {
     const device = $("#rec-device").value;
     if (!device) throw new Error("Bitte einen Audioeingang auswählen.");
@@ -509,10 +609,12 @@ async function startRecording() {
       device,
       title: $("#rec-title").value,
       num_speakers: Number($("#rec-speakers").value) || null,
+      language: $("#rec-language").value,
       channels: 2,
       sample_rate: 48000,
     }));
     rec.hardware = true;
+    $("#rec-language").disabled = true;
     rec.start = Date.now();
     rec.timer = setInterval(() => { $("#rec-time").textContent = fmt((Date.now() - rec.start) / 1000); }, 500);
     $("#rec-dot").classList.add("on");
@@ -527,9 +629,10 @@ async function startRecording() {
   }
   const mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
   rec.streams = [mic];
-  rec.ctx = new AudioContext();
+  rec.ctx = new AudioContext({ sampleRate: 48000 });
   const dest = rec.ctx.createMediaStreamDestination();
   const analyser = rec.ctx.createAnalyser();
+  analyser.fftSize = 32768;
   rec.ctx.createMediaStreamSource(mic).connect(dest);
   if ($("#rec-source").value === "mix") {
     // Online-Meeting: Ton des geteilten Tabs/Bildschirms mit aufnehmen.
@@ -543,6 +646,8 @@ async function startRecording() {
   rec.recorder = new MediaRecorder(dest.stream, { mimeType: MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "" });
   rec.recorder.ondataavailable = (ev) => ev.data.size && rec.chunks.push(ev.data);
   rec.recorder.start(1000);
+  watchBrowserSpeech(analyser);
+  $("#rec-language").disabled = true;
   rec.start = Date.now();
   rec.timer = setInterval(() => { $("#rec-time").textContent = fmt((Date.now() - rec.start) / 1000); }, 500);
   $("#rec-dot").classList.add("on");
@@ -568,6 +673,8 @@ function drawLevel(analyser) {
 }
 
 function cleanupRecording() {
+  clearTimeout(rec.speechTimer);
+  rec.speechSession++;
   clearInterval(rec.timer);
   clearTimeout(rec.raf);
   cancelAnimationFrame(rec.raf);
@@ -582,10 +689,12 @@ function cleanupRecording() {
   $("#rec-method").disabled = false;
   $("#rec-device").disabled = false;
   $("#rec-source").disabled = false;
+  $("#rec-language").disabled = false;
   $("#rec-time").textContent = "00:00";
 }
 
 $("#btn-record").addEventListener("click", async () => {
+  $("#rec-language").value = preferredLanguage();
   selectRecordingMethod();
   $("#dlg-record").showModal();
   await loadCaptureDevices();
@@ -615,9 +724,12 @@ $("#rec-stop").addEventListener("click", () => {
   r.onstop = async () => {
     const blob = new Blob(rec.chunks, { type: "audio/webm" });
     const title = $("#rec-title").value || `Aufnahme ${new Date().toLocaleString("de-DE")}`;
+    const language = $("#rec-language").value;
+    const speakers = $("#rec-speakers").value;
+    const stopReason = rec.autoStopped ? "silence" : null;
     cleanupRecording();
     $("#dlg-record").close();
-    try { await uploadBlob(blob, "aufnahme.webm", title); } catch (err) { alert(`Upload fehlgeschlagen: ${err.message}`); }
+    try { await uploadBlob(blob, "aufnahme.webm", title, speakers, language, stopReason); } catch (err) { alert(`Upload fehlgeschlagen: ${err.message}`); }
   };
   r.stop();
 });

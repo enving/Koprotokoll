@@ -13,6 +13,8 @@ import urllib.parse
 from dataclasses import asdict
 from pathlib import Path
 
+import numpy as np
+
 from fastapi import APIRouter, Depends, FastAPI, File, Form, HTTPException, UploadFile, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -21,6 +23,7 @@ from fastapi.exception_handlers import request_validation_exception_handler
 from pydantic import BaseModel
 
 from . import auth
+from .activity import SILENCE_SECONDS, SilenceTimer, SpeechDetector
 from .bot.platforms import SUPPORTED, detect_platform, find_meeting_url, link_hint
 from .caldav_source import CalDavCalendarSource, CalDavError, normalize_server_url
 from .calendar_source import CalendarEvent
@@ -82,6 +85,11 @@ class CaptureStart(BaseModel):
     num_speakers: int | None = None
     channels: int = 2
     sample_rate: int = 48_000
+    language: str | None = None
+
+
+class RetranscribeIn(BaseModel):
+    language: str
 
 
 class Question(BaseModel):
@@ -217,6 +225,9 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
                         select_transcriber=None if custom_transcriber else select_transcriber,
                         default_language=default_mode)
     capture = HardwareRecorder(s.data_dir / "captures")
+    capture_lock = threading.RLock()
+    speech_detector = SpeechDetector(Path(s.asr_vad_path).expanduser() if s.asr_vad_path
+                                     else s.models_dir / "silero-vad-onnx")
     google = google or GoogleClient(s, db)
     microsoft = MicrosoftClient(s, db)
     mail = MailService(s, db, google, microsoft)
@@ -270,6 +281,33 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
         version="2.0",
     )
     app.state.db, app.state.pipeline, app.state.settings, app.state.capture = db, pipeline, s, capture
+    app.state.speech_detector = speech_detector
+    app.state.capture_request = {}
+    app.state.last_capture = {}
+    app.state.capture_clock = time.monotonic
+    app.state.capture_stop_event = threading.Event()
+
+    def check_capture_silence(request: dict) -> bool:
+        with capture_lock:
+            if app.state.capture_request is not request:
+                return False
+            speech = None
+            try:
+                tracks = capture.speech_audio()
+                if tracks and all(track is not None for track in tracks):
+                    speech = any(speech_detector.has_speech(track) for track in tracks)
+                    app.state.capture_warning = None
+            except Exception as exc:
+                app.state.capture_warning = f"Automatischer Stopp nicht verfügbar: {exc}"
+            if app.state.capture_timer.check(speech, app.state.capture_clock()):
+                try:
+                    save_hardware_capture("silence")
+                except HTTPException as exc:
+                    app.state.last_capture = {"error": exc.detail}
+                return False
+            return True
+
+    app.state.check_capture_silence = check_capture_silence
     app.state.events, app.state.bots, app.state.google, app.state.calendar = events, bots, google, calendar
     api = APIRouter(dependencies=[Depends(auth.require_auth)])
     public = APIRouter()
@@ -475,24 +513,64 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
 
     @api.get("/api/capture", tags=["recording"])
     def capture_status():
-        return capture.status()
+        with capture_lock:
+            result = capture.status()
+            if not result["active"]:
+                result.update(app.state.last_capture)
+            if getattr(app.state, "capture_warning", None):
+                result["warning"] = app.state.capture_warning
+            return result
+
+    @api.post("/api/capture/activity", tags=["recording"])
+    def speech_activity(file: UploadFile = File(...)):
+        """Kurzen PCM-Ausschnitt lokal auf Sprache prüfen, ohne ihn zu speichern."""
+        data = file.file.read(64002)
+        if not 16000 <= len(data) <= 64000 or len(data) % 2:
+            raise HTTPException(400, "Erwartet werden 0,5–2 Sekunden PCM16-Mono mit 16 kHz.")
+        try:
+            speech = speech_detector.has_speech(np.frombuffer(data, dtype='<i2').astype(np.float32) / 32768)
+        except Exception as exc:
+            raise HTTPException(503, f"Sprachaktivität konnte nicht geprüft werden: {exc}") from exc
+        return {"speech": speech, "silence_seconds": SILENCE_SECONDS}
 
     @api.post("/api/capture/start", tags=["recording"])
     def start_hardware_capture(body: CaptureStart):
         if body.num_speakers is not None and body.num_speakers < 1:
             raise HTTPException(400, "Die Sprecherzahl muss positiv sein")
         try:
-            state = capture.start(body.device, body.channels, body.sample_rate)
-        except (RuntimeError, ValueError) as exc:
-            raise HTTPException(409, str(exc)) from exc
-        # Der Titel wird nur bis zum ausdrücklichen Stopp im Speicher gehalten.
-        state["title"] = body.title.strip()
-        state["num_speakers"] = body.num_speakers
-        app.state.capture_request = state
+            mode = language_mode(body.language, default_mode)
+            select_transcriber(mode)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        with capture_lock:
+            try:
+                state = capture.start(body.device, body.channels, body.sample_rate)
+            except (RuntimeError, ValueError) as exc:
+                raise HTTPException(409, str(exc)) from exc
+            state["title"] = body.title.strip()
+            state["num_speakers"] = body.num_speakers
+            state["asr_language"] = mode
+            app.state.capture_request = state
+            app.state.last_capture = {}
+            app.state.capture_warning = None
+            app.state.capture_timer = SilenceTimer(app.state.capture_clock())
+            stopped = threading.Event()
+            app.state.capture_stop_event = stopped
+            if background:
+                def watch():
+                    while not stopped.wait(1):
+                        if not check_capture_silence(state):
+                            break
+                threading.Thread(target=watch, name="capture-silence", daemon=True).start()
         return state
 
     @api.post("/api/capture/stop", status_code=201, tags=["recording"])
     def stop_hardware_capture():
+        with capture_lock:
+            return save_hardware_capture()
+
+    def save_hardware_capture(reason: str | None = None):
+        app.state.capture_stop_event.set()
         try:
             path, duration, device = capture.stop()
         except RuntimeError as exc:
@@ -501,21 +579,26 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
         title = request.get("title") or f"Hardwareaufnahme {time.strftime('%Y-%m-%d %H:%M')}"
         speakers = request.get("num_speakers")
         meeting_id = db.create_meeting(title, path.stem, speakers,
-                                       meta={"source": "hardware", "device": device})
+                                       meta={"source": "hardware", "device": device,
+                                             **({"stop_reason": reason} if reason else {}),
+                                             "asr_language": request.get("asr_language", default_mode)})
         original = s.media_dir / f"{meeting_id}.original.wav"
         shutil.move(str(path), original)
         db.update_meeting(meeting_id, audio_path=str(original), duration=round(duration, 2))
         pipeline.submit(meeting_id)
         app.state.capture_request = {}
+        app.state.last_capture = {"meeting_id": meeting_id, "stop_reason": reason}
         return db.get_meeting(meeting_id)
 
     @api.post("/api/meetings", status_code=201)
     def upload(file: UploadFile = File(...), title: str = Form(""), num_speakers: int | None = Form(None),
-               language: str | None = Form(None)):
+               language: str | None = Form(None), stop_reason: str | None = Form(None)):
         name = Path(file.filename or "aufnahme.webm").name
         ext = Path(name).suffix.lower()
         if ext not in ALLOWED_EXT:
             raise HTTPException(400, f"Dateityp {ext or '?'} wird nicht unterstützt")
+        if stop_reason not in (None, "silence"):
+            raise HTTPException(400, "Unbekannter Grund für das Aufnahmeende.")
         try:
             mode = language_mode(language, default_mode)
             select_transcriber(mode)
@@ -523,7 +606,7 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
             raise HTTPException(400, str(e)) from e
         meeting_id = db.create_meeting(title.strip() or Path(name).stem, Path(name).stem,
                                        num_speakers if num_speakers and num_speakers > 0 else None,
-                                       meta={"asr_language": mode})
+                                       meta={"asr_language": mode, **({"stop_reason": stop_reason} if stop_reason else {})})
         dst = s.media_dir / f"{meeting_id}{ext}"
         with dst.open("wb") as out:
             shutil.copyfileobj(file.file, out)
@@ -539,6 +622,34 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
         m["bookmarks"] = db.list_bookmarks(meeting_id)
         m["talk_time"] = talk_time(m["segments"])
         return m
+
+    @api.post("/api/meetings/{meeting_id}/retranscribe", status_code=201)
+    def retranscribe(meeting_id: int, body: RetranscribeIn):
+        """Audio erneut erkennen; die bisherige Fassung bleibt als eigenes Meeting erhalten."""
+        m = meeting_or_404(meeting_id)
+        if m["status"] not in ("done", "error"):
+            raise HTTPException(409, "Die Aufnahme wird noch verarbeitet. Bitte warten.")
+        try:
+            mode = language_mode(body.language, default_mode)
+            select_transcriber(mode)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        source = Path(m["audio_path"] or "")
+        if not source.is_file():
+            raise HTTPException(404, "Audio nicht vorhanden; bitte die Aufnahme erneut hochladen.")
+        labels = {"de": "Deutsch", "en": "Englisch", "auto": "Automatisch"}
+        new_id = db.create_meeting(f"{m['title']} ({labels[mode]})", m["source_name"], m["num_speakers"],
+                                   meta={"asr_language": mode, "retranscribed_from": meeting_id})
+        destination = s.media_dir / f"{new_id}.original{source.suffix}"
+        try:
+            shutil.copyfile(source, destination)
+        except OSError as exc:
+            destination.unlink(missing_ok=True)
+            db.delete_meeting(new_id)
+            raise HTTPException(500, "Die Aufnahme konnte nicht kopiert werden. Bitte erneut versuchen.") from exc
+        db.update_meeting(new_id, audio_path=str(destination), duration=m["duration"])
+        pipeline.submit(new_id)
+        return db.get_meeting(new_id)
 
     @api.patch("/api/meetings/{meeting_id}")
     def patch_meeting(meeting_id: int, patch: MeetingPatch):
