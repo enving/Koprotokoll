@@ -69,3 +69,28 @@ bestätigt ist ihr erfolgreicher Ablauf, keine korrekte Sprechertrennung.
 Eine Messung der Sprecherfehlerrate wurde nicht durchgeführt. Überlappende Sprache,
 Akzente, verrauschte oder lange reale Aufnahmen sowie fp32 wurden hier nicht geprüft.
 Die Integration hat keine laufenden Dienste neu gestartet.
+
+## Unabhängige Gegenprüfung am 17.11.2026
+
+GPT-6.1-sol hat den vorhandenen Stand `fdd0e11` ohne Codeänderung erneut geprüft.
+Frische synthetische Aufnahmen mit Anna und Samantha, je 160 Wörter pro Minute,
+verwenden die oben veröffentlichten erfundenen Sätze. Installierte Gewichte,
+`HF_HUB_OFFLINE=1` und `sandbox-exec` mit `(deny network*)`; kein Modelldownload.
+
+Sieben direkte Proben bestanden: v3 mit Deutsch (15 Wörter), Englisch (17),
+gemischter Sprache (32), Stille (0), zusätzlich Englisch im Modus `en` (17);
+Primeline mit Deutsch (15) und Stille (0). Beide gemischten Abschnitte blieben
+in ihrer Originalsprache. Die Wortzeiten lagen innerhalb der Audiodauer.
+Modell und CPU-Provider sind im verwendeten Ladecode ausdrücklich ausgewählt;
+eine neue Laufzeitinspektion aller ONNX-Sessions war nicht Teil dieser Gegenprüfung.
+
+Die frühere API-/Queue-Prüfung oben wurde anhand ihres vorhandenen Nachweises
+abgeglichen; die sieben neuen Inferenzproben verwendeten die direkten Backends.
+Synthetische Funktionsprobe, weiterhin keine Qualitätsabnahme echter Meetings.
+Audio, Prüfskript und JSON-Ergebnisse liegen dauerhaft außerhalb des Repositorys.
+
+Gesamte Regression am 17.11.: `.venv/bin/pytest -q` — **356 bestanden**,
+keine Skips, 135,35 Sekunden. Keine Anwendung oder Aufnahmedaten verändert.
+
+Lerneintrag: Vor einer erneuten Offenaussage den vorhandenen Issue-Nachweis lesen.
+Prüffall: Die sieben CPU-Proben oben müssen zur aktuellen Übergabe passen.
