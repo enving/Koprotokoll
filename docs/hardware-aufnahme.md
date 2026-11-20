@@ -61,6 +61,9 @@ Es ist auch über **Ko → Einstellungen …** erreichbar. Es beginnt noch keine
    **Beenden & erneut öffnen** bestätigen und den Status in Koprotokoll prüfen.
    Das Mac-Passwort ausschließlich im macOS-Dialog eingeben.
 4. **Die gewählte Taste zweimal kurz drücken und loslassen** startet die Aufnahme.
+   Wie bei Kodiktat bestätigt **Pop** den erfolgreichen Start; **Tink** bestätigt
+   das erfolgreiche Stoppen und Speichern. Bei einem fehlgeschlagenen Wechsel
+   wird kein Erfolgston abgespielt. Die Töne gelten auch für die Start-/Stoppschaltfläche.
    In der Menüleiste erscheint **●** mit der Aufnahmedauer. Kombinationen mit
    anderen Tasten und längeres Halten lösen keine Aufnahme aus.
 5. **Dieselbe Taste zweimal erneut** stoppt und sichert die Aufnahme. Erst danach beginnt

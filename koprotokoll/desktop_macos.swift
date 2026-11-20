@@ -52,6 +52,15 @@ final class ShortcutMonitor: @unchecked Sendable {
 
 @MainActor
 final class DesktopApp: NSObject, NSApplicationDelegate {
+    private let playSound: (String) -> Void
+
+    init(playSound: @escaping (String) -> Void = { name in
+        NSSound(named: NSSound.Name(name))?.play()
+    }) {
+        self.playSound = playSound
+        super.init()
+    }
+
     private var config: Launcher!
     private var item: NSStatusItem!
     private let menu = NSMenu()
@@ -311,6 +320,13 @@ final class DesktopApp: NSObject, NSApplicationDelegate {
         return data
     }
 
+    private func confirmedCapture(_ path: String, body: [String: Any], sound: String) async throws -> Data {
+        // Erst der bestätigte Aufnahmewechsel darf hörbaren Erfolg melden.
+        let result = try await request(path, body: body)
+        playSound(sound)
+        return result
+    }
+
     private func serverReady() async -> Bool {
         guard let data = try? await request("/openapi.json"),
               let schema = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
@@ -451,7 +467,7 @@ final class DesktopApp: NSObject, NSApplicationDelegate {
             let state = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
             if state["active"] as? Bool == true {
                 stateItem.title = "Aufnahme wird gesichert …"
-                let result = try await request("/api/capture/stop", body: [:])
+                let result = try await confirmedCapture("/api/capture/stop", body: [:], sound: "Tink")
                 let meeting = try JSONSerialization.jsonObject(with: result) as? [String: Any] ?? [:]
                 active = false
                 if let id = meeting["id"] as? Int {
@@ -468,7 +484,7 @@ final class DesktopApp: NSObject, NSApplicationDelegate {
                 stateItem.title = "Aufnahme wird gestartet …"
                 var body: [String: Any] = ["device": source.id, "title": "", "language": preferences.language.rawValue]
                 if preferences.speakerCount > 0 { body["num_speakers"] = preferences.speakerCount }
-                _ = try await request("/api/capture/start", body: body)
+                _ = try await confirmedCapture("/api/capture/start", body: body, sound: "Pop")
                 active = true
                 item.button?.title = "● Aufnahme"
             }

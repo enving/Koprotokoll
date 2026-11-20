@@ -83,3 +83,42 @@ def test_finder_launcher_preserves_an_existing_app(tmp_path):
     original.write_text("Vorhandene Installation")
     assert link_app(tmp_path / "anderes/Koprotokoll.app", applications) is None
     assert original.read_text() == "Vorhandene Installation"
+
+
+@pytest.mark.skipif(sys.platform != "darwin" or shutil.which("swiftc") is None,
+                    reason="Die native Tonprüfung benötigt macOS und Apple-Entwicklerwerkzeuge.")
+def test_recording_sounds_require_successful_backend_response(tmp_path):
+    """Produktive HTTP-Anfrage: bestätigter Wechsel klingt, Fehler bleibt ohne Erfolgston."""
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from threading import Thread
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            self.rfile.read(int(self.headers.get('Content-Length', 0)))
+            self.send_response(500 if self.path == '/error' else 200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(b'{"detail":"Testfehler"}' if self.path == '/error' else b'{}')
+
+        def log_message(self, *_):
+            pass
+
+    source = Path(__file__).resolve().parents[1]
+    desktop = (source / 'koprotokoll/desktop_macos.swift').read_text().split('@main\nstruct DesktopMain')[0]
+    fixture = (source / 'tests/fixtures/recording_sound_macos_test.swift').read_text()
+    combined = tmp_path / 'sound-test.swift'
+    combined.write_text(desktop + '\n' + fixture)
+    binary = tmp_path / 'sound-test'
+    subprocess.run(['swiftc', str(source / 'koprotokoll/macos_hotkey.swift'),
+                    str(combined), '-o', str(binary)], check=True)
+    server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        result = subprocess.run([str(binary), str(server.server_port)], capture_output=True,
+                                text=True, check=True, timeout=30)
+        assert 'Aufnahmebestätigungen und fehlgeschlagene Anfrage geprüft' in result.stdout
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
