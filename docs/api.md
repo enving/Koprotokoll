@@ -269,3 +269,36 @@ Fassung. `meta.transcript_version` speichert die Auswahl; `meta.correction` nenn
 Dienstadresse, `external`, `status` (`completed`/`fallback`) und nullbasierte Indizes der
 verworfenen Äußerungen in `rejected`. Es werden keine Modellfehlermeldungen mit möglicherweise
 vertraulichen Antworten gespeichert. Die Schnittstellen unterliegen der vorhandenen API-Authentifizierung.
+
+### iPhone-Kurzbefehl: auf dem Mac diktieren
+
+`scripts/create_iphone_shortcut.py` erzeugt eine importierbare Vorlage. Der
+Kurzbefehl nimmt Audio auf, sendet es an die Transkriptions-API und kopiert den
+zurückgegebenen Text in die Zwischenablage. Diesen Text danach z. B. in T3 Code
+einfügen. Die Spracherkennung des iPhones wird dabei nicht verwendet.
+
+```bash
+python scripts/create_iphone_shortcut.py \
+  --endpoint https://mac.example.ts.net:8444/v1/audio/transcriptions \
+  --output mac-diktat.shortcut
+shortcuts sign --mode anyone --input mac-diktat.shortcut --output Mac-Diktat-fuer-T3.shortcut
+```
+
+Die Signierung benötigt macOS. Apple erhält dabei nur die Vorlage mit einem
+Platzhalter; der API-Schlüssel wird beim Import abgefragt. Den Schlüssel vorher
+in Koprotokoll unter **Integrationen & API → API-Schlüssel** erzeugen. Importiert
+man die Vorlage ohne Konfiguration, muss im ersten Textfeld der Platzhalter
+anschließend durch den Schlüssel ersetzt werden. Keine Datei mit eingetragenem
+Schlüssel veröffentlichen oder zur Signierung hochladen.
+
+Der Mac muss erreichbar sein, beispielsweise über das eigene Tailscale-Netz mit
+HTTPS-Weiterleitung zum lokalen Koprotokoll-Server. Am iPhone muss die Verbindung
+zu diesem Netz aktiv sein. Externe Anfragen benötigen weiterhin den API-Schlüssel;
+eine Portfreigabe am Router ist dafür nicht nötig. Im Kurzbefehl nur die selbst
+kontrollierte HTTPS-Adresse verwenden. Die Vorlage wählt Deutsch; die verfügbaren
+Sprachmodi beschreibt der Transkriptionsabschnitt oben.
+
+Einmalig den Zugriff auf Mikrofon und eigenen Mac erlauben. Danach Kurzbefehl
+starten, sprechen, die Aufnahme durch Antippen beenden und den angezeigten Text
+in die Ziel-App einfügen. Die Mikrofontaste der offiziellen T3-App bleibt ein
+separater, unveränderter Eingabeweg.
