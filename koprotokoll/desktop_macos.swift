@@ -176,12 +176,13 @@ final class DesktopApp: NSObject, NSApplicationDelegate {
         stack.addArrangedSubview(languagePicker)
         languagePicker.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         label("Anzahl Sprecher", heading: true)
-        speakerPicker.addItems(withTitles: ["Automatisch"] + (1...20).map { $0 == 1 ? "1 Sprecher" : "\($0) Sprecher" })
+        speakerPicker.addItems(withTitles: ["Automatisch"] + (1...20).map { $0 == 1 ? "Nur ich (1 Person)" : "\($0) Sprecher" })
         speakerPicker.target = self
         speakerPicker.action = #selector(changeSpeakerCount)
         speakerPicker.setAccessibilityLabel("Anzahl Sprecher")
         stack.addArrangedSubview(speakerPicker)
         speakerPicker.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        label("Bei ‚Nur ich‘ bleibt alles bei einer Person. Für Gespräche die Anzahl wählen; ‚Automatisch‘ schätzt sie.")
         label("Nach 5 Minuten ohne erkannte Sprache wird die Aufnahme automatisch gestoppt und ausgewertet.")
         label("Tastenkürzel", heading: true)
         shortcutToggle.target = self

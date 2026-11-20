@@ -37,6 +37,7 @@ struct DesktopPreferences {
 
     var speakerCount: Int {
         get {
+            guard defaults.object(forKey: "speakerCount") != nil else { return 1 }
             let count = defaults.integer(forKey: "speakerCount")
             return (0...20).contains(count) ? count : 0
         }

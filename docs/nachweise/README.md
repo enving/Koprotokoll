@@ -43,3 +43,6 @@ Prüffälle: Redirect sendet nichts ans Ziel; Wechsel erhält alte Kennzeichnung
 
 Lerneintrag #44 (2026-11-07): Wortliste vom Antwortobjekt trennen; kleine Modelle können Eingabefelder mitkopieren.
 Prüffälle: zusätzliche Struktur verwerfen, Original samt Wortzeiten bei Neuverarbeitung erhalten.
+
+Sprecherwahl (20.11.2026): [Auswahl und Speicherung](sprecherwahl.md).
+„Nur ich“ umgeht die fehleranfällige automatische Aufteilung; Browserablauf bis zur Pipeline geprüft.

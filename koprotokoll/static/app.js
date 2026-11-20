@@ -488,6 +488,24 @@ $("#global-search").addEventListener("input", (e) => {
 // ---------------------------------------------------------- Upload
 const LANGUAGE_LABELS = { de: "Deutsch", auto: "Automatisch (mehrsprachig)", en: "Englisch" };
 
+function preferredSpeakers() {
+  try {
+    const saved = localStorage.getItem("koprotokoll-speakers");
+    if (saved === "" || /^(?:[1-9]|1[0-9]|20)$/.test(saved || "")) return saved;
+  } catch { /* Ohne Browserspeicher bleibt die Auswahl im Dialog nutzbar. */ }
+  return "1";
+}
+
+for (const id of ["up-speakers", "rec-speakers"]) {
+  const select = $(`#${id}`);
+  for (let count = 2; count <= 20; count++) {
+    select.append(h("option", { value: count }, `${count} Personen`));
+  }
+  select.addEventListener("change", (event) => {
+    try { localStorage.setItem("koprotokoll-speakers", event.target.value); } catch { /* optional */ }
+  });
+}
+
 function preferredLanguage() {
   const saved = localStorage.getItem("koprotokoll-language");
   return Object.hasOwn(LANGUAGE_LABELS, saved) ? saved : "de";
@@ -534,6 +552,7 @@ async function uploadBlob(blob, filename, title, numSpeakers, language, stopReas
 
 $("#btn-upload").addEventListener("click", () => {
   $("#up-language").value = preferredLanguage();
+  $("#up-speakers").value = preferredSpeakers();
   $("#dlg-upload").showModal();
 });
 $("#upload-form").addEventListener("submit", async (e) => {
@@ -747,6 +766,7 @@ function cleanupRecording() {
 
 $("#btn-record").addEventListener("click", async () => {
   $("#rec-language").value = preferredLanguage();
+  $("#rec-speakers").value = preferredSpeakers();
   selectRecordingMethod();
   $("#dlg-record").showModal();
   await loadCaptureDevices();

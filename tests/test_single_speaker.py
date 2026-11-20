@@ -118,3 +118,51 @@ def test_merge_and_restore_speakers_in_browser(tmp_path, width):
         assert len(client.get(f'/api/meetings/{mid}').json()['speakers']) == 2
         assert errors == []
         browser.close()
+
+
+@pytest.mark.parametrize('width', [1280, 390])
+def test_speaker_selection_is_clear_persistent_and_sent_on_upload(tmp_path, width):
+    """Die Vorgabe übersteht Neuladen und gelangt bis zur Sprechererkennung."""
+    from playwright.sync_api import expect, sync_playwright
+    from test_integrations import _chrome_path
+
+    app = create_app(Settings(data_dir=tmp_path), transcriber=FakeTranscriber(),
+                     diarizer=FakeDiarizer(), llm=NoLLM(), background=False)
+    with TestClient(app) as client, sync_playwright() as pw:
+        browser = pw.chromium.launch(executable_path=_chrome_path(), headless=True)
+        page = browser.new_page(viewport={'width': width, 'height': 1000})
+        errors = []
+        page.on('pageerror', lambda error: errors.append(str(error)))
+
+        def serve(route):
+            req = route.request
+            response = client.request(req.method, urlsplit(req.url).path, content=req.post_data_buffer,
+                                      headers={'content-type': req.headers.get('content-type', '')})
+            route.fulfill(status=response.status_code, headers=dict(response.headers), body=response.content)
+
+        page.route('**/*', serve)
+        page.goto('http://127.0.0.1/')
+        page.get_by_role('button', name='⇪ Hochladen').click()
+        select = page.locator('select#up-speakers')
+        expect(select).to_have_value('1')
+        select.select_option('2')
+        page.reload()
+        page.get_by_role('button', name='● Aufnehmen', exact=True).click()
+        expect(page.locator('#rec-speakers')).to_have_value('2')
+        page.locator('#rec-speakers').select_option('')
+        page.locator('#rec-cancel').click()
+        page.get_by_role('button', name='⇪ Hochladen').click()
+        expect(select).to_have_value('')
+        select.select_option('1')
+        page.locator('#up-file').set_input_files({'name': 'test.wav', 'mimeType': 'audio/wav',
+                                                'buffer': wav_bytes(tmp_path)})
+        page.locator('#upload-form button[value="ok"]').click()
+        expect(page.locator('#m-title')).to_have_text('test')
+        app.state.pipeline.join()
+        mid = app.state.db.list_meetings()[0]['id']
+        result = client.get(f'/api/meetings/{mid}').json()
+        assert result['num_speakers'] == 1
+        assert set(result['speakers']) == {'S1'}
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        assert errors == []
+        browser.close()

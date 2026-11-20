@@ -45,7 +45,9 @@ struct HotkeyTests {
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
         let preferences = DesktopPreferences(defaults: defaults)
-        guard preferences.speakerCount == 0 else { exit(1) }
+        guard preferences.speakerCount == 1 else { exit(1) }
+        preferences.speakerCount = 0
+        guard DesktopPreferences(defaults: UserDefaults(suiteName: suite)!).speakerCount == 0 else { exit(1) }
         preferences.speakerCount = 1
         guard DesktopPreferences(defaults: UserDefaults(suiteName: suite)!).speakerCount == 1 else { exit(1) }
         defaults.set(99, forKey: "speakerCount")

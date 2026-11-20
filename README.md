@@ -177,7 +177,9 @@ Einstellungen der Mac-Menüleisten-App. Bestehende Aufnahmen lassen sich im Tab
 bleibt erhalten. Für Gespräche mit mehreren Sprachen **Automatisch** wählen.
 Aufnahmen stoppen und speichern sich nach **5 Minuten ohne erkannte Sprache**
 automatisch; anschließend beginnt die Auswertung.
-Für Monologe **Anzahl Sprecher → 1** setzen. Fälschlich getrennte Stimmen lassen
+Für Monologe ist **Anzahl Sprecher → Nur ich (1 Person)** voreingestellt.
+Für Gespräche 2–20 Personen oder **Automatisch erkennen** wählen. Die Auswahl
+wird im Browser bzw. in der Mac-App für weitere Aufnahmen gespeichert. Fälschlich getrennte Stimmen lassen
 sich in der Übersicht als eine Person zusammenführen und bei Bedarf wieder trennen.
 Das Transkript und der Textexport zeigen **fortlaufenden Text ohne Zeitmarken**.
 Notizen und Soundbites lassen sich im Tab **Markierungen** anlegen.

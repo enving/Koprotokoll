@@ -224,7 +224,13 @@
       <label>Audio/Video <input type="file" id="up-file" required
         accept=".mp3,.mp4,.wav,.m4a,.webm,.ogg,.opus,.flac,.aac,.mov,.mkv,audio/*,video/*"></label>
       <label>Titel <input id="up-title" placeholder="optional"></label>
-      <label>Anzahl Sprecher <input id="up-speakers" type="number" min="1" max="20" placeholder="automatisch"></label>
+      <label>Anzahl Sprecher
+        <select id="up-speakers" aria-describedby="up-speakers-help">
+          <option value="1">Nur ich (1 Person)</option>
+          <option value="">Automatisch erkennen</option>
+        </select>
+      </label>
+      <p id="up-speakers-help" class="small muted">Bei „Nur ich“ bleibt alles bei einer Person. Bei Gesprächen die Anzahl wählen; „Automatisch“ schätzt sie.</p>
       <label>Transkriptionssprache
         <select id="up-language">
           <option value="de">Deutsch</option>
@@ -241,7 +247,13 @@
     <form method="dialog" id="record-form">
       <h2>Aufnahme</h2>
       <label>Titel <input id="rec-title" placeholder="z. B. Team-Weekly"></label>
-      <label>Anzahl Sprecher <input id="rec-speakers" type="number" min="1" max="20" placeholder="automatisch"></label>
+      <label>Anzahl Sprecher
+        <select id="rec-speakers" aria-describedby="rec-speakers-help">
+          <option value="1">Nur ich (1 Person)</option>
+          <option value="">Automatisch erkennen</option>
+        </select>
+      </label>
+      <p id="rec-speakers-help" class="small muted">Bei „Nur ich“ bleibt alles bei einer Person. Bei Gesprächen die Anzahl wählen; „Automatisch“ schätzt sie.</p>
       <label>Transkriptionssprache
         <select id="rec-language">
           <option value="de">Deutsch</option>

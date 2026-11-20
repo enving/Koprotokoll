@@ -369,7 +369,7 @@ gespeichert und ausgewertet. Hardwareaufnahmen überwacht der Server auch ohne
 offenen Browser. Bei Browseraufnahmen muss der Tab weiterlaufen. Bei einem Fehler
 der lokalen Sprachaktivitätserkennung erscheint eine Warnung; dann manuell stoppen.
 
-Spricht nur eine Person, **Anzahl Sprecher → 1** wählen, auch in den Einstellungen
+Spricht nur eine Person, **Anzahl Sprecher → Nur ich (1 Person)** wählen, auch in den Einstellungen
 der Mac-Menüleisten-App. Dann wird diese Stimme nicht automatisch aufgeteilt.
 Bei einer bereits falsch aufgeteilten Aufnahme in der Übersicht unter **Sprecher &
 Redeanteil** auf **Alle als eine Person zusammenführen** klicken. Text und Zeiten
