@@ -467,7 +467,7 @@ final class DesktopApp: NSObject, NSApplicationDelegate {
             let state = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
             if state["active"] as? Bool == true {
                 stateItem.title = "Aufnahme wird gesichert …"
-                let result = try await confirmedCapture("/api/capture/stop", body: [:], sound: "Tink")
+                let result = try await confirmedCapture("/api/capture/stop", body: [:], sound: "Pop")
                 let meeting = try JSONSerialization.jsonObject(with: result) as? [String: Any] ?? [:]
                 active = false
                 if let id = meeting["id"] as? Int {
@@ -484,7 +484,7 @@ final class DesktopApp: NSObject, NSApplicationDelegate {
                 stateItem.title = "Aufnahme wird gestartet …"
                 var body: [String: Any] = ["device": source.id, "title": "", "language": preferences.language.rawValue]
                 if preferences.speakerCount > 0 { body["num_speakers"] = preferences.speakerCount }
-                _ = try await confirmedCapture("/api/capture/start", body: body, sound: "Pop")
+                _ = try await confirmedCapture("/api/capture/start", body: body, sound: "Tink")
                 active = true
                 item.button?.title = "● Aufnahme"
             }

@@ -4,14 +4,14 @@ extension DesktopApp {
         var sounds: [String] = []
         let app = DesktopApp(playSound: { sounds.append($0) })
         app.config = Launcher(project: "", python: "", data: "", port: port, path: "")
-        _ = try await app.confirmedCapture("/start", body: [:], sound: "Pop")
-        _ = try await app.confirmedCapture("/stop", body: [:], sound: "Tink")
-        guard sounds == ["Pop", "Tink"] else { fatalError("Bestätigungstöne fehlen") }
+        _ = try await app.confirmedCapture("/start", body: [:], sound: "Tink")
+        _ = try await app.confirmedCapture("/stop", body: [:], sound: "Pop")
+        guard sounds == ["Tink", "Pop"] else { fatalError("Bestätigungstöne fehlen") }
         do {
-            _ = try await app.confirmedCapture("/error", body: [:], sound: "Pop")
+            _ = try await app.confirmedCapture("/error", body: [:], sound: "Tink")
             fatalError("Fehler wurde nicht weitergegeben")
         } catch { }
-        guard sounds == ["Pop", "Tink"] else { fatalError("Erfolgston trotz fehlgeschlagener Anfrage") }
+        guard sounds == ["Tink", "Pop"] else { fatalError("Erfolgston trotz fehlgeschlagener Anfrage") }
         for name in sounds {
             guard NSSound(named: NSSound.Name(name)) != nil else { fatalError("Systemton fehlt") }
         }
