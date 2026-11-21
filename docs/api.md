@@ -275,7 +275,9 @@ vertraulichen Antworten gespeichert. Die Schnittstellen unterliegen der vorhande
 `scripts/create_iphone_shortcut.py` erzeugt eine importierbare Vorlage. Der
 Kurzbefehl nimmt Audio auf, sendet es an die Transkriptions-API und kopiert den
 zurückgegebenen Text in die Zwischenablage. Diesen Text danach z. B. in T3 Code
-einfügen. Die Spracherkennung des iPhones wird dabei nicht verwendet.
+einfügen. Beim Ausführen auf dem iPhone liegt er direkt in dessen Zwischenablage;
+ein Ergebnisfenster muss nicht bestätigt werden. Die Spracherkennung des iPhones
+wird dabei nicht verwendet.
 
 ```bash
 python scripts/create_iphone_shortcut.py \
@@ -299,6 +301,6 @@ kontrollierte HTTPS-Adresse verwenden. Die Vorlage wählt Deutsch; die verfügba
 Sprachmodi beschreibt der Transkriptionsabschnitt oben.
 
 Einmalig den Zugriff auf Mikrofon und eigenen Mac erlauben. Danach Kurzbefehl
-starten, sprechen, die Aufnahme durch Antippen beenden und den angezeigten Text
-in die Ziel-App einfügen. Die Mikrofontaste der offiziellen T3-App bleibt ein
+starten, sprechen, die Aufnahme durch Antippen beenden und nach Abschluss in der
+Ziel-App **Einfügen** wählen. Die Mikrofontaste der offiziellen T3-App bleibt ein
 separater, unveränderter Eingabeweg.

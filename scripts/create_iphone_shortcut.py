@@ -54,7 +54,6 @@ def create_shortcut(endpoint: str) -> dict:
                                   field('response_format', text('text'))])}),
         action('gettext', {'UUID': text_id, 'WFTextActionText': token_text(upload_id, 'Inhalte von URL')}),
         action('setclipboard', {'WFInput': output(text_id, 'Text')}),
-        action('showresult', {'Text': token_text(text_id, 'Text')}),
     ]
     return {
         'WFWorkflowClientVersion': '4110.0.1', 'WFWorkflowMinimumClientVersion': 900,

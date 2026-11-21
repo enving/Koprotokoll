@@ -32,5 +32,9 @@ def test_shortcut_serializes_audio_file_and_response_tokens_for_apple_import():
     assert token['Value']['attachmentsByRange']['{0, 1}']['OutputUUID'] == upload['UUID']
     assert workflow['WFWorkflowImportQuestions'][0]['ActionIndex'] == 0
     assert 'BEIM-IMPORT' in key['WFTextActionText']
+    clipboard = actions[-1]
+    assert clipboard['WFWorkflowActionIdentifier'] == 'is.workflow.actions.setclipboard'
+    assert clipboard['WFWorkflowActionParameters']['WFInput']['Value']['OutputUUID'] == text['UUID']
+    assert len(actions) == 5
     assert not any('speech' in a['WFWorkflowActionIdentifier'] or 'dictate' in a['WFWorkflowActionIdentifier']
                    for a in actions)
