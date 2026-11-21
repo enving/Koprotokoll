@@ -1,5 +1,20 @@
 # Sprachwahl und automatischer Aufnahmestopp
 
+## Ergänzung: alle erlaubten Abtastraten (21.11.2026)
+
+Der unabhängige Review von PR #54 zeigte, dass die Sprachprüfung bei über die
+API gewählten 24 oder 44,1 kHz bisher keine Samples erhielt. Dadurch wurde der
+Stillezähler fortlaufend zurückgesetzt. Diese Raten werden nun ebenfalls auf
+16-kHz-Mono umgerechnet; die Originalaufnahme bleibt unverändert.
+
+`tests/test_activity.py` prüft alle erlaubten Raten (16, 24, 44,1 und 48 kHz)
+jeweils mit einer und zwei Spuren, Stille und einem 1-kHz-Testsignal. Der
+Prüfausschnitt hat die erwartete Dauer, Abtastrate und Signalfrequenz.
+Die 12 Tests dieser Datei bestanden. Echte Hardwareaufnahmen mit 24 oder
+44,1 kHz wurden dabei nicht erneut gestartet.
+
+## Historische Prüfung vom 14.11.2026
+
 Geprüft am 14.11.2026 mit GPT-6.1-sol auf macOS/Apple Silicon.
 Lokale Umsetzung auf `main`; kein Push, keine unabhängige PR-Freigabe.
 

@@ -190,9 +190,10 @@ def pcm_tail(path: Path, channels: int, sample_rate: int):
                     stream.seek(start + ((end - start) // frame_bytes - count) * frame_bytes)
                     samples = np.frombuffer(stream.read(count * frame_bytes), dtype='<i2')
                     mono = samples.reshape(-1, channels).mean(axis=1).astype(np.float32) / 32768
-                    # Die Aufnahmewege liefern 48 kHz; andere ganzzahlige Raten ebenfalls zulassen.
+                    # Auch 24 und 44,1 kHz aus der Aufnahme-API für die Sprachprüfung umrechnen.
                     if sample_rate % 16000:
-                        return None
+                        positions = np.arange(len(mono) * 16000 // sample_rate) * (sample_rate / 16000)
+                        return np.interp(positions, np.arange(len(mono)), mono).astype(np.float32)
                     step = sample_rate // 16000
                     return mono[:len(mono) // step * step].reshape(-1, step).mean(axis=1)
                 stream.seek(size + (size % 2), 1)

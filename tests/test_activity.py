@@ -3,6 +3,7 @@
 import wave
 
 import numpy as np
+import pytest
 from fastapi.testclient import TestClient
 
 from koprotokoll.activity import SilenceTimer
@@ -35,6 +36,26 @@ def test_pcm_tail_reads_growing_wav_without_trusting_frame_count(tmp_path):
     assert tail.shape == (32000,)
     assert np.allclose(tail, 16000 / 32768)
     assert pcm_tail(tmp_path / 'missing.wav', 2, 48000) is None
+
+
+@pytest.mark.parametrize('sample_rate', [16000, 24000, 44100, 48000])
+@pytest.mark.parametrize('channels', [1, 2])
+def test_pcm_tail_converts_every_supported_capture_rate(tmp_path, sample_rate, channels):
+    path = tmp_path / 'capture.wav'
+    for signal in [np.zeros(sample_rate * 3),
+                   0.5 * np.sin(2 * np.pi * 1000 * np.arange(sample_rate * 3) / sample_rate)]:
+        pcm = np.repeat((signal * 32767).astype('<i2')[:, None], channels, axis=1)
+        with wave.open(str(path), 'wb') as output:
+            output.setparams((channels, 2, sample_rate, 0, 'NONE', 'not compressed'))
+            output.writeframes(pcm.tobytes())
+        tail = pcm_tail(path, channels, sample_rate)
+        assert tail is not None and tail.shape == (32000,)
+        assert tail.dtype == np.float32
+        if np.any(signal):
+            assert np.max(np.abs(tail)) > 0.45
+            assert np.argmax(np.abs(np.fft.rfft(tail))) * 16000 / len(tail) == 1000
+        else:
+            assert not np.any(tail)
 
 
 def test_activity_endpoint_accepts_pcm_and_rejects_invalid_audio(tmp_path, monkeypatch):
