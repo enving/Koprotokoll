@@ -190,6 +190,98 @@ def test_api_selects_per_request_and_retains_queue_metadata(tmp_path, monkeypatc
         assert list((tmp_path / 'tmp').iterdir()) == []
 
 
+@pytest.mark.parametrize('mode', ['de', 'en', 'auto'])
+def test_hardware_capture_keeps_selected_language(tmp_path, monkeypatch, mode):
+    class Recorder:
+        def __init__(self, path):
+            pass
+
+        def start(self, *args):
+            return {'active': True}
+
+        def stop(self):
+            path = tmp_path / 'capture.wav'
+            path.write_bytes(wav_bytes(tmp_path, seconds=1))
+            return path, 1, 'Testmikrofon'
+
+    monkeypatch.setattr(app_mod, 'HardwareRecorder', Recorder)
+    app = app_mod.create_app(Settings(data_dir=tmp_path, diarization=False), transcriber=FakeTranscriber(),
+                             llm=NoLLM(), background=False)
+    with TestClient(app) as client:
+        assert client.post('/api/capture/start', json={'device': '0', 'language': mode}).status_code == 200
+        meeting = client.post('/api/capture/stop').json()
+        app.state.pipeline.join()
+        result = client.get(f"/api/meetings/{meeting['id']}").json()
+        assert result['meta']['asr_language'] == result['meta']['asr']['mode'] == mode
+
+
+def test_hardware_rejects_unknown_language_before_recording(tmp_path, monkeypatch):
+    def unexpected_start(*args):
+        pytest.fail('Aufnahme darf bei ungültiger Sprachwahl nicht starten')
+
+    app = app_mod.create_app(Settings(data_dir=tmp_path, diarization=False), transcriber=FakeTranscriber(),
+                             llm=NoLLM(), background=False)
+    monkeypatch.setattr(app.state.capture, 'start', unexpected_start)
+    with TestClient(app) as client:
+        assert client.post('/api/capture/start', json={'device': '0', 'language': 'fr'}).status_code == 400
+
+
+def test_retranscription_uses_new_language_and_preserves_previous_result(tmp_path, monkeypatch):
+    calls = []
+
+    def factory(settings, language=None):
+        mode = language or settings.asr_language
+        asr = FakeTranscriber()
+        asr.asr_info = {'model': mode, 'model_path': str(tmp_path / mode), 'quantization': 'int8'}
+        original = asr.transcribe
+
+        def run(*args):
+            calls.append(mode)
+            return original(*args)
+
+        asr.transcribe = run
+        return asr
+
+    monkeypatch.setattr(app_mod, 'create_transcriber', factory)
+    app = app_mod.create_app(Settings(data_dir=tmp_path, diarization=False), llm=NoLLM(), background=False)
+    with TestClient(app) as client:
+        meeting = client.post('/api/meetings', files={'file': ('sample.wav', wav_bytes(tmp_path), 'audio/wav')},
+                              data={'language': 'auto'}).json()
+        mid = meeting['id']
+        app.state.pipeline.join()
+        before = client.get(f'/api/meetings/{mid}').json()
+        audio = client.get(f'/api/meetings/{mid}/audio').content
+        assert client.post(f'/api/meetings/{mid}/retranscribe', json={'language': 'fr'}).status_code == 400
+        copied = client.post(f'/api/meetings/{mid}/retranscribe', json={'language': 'de'})
+        assert copied.status_code == 201
+        new_id = copied.json()['id']
+        assert new_id != mid
+        app.state.pipeline.join()
+        after = client.get(f'/api/meetings/{new_id}').json()
+        assert calls == ['auto', 'de']
+        assert after['status'] == 'done' and after['segments']
+        assert after['meta']['asr_language'] == after['meta']['asr']['mode'] == 'de'
+        assert after['meta']['retranscribed_from'] == mid
+        assert client.get(f'/api/meetings/{mid}').json() == before
+        client.delete(f'/api/meetings/{mid}')
+        assert client.get(f'/api/meetings/{new_id}/audio').content == audio
+        assert client.post('/api/meetings/99999/retranscribe', json={'language': 'de'}).status_code == 404
+
+
+@pytest.mark.parametrize('status,audio_present,expected', [('transcribing', True, 409), ('done', False, 404)])
+def test_retranscription_rejects_busy_or_missing_audio(tmp_path, status, audio_present, expected):
+    app = app_mod.create_app(Settings(data_dir=tmp_path, diarization=False), transcriber=FakeTranscriber(),
+                             llm=NoLLM(), background=False)
+    mid = app.state.db.create_meeting('Test', 'test')
+    path = tmp_path / 'audio.wav'
+    if audio_present:
+        path.write_bytes(wav_bytes(tmp_path))
+    app.state.db.update_meeting(mid, status=status, audio_path=str(path))
+    with TestClient(app) as client:
+        assert client.post(f'/api/meetings/{mid}/retranscribe', json={'language': 'de'}).status_code == expected
+        assert len(app.state.db.list_meetings()) == 1
+
+
 def test_api_reports_missing_model_and_cleans_upload(tmp_path):
     with TestClient(app_mod.create_app(Settings(data_dir=tmp_path, diarization=False),
                                        llm=NoLLM(), background=False)) as client:

@@ -70,7 +70,8 @@ def test_raw_observations_are_not_sent_to_webhooks():
     from koprotokoll.pipeline import meeting_payload
 
     meeting = {"meta": {"source": "bot", "speaker_activity": activity(["Anna"]),
-                         "manual_speakers": {"S3": "Alter Name"}, "automatic_speakers": {"S1": "Anna"}}}
+                         "manual_speakers": {"S3": "Alter Name"}, "automatic_speakers": {"S1": "Anna"},
+                         "speaker_correction": {"segments": {"1": "S2"}}}}
     assert meeting_payload(meeting)["meta"] == {"source": "bot"}
     assert "speaker_activity" in meeting["meta"]
 

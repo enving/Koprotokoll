@@ -45,6 +45,18 @@ struct HotkeyTests {
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
         let preferences = DesktopPreferences(defaults: defaults)
+        guard preferences.speakerCount == 1 else { exit(1) }
+        preferences.speakerCount = 0
+        guard DesktopPreferences(defaults: UserDefaults(suiteName: suite)!).speakerCount == 0 else { exit(1) }
+        preferences.speakerCount = 1
+        guard DesktopPreferences(defaults: UserDefaults(suiteName: suite)!).speakerCount == 1 else { exit(1) }
+        defaults.set(99, forKey: "speakerCount")
+        guard preferences.speakerCount == 0 else { exit(1) }
+        guard preferences.language == .german else { exit(1) }
+        preferences.language = .automatic
+        guard DesktopPreferences(defaults: UserDefaults(suiteName: suite)!).language == .automatic else { exit(1) }
+        defaults.set("unbekannt", forKey: "transcriptionLanguage")
+        guard preferences.language == .german else { exit(1) }
         guard preferences.shortcutEnabled, preferences.modifier == .option, preferences.sourceName == nil else { exit(1) }
         defaults.set("Vorhandenes Mikrofon", forKey: "audioSourceName")
         preferences.modifier = .control
@@ -73,6 +85,6 @@ struct HotkeyTests {
         configurable.configure(enabled: true, modifier: .control)
         _ = configurable.update(down: true, otherKey: false, at: 1.30)
         guard !configurable.update(down: false, otherKey: false, at: 1.35) else { exit(1) }
-        print("14 Tastenkürzel- und Einstellungsfälle bestanden")
+        print("20 Tastenkürzel- und Einstellungsfälle bestanden")
     }
 }

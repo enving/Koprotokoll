@@ -133,6 +133,8 @@ async function openMeeting(id, { keepTab = false, seekTo = null } = {}) {
   if (diarization?.status === "completed") {
     diarizationText = `Sprechererkennung: ${diarization.speaker_count} Sprecher`;
     if (diarization.warning) diarizationText += ` (${diarization.warning})`;
+  } else if (diarization?.status === "fixed") {
+    diarizationText = diarization.source === "manual" ? "Sprecherzuordnung: auf eine Person korrigiert" : "Sprecherzahl: 1 vorgegeben";
   } else if (diarization?.status === "failed" || diarization?.status === "empty") {
     diarizationText = "Sprechererkennung fehlgeschlagen – Transkript ohne Sprecherzuordnung.";
   } else if (diarization?.status === "disabled") {
@@ -140,10 +142,18 @@ async function openMeeting(id, { keepTab = false, seekTo = null } = {}) {
   }
   $("#m-meta").textContent = [created, m.duration ? fmt(m.duration) : null,
     Object.keys(m.speakers).length ? `${Object.keys(m.speakers).length} Sprecher` : null,
+    m.meta?.asr_language ? `Transkriptionsmodus: ${LANGUAGE_LABELS[m.meta.asr_language] || m.meta.asr_language}` : null,
+    m.meta?.stop_reason === "silence" ? "Automatisch nach 5 Minuten ohne Sprache gestoppt" : null,
     diarizationText,
     m.summary?.engine ? `Zusammenfassung: ${m.summary.engine}` : null, m.summary?.warning, m.summary?.external_service ? `Auswertung durch externen Dienst: ${m.summary.external_service}` : null].filter(Boolean).join(" · ");
 
   const done = m.status === "done";
+  if (changedMeeting) {
+    $("#t-language").value = m.meta?.asr_language || preferredLanguage();
+    $("#t-language-error").hidden = true;
+  }
+  $("#t-retranscribe").disabled = !["done", "error"].includes(m.status);
+  $("#t-language").disabled = !["done", "error"].includes(m.status);
   $("#m-progress").hidden = done;
   if (!done) {
     $("#m-progress-bar").style.transform = `scaleX(${Math.max(0, Math.min(1, m.progress))})`;
@@ -246,6 +256,9 @@ function renderSummary() {
     h("div", { class: "card" }, h("h3", {}, "Zusammenfassung"), h("p", {}, s.overview || "–"),
       s.keywords?.length ? h("div", { class: "chips" }, s.keywords.map((k) => h("span", { class: "chip" }, k))) : null),
   ];
+  if (m.meta.summary_speakers_changed) {
+    left.unshift(h("p", { role: "status", class: "muted" }, "Die Sprecherzuordnung wurde geändert. Die vorhandene Zusammenfassung bei Bedarf über „Zusammenfassung neu erstellen“ aktualisieren."));
+  }
   if (s.action_items?.length) {
     left.push(h("div", { class: "card" }, h("h3", {}, `Action Items (${s.action_items.length})`),
       h("ul", { class: "list" }, s.action_items.map((a) => h("li", {},
@@ -283,6 +296,23 @@ function renderSummary() {
         h("div", { class: "talk" }, h("div", { style: `width:${pct}%;background:${color(spk)}` })));
     }),
     h("p", { class: "muted", style: "font-size:12px" }, "Namen ändern: Feld bearbeiten und Enter drücken."));
+  const speakerError = h("p", { role: "alert" });
+  if (m.meta.speaker_correction || Object.keys(m.speakers).length > 1) {
+    const restore = Boolean(m.meta.speaker_correction);
+    speakers.append(h("button", { id: "speaker-single", disabled: !["done", "error"].includes(m.status), onclick: async (event) => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      speakerError.textContent = "";
+      try {
+        await api(`/api/meetings/${m.id}/single-speaker`, { method: restore ? "DELETE" : "POST" });
+        await openMeeting(m.id, { keepTab: true });
+      } catch (err) {
+        speakerError.textContent = err.message;
+        button.disabled = false;
+      }
+    } }, restore ? "Frühere Sprecheraufteilung wiederherstellen" : "Alle als eine Person zusammenführen"),
+    h("p", { class: "small muted" }, restore ? "Die frühere Aufteilung ist gespeichert." : "Wenn überall dieselbe Person spricht. Die Änderung lässt sich rückgängig machen."), speakerError);
+  }
   const tools = h("div", { class: "card" }, h("h3", {}, "Werkzeuge"),
     h("button", { onclick: async (e) => {
       e.target.disabled = true; e.target.textContent = "Erstelle …";
@@ -291,6 +321,52 @@ function renderSummary() {
     } }, "Zusammenfassung neu erstellen"));
 
   box.replaceChildren(h("div", { class: "grid2" }, h("div", {}, left), h("div", {}, speakers, tools)));
+}
+
+function renderReadingTranscript(meeting, query, box) {
+  const paragraphs = [];
+  let paragraph = null;
+  for (const segment of meeting.segments) {
+    const previous = paragraph?.segments.at(-1);
+    if (!paragraph || paragraph.speaker !== segment.speaker ||
+        (paragraph.length >= 650 && /[.!?…]["“”»]?$/u.test(previous.text))) {
+      paragraph = { speaker: segment.speaker, segments: [], length: 0 };
+      paragraphs.push(paragraph);
+    }
+    paragraph.segments.push(segment);
+    paragraph.length += segment.text.length + 1;
+  }
+  const multiple = new Set(meeting.segments.map((segment) => segment.speaker)).size > 1;
+  const nodes = [];
+  state.segEls = [];
+  let previousSpeaker = null;
+  for (const paragraph of paragraphs) {
+    const plain = paragraph.segments.map((segment) => segment.text).join(" ");
+    const match = query ? plain.toLowerCase().indexOf(query) : -1;
+    if (query && match < 0) continue;
+    if (multiple && (query || previousSpeaker !== paragraph.speaker)) {
+      nodes.push(h("p", { class: "reading-speaker", style: `color:${color(paragraph.speaker)}` }, speakerName(paragraph.speaker)));
+    }
+    previousSpeaker = paragraph.speaker;
+    const node = h("p", { class: "reading-paragraph" });
+    let offset = 0;
+    for (const segment of paragraph.segments) {
+      let text = segment.text !== segment.original_text
+        ? [h("del", {}, segment.original_text), " ", h("mark", {}, segment.text)] : [segment.text];
+      if (query) {
+        const begin = Math.max(0, match - offset), end = Math.min(segment.text.length, match + query.length - offset);
+        text = begin < end
+          ? [segment.text.slice(0, begin), h("mark", {}, segment.text.slice(begin, end)), segment.text.slice(end)] : [segment.text];
+      }
+      const span = h("span", { class: "reading-segment", "data-start": segment.start, "data-end": segment.end }, text);
+      if (node.childNodes.length) node.append(" ");
+      node.append(span);
+      state.segEls.push(span);
+      offset += segment.text.length + 1;
+    }
+    nodes.push(node);
+  }
+  box.replaceChildren(...(nodes.length ? nodes : [h("p", { class: "muted" }, "Keine passenden Textstellen.")]));
 }
 
 function renderTranscript() {
@@ -309,29 +385,13 @@ function renderTranscript() {
     h("p", { class: "muted" }, report ? `${report.external ? "Externer Dienst" : "Lokaler Dienst"}: ${report.service} · ${report.model} · ${report.status === "completed" ? "abgeschlossen" : "Original als Ersatz verwendet"} · ${report.rejected.length} Äußerungen unverändert belassen. Änderungen bitte prüfen.` : "Keine Nachbesserung vorhanden."));
   const q = $("#t-filter").value.trim().toLowerCase();
   const box = $("#transcript");
+  box.classList.add("reading");
   if (!m.segments.length) {
     box.replaceChildren(h("p", { class: "muted" }, m.status === "done" ? "Keine Sprache erkannt." : "Transkript wird erstellt …"));
     state.segEls = [];
     return;
   }
-  state.segEls = m.segments.map((s) => {
-    let text = s.text !== s.original_text ? [h("del", {}, s.original_text), " ", h("mark", {}, s.text)] : [s.text];
-    if (q) {
-      const idx = s.text.toLowerCase().indexOf(q);
-      if (idx < 0) return null;
-      text = [s.text.slice(0, idx), h("mark", {}, s.text.slice(idx, idx + q.length)), s.text.slice(idx + q.length)];
-    }
-    const el = h("div", { class: "seg", "data-start": s.start, "data-end": s.end },
-      h("div", { class: "who", style: `color:${color(s.speaker)}` }, speakerName(s.speaker), tsLink(s.start)),
-      h("div", {}, text),
-      h("button", { class: "mark", title: "Als Soundbite markieren", onclick: async () => {
-        await api(`/api/meetings/${m.id}/bookmarks`, jsonOpts("POST",
-          { start: s.start, end: s.end, kind: "soundbite", note: `${speakerName(s.speaker)}: ${s.text}` }));
-        await openMeeting(m.id, { keepTab: true });
-      } }, "★"));
-    return el;
-  }).filter(Boolean);
-  box.replaceChildren(...state.segEls);
+  renderReadingTranscript(m, q, box);
 }
 
 function renderBookmarks() {
@@ -342,7 +402,7 @@ function renderBookmarks() {
     h("button", { title: "Entfernen", onclick: async () => {
       await api(`/api/meetings/${m.id}/bookmarks/${b.id}`, { method: "DELETE" });
       await openMeeting(m.id, { keepTab: true });
-    } }, "✕"))) : [h("li", { class: "muted" }, "Noch keine Markierungen. Im Transkript auf ★ klicken oder oben eine Notiz zur Abspielposition anlegen.")]));
+    } }, "✕"))) : [h("li", { class: "muted" }, "Noch keine Markierungen. Oben eine Notiz oder einen Soundbite zur aktuellen Abspielposition anlegen.")]));
 }
 
 // Aktuelles Segment beim Abspielen hervorheben.
@@ -426,28 +486,128 @@ $("#global-search").addEventListener("input", (e) => {
 });
 
 // ---------------------------------------------------------- Upload
-async function uploadBlob(blob, filename, title, numSpeakers) {
+const LANGUAGE_LABELS = { de: "Deutsch", auto: "Automatisch (mehrsprachig)", en: "Englisch" };
+
+function preferredSpeakers() {
+  try {
+    const saved = localStorage.getItem("koprotokoll-speakers");
+    if (saved === "" || /^(?:[1-9]|1[0-9]|20)$/.test(saved || "")) return saved;
+  } catch { /* Ohne Browserspeicher bleibt die Auswahl im Dialog nutzbar. */ }
+  return "1";
+}
+
+for (const id of ["up-speakers", "rec-speakers"]) {
+  const select = $(`#${id}`);
+  for (let count = 2; count <= 20; count++) {
+    select.append(h("option", { value: count }, `${count} Personen`));
+  }
+  select.addEventListener("change", (event) => {
+    try { localStorage.setItem("koprotokoll-speakers", event.target.value); } catch { /* optional */ }
+  });
+}
+
+function preferredLanguage() {
+  const saved = localStorage.getItem("koprotokoll-language");
+  return Object.hasOwn(LANGUAGE_LABELS, saved) ? saved : "de";
+}
+
+for (const id of ["up-language", "rec-language"]) {
+  $(`#${id}`).addEventListener("change", (event) => {
+    localStorage.setItem("koprotokoll-language", event.target.value);
+  });
+}
+
+$("#t-language-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const button = $("#t-retranscribe"), error = $("#t-language-error");
+  if (button.disabled) return;
+  button.disabled = true;
+  button.textContent = "Transkription wird gestartet …";
+  error.hidden = true;
+  try {
+    const m = await api(`/api/meetings/${state.current.id}/retranscribe`, jsonOpts("POST", { language: $("#t-language").value }));
+    await loadMeetings();
+    await openMeeting(m.id);
+    showTab("transcript");
+  } catch (err) {
+    error.textContent = err.message;
+    error.hidden = false;
+    button.disabled = false;
+  } finally {
+    button.textContent = "Erneut transkribieren";
+  }
+});
+
+async function uploadBlob(blob, filename, title, numSpeakers, language, stopReason) {
   const fd = new FormData();
   fd.append("file", blob, filename);
   fd.append("title", title || "");
   if (numSpeakers) fd.append("num_speakers", numSpeakers);
+  if (language) fd.append("language", language);
+  if (stopReason) fd.append("stop_reason", stopReason);
   const m = await api("/api/meetings", { method: "POST", body: fd });
   await loadMeetings();
   await openMeeting(m.id);
 }
 
-$("#btn-upload").addEventListener("click", () => $("#dlg-upload").showModal());
+$("#btn-upload").addEventListener("click", () => {
+  $("#up-language").value = preferredLanguage();
+  $("#up-speakers").value = preferredSpeakers();
+  $("#dlg-upload").showModal();
+});
 $("#upload-form").addEventListener("submit", async (e) => {
   if (e.submitter?.value !== "ok") return;
   const file = $("#up-file").files[0];
   if (!file) return;
-  try { await uploadBlob(file, file.name, $("#up-title").value, $("#up-speakers").value); }
+  try { await uploadBlob(file, file.name, $("#up-title").value, $("#up-speakers").value, $("#up-language").value); }
   catch (err) { alert(`Upload fehlgeschlagen: ${err.message}`); }
   e.target.reset();
 });
 
 // ---------------------------------------------------------- Aufnahme
-const rec = { recorder: null, streams: [], chunks: [], start: 0, timer: null, ctx: null, raf: null, hardware: false };
+const rec = { recorder: null, streams: [], chunks: [], start: 0, timer: null, ctx: null, raf: null, hardware: false,
+  speechTimer: null, speechSession: 0, autoStopped: false };
+
+function watchBrowserSpeech(analyser) {
+  const session = ++rec.speechSession;
+  let lastSpeech = performance.now(), lastCheck = lastSpeech;
+  async function check() {
+    if (session !== rec.speechSession || !rec.recorder) return;
+    const now = performance.now();
+    // Ein angehaltener Browser hat die Zwischenzeit nicht beobachtet.
+    if (now - lastCheck > 2000) lastSpeech = now;
+    lastCheck = now;
+    const samples = new Float32Array(analyser.fftSize);
+    analyser.getFloatTimeDomainData(samples);
+    const ratio = rec.ctx.sampleRate / 16000;
+    const pcm = new Int16Array(Math.floor(samples.length / ratio));
+    for (let i = 0; i < pcm.length; i++) {
+      const begin = Math.floor(i * ratio), end = Math.floor((i + 1) * ratio);
+      let sum = 0;
+      for (let j = begin; j < end; j++) sum += samples[j];
+      pcm[i] = Math.max(-32768, Math.min(32767, sum / (end - begin) * 32768));
+    }
+    const data = new FormData();
+    data.append("file", new Blob([pcm.buffer]), "activity.pcm");
+    try {
+      const result = await api("/api/capture/activity", { method: "POST", body: data });
+      if (session !== rec.speechSession) return;
+      $("#rec-silence-status").textContent = "Stoppt nach 5 Minuten ohne erkannte Sprache und wertet die Aufnahme aus.";
+      if (result.speech) lastSpeech = now;
+      if (!result.speech && now - lastSpeech >= result.silence_seconds * 1000) {
+        rec.autoStopped = true;
+        $("#rec-stop").click();
+        return;
+      }
+    } catch (err) {
+      if (session !== rec.speechSession) return;
+      lastSpeech = performance.now();
+      $("#rec-silence-status").textContent = `Automatischer Stopp nicht verfügbar: ${err.message}`;
+    }
+    if (session === rec.speechSession) rec.speechTimer = setTimeout(check, 500);
+  }
+  rec.speechTimer = setTimeout(check, 500);
+}
 
 function drawCaptureLevel(levelDb) {
   const c = $("#rec-level"), g = c.getContext("2d");
@@ -461,6 +621,15 @@ async function pollCaptureLevel() {
   if (!rec.hardware) return;
   try {
     const status = await api("/api/capture");
+    if (!rec.hardware) return;
+    if (!status.active && status.meeting_id) {
+      cleanupRecording();
+      $("#dlg-record").close();
+      await loadMeetings();
+      await openMeeting(status.meeting_id);
+      return;
+    }
+    if (status.warning) $("#rec-silence-status").textContent = status.warning;
     drawCaptureLevel(status.level_db ?? -120);
   } catch { /* Aufnahme läuft unabhängig von der Pegelanzeige weiter. */ }
   if (rec.hardware) rec.raf = setTimeout(pollCaptureLevel, 250);
@@ -502,6 +671,8 @@ $("#rec-method").addEventListener("change", selectRecordingMethod);
 $("#rec-device").addEventListener("change", updateCaptureHelp);
 
 async function startRecording() {
+  rec.autoStopped = false;
+  $("#rec-silence-status").textContent = "Stoppt nach 5 Minuten ohne erkannte Sprache und wertet die Aufnahme aus.";
   if ($("#rec-method").value === "hardware") {
     const device = $("#rec-device").value;
     if (!device) throw new Error("Bitte einen Audioeingang auswählen.");
@@ -509,10 +680,12 @@ async function startRecording() {
       device,
       title: $("#rec-title").value,
       num_speakers: Number($("#rec-speakers").value) || null,
+      language: $("#rec-language").value,
       channels: 2,
       sample_rate: 48000,
     }));
     rec.hardware = true;
+    $("#rec-language").disabled = true;
     rec.start = Date.now();
     rec.timer = setInterval(() => { $("#rec-time").textContent = fmt((Date.now() - rec.start) / 1000); }, 500);
     $("#rec-dot").classList.add("on");
@@ -527,9 +700,10 @@ async function startRecording() {
   }
   const mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
   rec.streams = [mic];
-  rec.ctx = new AudioContext();
+  rec.ctx = new AudioContext({ sampleRate: 48000 });
   const dest = rec.ctx.createMediaStreamDestination();
   const analyser = rec.ctx.createAnalyser();
+  analyser.fftSize = 32768;
   rec.ctx.createMediaStreamSource(mic).connect(dest);
   if ($("#rec-source").value === "mix") {
     // Online-Meeting: Ton des geteilten Tabs/Bildschirms mit aufnehmen.
@@ -543,6 +717,8 @@ async function startRecording() {
   rec.recorder = new MediaRecorder(dest.stream, { mimeType: MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "" });
   rec.recorder.ondataavailable = (ev) => ev.data.size && rec.chunks.push(ev.data);
   rec.recorder.start(1000);
+  watchBrowserSpeech(analyser);
+  $("#rec-language").disabled = true;
   rec.start = Date.now();
   rec.timer = setInterval(() => { $("#rec-time").textContent = fmt((Date.now() - rec.start) / 1000); }, 500);
   $("#rec-dot").classList.add("on");
@@ -568,6 +744,8 @@ function drawLevel(analyser) {
 }
 
 function cleanupRecording() {
+  clearTimeout(rec.speechTimer);
+  rec.speechSession++;
   clearInterval(rec.timer);
   clearTimeout(rec.raf);
   cancelAnimationFrame(rec.raf);
@@ -582,10 +760,13 @@ function cleanupRecording() {
   $("#rec-method").disabled = false;
   $("#rec-device").disabled = false;
   $("#rec-source").disabled = false;
+  $("#rec-language").disabled = false;
   $("#rec-time").textContent = "00:00";
 }
 
 $("#btn-record").addEventListener("click", async () => {
+  $("#rec-language").value = preferredLanguage();
+  $("#rec-speakers").value = preferredSpeakers();
   selectRecordingMethod();
   $("#dlg-record").showModal();
   await loadCaptureDevices();
@@ -615,9 +796,12 @@ $("#rec-stop").addEventListener("click", () => {
   r.onstop = async () => {
     const blob = new Blob(rec.chunks, { type: "audio/webm" });
     const title = $("#rec-title").value || `Aufnahme ${new Date().toLocaleString("de-DE")}`;
+    const language = $("#rec-language").value;
+    const speakers = $("#rec-speakers").value;
+    const stopReason = rec.autoStopped ? "silence" : null;
     cleanupRecording();
     $("#dlg-record").close();
-    try { await uploadBlob(blob, "aufnahme.webm", title); } catch (err) { alert(`Upload fehlgeschlagen: ${err.message}`); }
+    try { await uploadBlob(blob, "aufnahme.webm", title, speakers, language, stopReason); } catch (err) { alert(`Upload fehlgeschlagen: ${err.message}`); }
   };
   r.stop();
 });

@@ -90,7 +90,10 @@ class Pipeline:
             diarization: dict = {"status": "disabled" if self.diarizer is None else "skipped"}
             if self.diarizer is not None and not words:
                 diarization["reason"] = "Keine Wörter erkannt; Sprechererkennung nicht ausgeführt."
-            if self.diarizer is not None and words:
+            if words and meeting.get("num_speakers") == 1:
+                diarization = {"status": "fixed", "speaker_count": 1,
+                               "requested_speakers": 1, "source": "setting"}
+            elif self.diarizer is not None and words:
                 progress = self._step(meeting_id, "diarizing")
                 try:
                     turns = self.diarizer.diarize(audio, meeting.get("num_speakers"), progress)
@@ -145,6 +148,8 @@ class Pipeline:
         current = self.db.get_meeting(meeting_id)
         if summary.get("title") and current["title"] == current.get("source_name"):
             fields["title"] = summary["title"]
+        if current["meta"].get("summary_speakers_changed"):
+            fields["meta"] = {**current["meta"], "summary_speakers_changed": False}
         self.db.update_meeting(meeting_id, **fields)
         self._emit("meeting.completed", meeting_id)
 
@@ -159,6 +164,9 @@ class Pipeline:
         meeting = self.db.get_meeting(meeting_id)
         summary = summarize(self.db.get_segments(meeting_id), meeting["speakers"], self.llm)
         self.db.update_meeting(meeting_id, summary=summary)
+        current = self.db.get_meeting(meeting_id)
+        if current["meta"].get("summary_speakers_changed") and current["speakers"] == meeting["speakers"]:
+            self.db.update_meeting(meeting_id, meta={**current["meta"], "summary_speakers_changed": False})
         return summary
 
 
@@ -167,5 +175,5 @@ def meeting_payload(m: dict) -> dict:
     payload = {k: m.get(k) for k in ("id", "title", "created_at", "duration", "status", "error",
                                     "speakers", "summary", "meta")}
     # Die rohe personenbezogene Beobachtungsreihe gehört nicht in externe Webhooks.
-    payload["meta"] = {k: v for k, v in (m.get("meta") or {}).items() if k not in ("speaker_activity", "manual_speakers", "automatic_speakers")}
+    payload["meta"] = {k: v for k, v in (m.get("meta") or {}).items() if k not in ("speaker_activity", "manual_speakers", "automatic_speakers", "speaker_correction")}
     return payload

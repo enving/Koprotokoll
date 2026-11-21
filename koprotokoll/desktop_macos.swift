@@ -52,6 +52,15 @@ final class ShortcutMonitor: @unchecked Sendable {
 
 @MainActor
 final class DesktopApp: NSObject, NSApplicationDelegate {
+    private let playSound: (String) -> Void
+
+    init(playSound: @escaping (String) -> Void = { name in
+        NSSound(named: NSSound.Name(name))?.play()
+    }) {
+        self.playSound = playSound
+        super.init()
+    }
+
     private var config: Launcher!
     private var item: NSStatusItem!
     private let menu = NSMenu()
@@ -73,6 +82,8 @@ final class DesktopApp: NSObject, NSApplicationDelegate {
     private var monitor: ShortcutMonitor?
     private var settingsWindow: NSWindow?
     private let sourcePicker = NSPopUpButton()
+    private let languagePicker = NSPopUpButton()
+    private let speakerPicker = NSPopUpButton()
     private let modifierPicker = NSPopUpButton()
     private let shortcutToggle = NSButton(checkboxWithTitle: "Globales Tastenkürzel aktivieren", target: nil, action: nil)
     private let permissionLabel = NSTextField(wrappingLabelWithString: "")
@@ -126,7 +137,7 @@ final class DesktopApp: NSObject, NSApplicationDelegate {
     }
 
     private func buildSettingsWindow() {
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 570, height: 560),
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 570, height: 760),
                               styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
         window.title = "Koprotokoll – Einstellungen"
         window.isReleasedWhenClosed = false
@@ -166,6 +177,22 @@ final class DesktopApp: NSObject, NSApplicationDelegate {
         stack.addArrangedSubview(refreshButton)
         label("Für ein Raumgespräch ein Mikrofon wählen. Für ein Online-Meeting müssen Systemton und Mikrofon enthalten sein.")
         label("Systemton benötigt unter macOS ‚Nur Aufnahme von Systemaudio‘ und die Mikrofonfreigabe. Bildschirminhalte werden nicht aufgenommen.")
+        label("Transkriptionssprache", heading: true)
+        languagePicker.addItems(withTitles: TranscriptionLanguage.allCases.map(\.title))
+        languagePicker.target = self
+        languagePicker.action = #selector(changeLanguage)
+        languagePicker.setAccessibilityLabel("Transkriptionssprache")
+        stack.addArrangedSubview(languagePicker)
+        languagePicker.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        label("Anzahl Sprecher", heading: true)
+        speakerPicker.addItems(withTitles: ["Automatisch"] + (1...20).map { $0 == 1 ? "Nur ich (1 Person)" : "\($0) Sprecher" })
+        speakerPicker.target = self
+        speakerPicker.action = #selector(changeSpeakerCount)
+        speakerPicker.setAccessibilityLabel("Anzahl Sprecher")
+        stack.addArrangedSubview(speakerPicker)
+        speakerPicker.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        label("Bei ‚Nur ich‘ bleibt alles bei einer Person. Für Gespräche die Anzahl wählen; ‚Automatisch‘ schätzt sie.")
+        label("Nach 5 Minuten ohne erkannte Sprache wird die Aufnahme automatisch gestoppt und ausgewertet.")
         label("Tastenkürzel", heading: true)
         shortcutToggle.target = self
         shortcutToggle.action = #selector(changeShortcut)
@@ -220,6 +247,11 @@ final class DesktopApp: NSObject, NSApplicationDelegate {
         let selectedIndex = selected.map { $0 + 1 } ?? (selectedName == nil ? 0 : titles.count - 1)
         if sourcePicker.indexOfSelectedItem != selectedIndex { sourcePicker.selectItem(at: selectedIndex) }
         sourcePicker.isEnabled = !active && !busy && !sourcesLoading && !sources.isEmpty
+        let languageIndex = TranscriptionLanguage.allCases.firstIndex(of: preferences.language) ?? 0
+        languagePicker.selectItem(at: languageIndex)
+        languagePicker.isEnabled = !active && !busy
+        speakerPicker.selectItem(at: preferences.speakerCount)
+        speakerPicker.isEnabled = !active && !busy
         refreshButton.isEnabled = !busy && !sourcesLoading
         shortcutToggle.state = preferences.shortcutEnabled ? .on : .off
         shortcutToggle.isEnabled = !active && !busy
@@ -238,6 +270,16 @@ final class DesktopApp: NSObject, NSApplicationDelegate {
     @objc private func selectSettingsSource() {
         guard !active && !busy, let name = sourcePicker.selectedItem?.representedObject as? String else { return }
         rememberSource(name)
+    }
+
+    @objc private func changeLanguage() {
+        guard !active && !busy else { return }
+        preferences.language = TranscriptionLanguage.allCases[languagePicker.indexOfSelectedItem]
+    }
+
+    @objc private func changeSpeakerCount() {
+        guard !active && !busy else { return }
+        preferences.speakerCount = speakerPicker.indexOfSelectedItem
     }
 
     @objc private func changeShortcut() {
@@ -276,6 +318,13 @@ final class DesktopApp: NSObject, NSApplicationDelegate {
             throw NSError(domain: "Koprotokoll", code: 1, userInfo: [NSLocalizedDescriptionKey: detail])
         }
         return data
+    }
+
+    private func confirmedCapture(_ path: String, body: [String: Any], sound: String) async throws -> Data {
+        // Erst der bestätigte Aufnahmewechsel darf hörbaren Erfolg melden.
+        let result = try await request(path, body: body)
+        playSound(sound)
+        return result
     }
 
     private func serverReady() async -> Bool {
@@ -375,6 +424,7 @@ final class DesktopApp: NSObject, NSApplicationDelegate {
         do {
             let data = try await request("/api/capture")
             let state = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
+            let wasActive = active
             active = state["active"] as? Bool ?? false
             startedAt = state["started_at"] as? Double ?? 0
             if active {
@@ -388,12 +438,16 @@ final class DesktopApp: NSObject, NSApplicationDelegate {
                 item.button?.title = "Ko"
                 stateItem.title = listening ? "Bereit · \(preferences.modifier.title)" : "Bereit · Start über die Schaltfläche"
                 toggleItem.title = "Aufnahme starten"
+                if wasActive, state["stop_reason"] as? String == "silence", let id = state["meeting_id"] as? Int {
+                    NSWorkspace.shared.open(URL(string: config.baseURL + "/#meeting=\(id)")!)
+                }
             }
             for entry in sourcesMenu.items { entry.isEnabled = !active }
             if let error = state["error"] as? String {
                 stateItem.title = "Aufnahmefehler: \(error)"
                 item.button?.title = "Ko !"
             }
+            if let warning = state["warning"] as? String { stateItem.title = warning }
         } catch {
             stateItem.title = "Server nicht erreichbar; Aufnahmezustand unbekannt"
             item.button?.title = "Ko !"
@@ -413,7 +467,7 @@ final class DesktopApp: NSObject, NSApplicationDelegate {
             let state = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
             if state["active"] as? Bool == true {
                 stateItem.title = "Aufnahme wird gesichert …"
-                let result = try await request("/api/capture/stop", body: [:])
+                let result = try await confirmedCapture("/api/capture/stop", body: [:], sound: "Pop")
                 let meeting = try JSONSerialization.jsonObject(with: result) as? [String: Any] ?? [:]
                 active = false
                 if let id = meeting["id"] as? Int {
@@ -428,7 +482,9 @@ final class DesktopApp: NSObject, NSApplicationDelegate {
                     return
                 }
                 stateItem.title = "Aufnahme wird gestartet …"
-                _ = try await request("/api/capture/start", body: ["device": source.id, "title": ""])
+                var body: [String: Any] = ["device": source.id, "title": "", "language": preferences.language.rawValue]
+                if preferences.speakerCount > 0 { body["num_speakers"] = preferences.speakerCount }
+                _ = try await confirmedCapture("/api/capture/start", body: body, sound: "Tink")
                 active = true
                 item.button?.title = "● Aufnahme"
             }

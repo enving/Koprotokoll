@@ -171,6 +171,19 @@ Transkription. Für die deutsche Primeline-Wahl zusätzlich
 `python scripts/download_models.py --language de --asr-only` ausführen.
 Sprachwahl, lokale Modellpfade und Migration: [Konfiguration](docs/einrichtung.md#konfiguration).
 
+Bei deutschen Aufnahmen **Transkriptionssprache → Deutsch** wählen, auch in den
+Einstellungen der Mac-Menüleisten-App. Bestehende Aufnahmen lassen sich im Tab
+**Transkript** mit anderer Sprachwahl erneut transkribieren; die bisherige Fassung
+bleibt erhalten. Für Gespräche mit mehreren Sprachen **Automatisch** wählen.
+Aufnahmen stoppen und speichern sich nach **5 Minuten ohne erkannte Sprache**
+automatisch; anschließend beginnt die Auswertung.
+Für Monologe ist **Anzahl Sprecher → Nur ich (1 Person)** voreingestellt.
+Für Gespräche 2–20 Personen oder **Automatisch erkennen** wählen. Die Auswahl
+wird im Browser bzw. in der Mac-App für weitere Aufnahmen gespeichert. Fälschlich getrennte Stimmen lassen
+sich in der Übersicht als eine Person zusammenführen und bei Bedarf wieder trennen.
+Das Transkript und der Textexport zeigen **fortlaufenden Text ohne Zeitmarken**.
+Notizen und Soundbites lassen sich im Tab **Markierungen** anlegen.
+
 **Für richtig gute Zusammenfassungen** ein lokales Sprachmodell starten, z. B. mit
 [Ollama](https://ollama.com): `ollama pull qwen2.5:7b-instruct` – Koprotokoll findet es automatisch.
 Ohne LLM gibt es eine einfache, rein lokale Auswertung. Unter **Integrationen & API → Sprachmodell**

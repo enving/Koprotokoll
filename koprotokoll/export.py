@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 from .summarize import fmt_time
 
@@ -15,11 +16,31 @@ def _srt_time(sec: float) -> str:
     return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
 
 
+def transcript_text(segments: list[dict], names: dict[str, str]) -> str:
+    """Fortlaufende Absätze; Namen nur bei tatsächlichem Sprecherwechsel ausgeben."""
+    multiple = len({segment['speaker'] for segment in segments}) > 1
+    paragraphs, parts = [], []
+    speaker, length = None, 0
+    for segment in segments:
+        changed = segment['speaker'] != speaker
+        if parts and (changed or (length >= 650 and re.search(r'[.!?…]["“”»]?$', parts[-1]))):
+            paragraphs.append(' '.join(parts))
+            parts, length = [], 0
+        if multiple and changed:
+            paragraphs.append(names.get(segment['speaker'], segment['speaker']) + ':')
+        speaker = segment['speaker']
+        parts.append(segment['text'])
+        length += len(segment['text']) + 1
+    if parts:
+        paragraphs.append(' '.join(parts))
+    return '\n\n'.join(paragraphs)
+
+
 def export(meeting: dict, segments: list[dict], bookmarks: list[dict], fmt: str) -> tuple[str, str]:
     names = meeting.get("speakers") or {}
     name = lambda spk: names.get(spk, spk)  # noqa: E731
     if fmt == "txt":
-        body = "\n".join(f"[{fmt_time(s['start'])}] {name(s['speaker'])}: {s['text']}" for s in segments)
+        body = transcript_text(segments, names)
         return body + "\n", "text/plain; charset=utf-8"
     if fmt == "srt":
         blocks = [
@@ -31,11 +52,11 @@ def export(meeting: dict, segments: list[dict], bookmarks: list[dict], fmt: str)
         data = {"meeting": meeting, "segments": segments, "bookmarks": bookmarks}
         return json.dumps(data, ensure_ascii=False, indent=2), "application/json"
     if fmt == "md":
-        return _markdown(meeting, segments, bookmarks, name), "text/markdown; charset=utf-8"
+        return _markdown(meeting, segments, bookmarks), "text/markdown; charset=utf-8"
     raise ValueError(f"Unbekanntes Format: {fmt}")
 
 
-def _markdown(meeting: dict, segments: list[dict], bookmarks: list[dict], name) -> str:
+def _markdown(meeting: dict, segments: list[dict], bookmarks: list[dict]) -> str:
     out = [f"# {meeting['title']}", ""]
     if meeting.get("duration"):
         out += [f"Dauer: {fmt_time(meeting['duration'])}", ""]
@@ -65,5 +86,5 @@ def _markdown(meeting: dict, segments: list[dict], bookmarks: list[dict], name) 
         out += [f"- [{fmt_time(b['start'])}] ({b['kind']}) {b['note']}" for b in bookmarks]
         out.append("")
     out += ["## Transkript", ""]
-    out += [f"**{name(s['speaker'])}** [{fmt_time(s['start'])}]: {s['text']}  " for s in segments]
+    out.append(transcript_text(segments, meeting.get('speakers') or {}))
     return "\n".join(out) + "\n"
