@@ -1,3 +1,8 @@
 -r requirements.txt
 # Nur klassisches Outlook auf Windows bietet COM.
 pywin32>=306; sys_platform == "win32"
+# Windows-Desktop-App: Tray-Symbol (pystray/Pillow) und WASAPI-Loopback-Aufnahme (pycaw/comtypes).
+pystray>=0.19; sys_platform == "win32"
+Pillow>=10.0; sys_platform == "win32"
+pycaw>=20240311; sys_platform == "win32"
+comtypes>=1.4; sys_platform == "win32"
