@@ -222,6 +222,9 @@ class HardwareRecorder:
             if major >= 15 and MACOS_CAPTURE_HELPER.exists() and shutil.which("swiftc"):
                 devices.insert(0, {"id": SYSTEM_AUDIO_DEVICE,
                                    "name": "Systemton + Standardmikrofon (macOS)"})
+        elif sys.platform.startswith("win"):
+            devices.insert(0, {"id": SYSTEM_AUDIO_DEVICE,
+                               "name": "Systemton + Standardmikrofon (Windows WASAPI-Loopback)"})
         return {"backend": backend(), "devices": devices, "details": details}
 
     def status(self) -> dict:
@@ -251,9 +254,9 @@ class HardwareRecorder:
             system_path = self.capture_dir / f"{path.stem}.system.wav"
             mic_path = self.capture_dir / f"{path.stem}.microphone.wav"
             if is_system_mix:
-                if sys.platform != "darwin":
-                    raise ValueError("Systemtonaufnahme ist in dieser Version nur unter macOS verfügbar.")
-                command = [self._system_helper_executable(), "--capture-audio", str(system_path), str(mic_path)]
+                if sys.platform != "darwin" and not sys.platform.startswith("win"):
+                    raise ValueError("Systemtonaufnahme ist nur unter macOS und Windows verfügbar.")
+                command = self._system_helper_command(system_path, mic_path)
             else:
                 command = record_command(device, Path("-"), channels=channels, sample_rate=sample_rate)
             try:
@@ -290,6 +293,13 @@ class HardwareRecorder:
         # Derselbe App-Bundle trägt die Audio-Zwecktexte und die macOS-Identität.
         app = build_app(Settings(data_dir=self.capture_dir.parent), configure_launcher=False)
         return str(app / "Contents" / "MacOS" / "Koprotokoll")
+
+    def _system_helper_command(self, system_path: Path, mic_path: Path) -> list[str]:
+        """Hilfsprozess für Systemton + Mikrofon: Swift-App auf dem Mac, Python-WASAPI-Helper unter Windows."""
+        if sys.platform.startswith("win"):
+            return [sys.executable, "-m", "koprotokoll.capture_windows",
+                    "--capture-audio", str(system_path), str(mic_path)]
+        return [self._system_helper_executable(), "--capture-audio", str(system_path), str(mic_path)]
 
     @staticmethod
     def _write_pcm(active: ActiveCapture) -> None:
