@@ -355,7 +355,14 @@ class HardwareRecorder:
                 raise RuntimeError("Es läuft keine Hardwareaufnahme.")
             self._active = None
         if active.process.poll() is None:
-            active.process.send_signal(signal.SIGINT)
+            try:
+                active.process.send_signal(signal.SIGINT)
+            except (ValueError, OSError):
+                # Unter Windows ohne gemeinsame Konsole ist SIGINT nicht zustellbar;
+                # der Windows-Helper beendet sich dann über die Stopp-Datei.
+                pass
+            if active.system_path is not None and active.mic_path is not None and sys.platform.startswith("win"):
+                active.mic_path.with_suffix(".stop").touch()
         try:
             active.process.wait(timeout=15)
         except subprocess.TimeoutExpired:

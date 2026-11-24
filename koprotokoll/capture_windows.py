@@ -96,12 +96,16 @@ class DualTrackRecorder:
     unvollständige Spur wird nicht still weitergeführt.
     """
 
-    def __init__(self, system_source, mic_source, system_path: Path, mic_path: Path, stream=None):
+    def __init__(self, system_source, mic_source, system_path: Path, mic_path: Path, stream=None,
+                 stop_file: Path | None = None):
         self.system_source = system_source
         self.mic_source = mic_source
         self.system_path = Path(system_path)
         self.mic_path = Path(mic_path)
         self.stream = stream
+        # Stopp-Datei: existiert sie, endet die Aufnahme sauber (SIGINT ist auf Windows
+        # ohne gemeinsame Konsole nicht zuverlässig zustellbar).
+        self.stop_file = Path(stop_file) if stop_file is not None else self.mic_path.with_suffix(".stop")
         self.system: WavTrackWriter | None = None
         self.mic: WavTrackWriter | None = None
         self.ready_emitted = False
@@ -131,6 +135,8 @@ class DualTrackRecorder:
         ended: set[str] = set()
         last_status = time.monotonic()
         while len(ended) < len(sources):
+            if self.stop_file.exists():
+                break
             idle = True
             chunks: dict[str, bytes | None] = {}
             for name, source in sources.items():
@@ -274,12 +280,14 @@ def wasapi_sources() -> tuple[_WasapiCaptureSource, _WasapiCaptureSource]:
     return system, mic
 
 
-def run_capture(system_path: Path, mic_path: Path, sources=None, stream=None) -> tuple[Path, Path]:
-    """Nimmt beide Spuren auf, bis SIGINT/EOF; sauberer Abschluss mit Exit-Code 0."""
+def run_capture(system_path: Path, mic_path: Path, sources=None, stream=None,
+                stop_file: Path | None = None) -> tuple[Path, Path]:
+    """Nimmt beide Spuren auf, bis SIGINT/Stopp-Datei/EOF; sauberer Abschluss mit Exit-Code 0."""
     if sources is None:
         sources = wasapi_sources()
     system_source, mic_source = sources
-    recorder = DualTrackRecorder(system_source, mic_source, system_path, mic_path, stream=stream)
+    recorder = DualTrackRecorder(system_source, mic_source, system_path, mic_path, stream=stream,
+                                 stop_file=stop_file)
 
     def _stop(signum, frame):
         raise KeyboardInterrupt
@@ -287,8 +295,9 @@ def run_capture(system_path: Path, mic_path: Path, sources=None, stream=None) ->
     previous = signal.signal(signal.SIGINT, _stop)
     try:
         recorder.run()
-    except KeyboardInterrupt:
-        # Ausdrücklicher Stopp: Spuren sauber schließen, danach mischt capture.py.
+    except (KeyboardInterrupt, BrokenPipeError):
+        # Ausdrücklicher Stopp (SIGINT, Stopp-Datei) oder abgebrochener Statuskanal:
+        # Spuren sauber schließen, danach mischt capture.py.
         if recorder.system is not None:
             recorder.system.close()
         if recorder.mic is not None:
@@ -297,6 +306,7 @@ def run_capture(system_path: Path, mic_path: Path, sources=None, stream=None) ->
         return recorder.system_path, recorder.mic_path
     finally:
         signal.signal(signal.SIGINT, previous)
+        recorder.stop_file.unlink(missing_ok=True)
         for source in (system_source, mic_source):
             close = getattr(source, "close", None)
             if close is not None:
