@@ -308,12 +308,22 @@ separater, unveränderter Eingabeweg.
 
 Während der Aufnahme zeigt iOS in der Dynamic Island oben automatisch das orange
 Mikrofon-Symbol an. Dieser Indikator ist bei jedem Mikrofonzugriff aktiv und lässt
-sich nicht abschalten. Beendet wird die Aufnahme durch Antippen der
-Stopp-Schaltfläche in der Aufnahme-Anzeige des Kurzbefehls; der Generator stellt
-das fest auf „Bei Tippen" ein (`WFRecordingEnd: 'On Tap'`). Ein Tap direkt auf die
+sich nicht abschalten. Die Aufnahme-Aktion der Kurzbefehle legt sich während der
+gesamten Aufnahme als Vollbild-Fenster über den Bildschirm („Tippe, um die
+Aufnahme zu beenden“); der Bildschirm ist in dieser Zeit nicht nutzbar, egal ob der
+Kurzbefehl aus der App, vom Home-Bildschirm oder per Back Tap gestartet wird.
+Beendet wird die Aufnahme durch Antippen des Fensters; der Generator stellt das
+fest auf „Bei Tippen“ ein (`WFRecordingEnd: 'On Tap'`). Ein Tap direkt auf die
 Dynamic Island stoppt nur die systemseitige Bildschirmaufnahme (rote Anzeige); die
 Bildschirmaufnahme lässt sich aus einem Kurzbefehl heraus weder starten noch
-stoppen. Zum Start den Kurzbefehl als Icon auf den Home-Bildschirm legen, dann
-bleibt die Kurzbefehle-App im Hintergrund. Wird der Bildschirm während der
-Aufnahme dunkel, die automatische Sperre unter **Einstellungen → Anzeige &
-Helligkeit** höher setzen.
+stoppen.
+
+Wer den Bildschirm während der Aufnahme weiter nutzen will, zeichnet dafür in
+**Sprachmemos** auf: Dort läuft die Aufnahme im Hintergrund weiter, während andere
+Apps benutzbar bleiben, und das orange Symbol in der Dynamic Island zeigt sie an.
+Beendet wird sie in der Sprachmemos-App. Die fertige m4a-Datei überträgt man per
+AirDrop auf den Mac und lädt sie dort per API hoch
+(`curl http://localhost:8000/v1/audio/transcriptions -H "Authorization: Bearer $KEY" -F file=@aufnahme.m4a`)
+oder importiert sie in der Koprotokoll-Oberfläche. Ein automatisches Senden an den
+Mac ist auf diesem Weg nicht möglich, weil Kurzbefehle nicht auf die
+Sprachmemos-Mediathek zugreifen dürfen.
