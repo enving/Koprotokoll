@@ -198,7 +198,9 @@ in Nextcloud erscheinen.
   Neuer Modus „Meeting aufnehmen“ neben „Diktieren“.
 - **Systemton aufnehmen**, getrennt vom Mikrofon (zwei Spuren → bessere Sprechertrennung):
   - Linux: PipeWire/PulseAudio-„Monitor“-Quelle
-  - Windows: WASAPI-Loopback (z. B. `soundcard` oder `PyAudioWPatch`)
+  - Windows: WASAPI-Loopback (z. B. `soundcard` oder `PyAudioWPatch`); in Koprotokoll als
+    Tray-App mit Doppeltipp umgesetzt (#35, siehe [Audioaufnahme](hardware-aufnahme.md)),
+    Kodiktat-Kopplung steht noch aus
   - macOS: Core-Audio-Taps und AVAudioEngine im nativen App-Paket, siehe [Audioaufnahme](hardware-aufnahme.md); alternativ ein vorhandener Loopback-Eingang
 - **Meeting erkennen:** Termin aus dem Kalender-Planer des Servers *oder* lokal: Teams-/Zoom-/Webex-
   Prozess aktiv und Mikrofon in Benutzung → Hinweis *„Meeting erkannt – aufnehmen?“*.

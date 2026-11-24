@@ -196,3 +196,76 @@ def test_linux_systemton_bleibt_abgelehnt(tmp_path, monkeypatch):
     recorder = capture.HardwareRecorder(tmp_path)
     with pytest.raises(ValueError, match="macOS und Windows"):
         recorder.start(capture.SYSTEM_AUDIO_DEVICE)
+
+
+class EndlessSource:
+    """Endlose PCM-Quelle (wie WASAPI ohne Stopp)."""
+
+    def read(self, max_bytes: int) -> bytes:
+        return b"\x01\x00\x02\x00" * (max_bytes // 4)
+
+
+def test_stoppdatei_beendet_aufnahme_sauber_und_wird_entfernt(tmp_path):
+    import threading
+    import time
+
+    stop = tmp_path / "m.stop"
+
+    def touch():
+        time.sleep(0.2)
+        stop.touch()
+
+    threading.Thread(target=touch, daemon=True).start()
+    system, mic = run_capture(tmp_path / "s.wav", tmp_path / "m.wav",
+                              sources=(EndlessSource(), EndlessSource()))
+    assert not stop.exists()
+    frames = []
+    for path in (system, mic):
+        with wave.open(str(path), "rb") as audio:
+            frames.append(audio.getnframes())
+    assert frames[0] > 0 and abs(frames[0] - frames[1]) <= 24_000  # Höchstens 0,5 s Versatz
+
+
+def test_windows_stopp_legt_stoppdatei_an_und_ueberlebt_sigint_valueerror(tmp_path, monkeypatch):
+    import sys
+    import time
+    from types import SimpleNamespace
+
+    import koprotokoll.capture as capture
+
+    class FakeProc:
+        returncode = 0
+
+        def poll(self):
+            return None
+
+        def send_signal(self, sig):
+            raise ValueError("Unsupported signal: 2")  # Windows ohne gemeinsame Konsole
+
+        def wait(self, **kwargs):
+            return 0
+
+        def kill(self):
+            pass
+
+    system = tmp_path / "a.system.wav"
+    mic = tmp_path / "a.microphone.wav"
+    mixed = tmp_path / "a.wav"
+    for path in (system, mic, mixed):
+        with wave.open(str(path), "wb") as audio:
+            audio.setnchannels(2)
+            audio.setsampwidth(2)
+            audio.setframerate(48_000)
+            audio.writeframes(b"\x00\x00\x00\x00" * 4_800)
+    recorder = capture.HardwareRecorder(tmp_path)
+    recorder._active = capture.ActiveCapture(
+        device=capture.SYSTEM_AUDIO_DEVICE, path=mixed, process=FakeProc(), channels=2,
+        sample_rate=48_000, started_at=time.time(), system_path=system, mic_path=mic)
+    monkeypatch.setattr(capture.sys, "platform", "win32")
+    monkeypatch.setattr(capture, "_validate_stem_durations", lambda s, m: (0.1, 0.1))
+    monkeypatch.setattr(capture.subprocess, "run",
+                        lambda *a, **k: SimpleNamespace(returncode=0, stderr=""))
+    path, duration, device = recorder.stop()
+    assert path == mixed and duration == pytest.approx(0.1) and device == capture.SYSTEM_AUDIO_DEVICE
+    # Die Stopp-Datei ist der Handshake an den Windows-Helper (der sie beim Beenden entfernt).
+    assert mic.with_suffix(".stop").exists()
