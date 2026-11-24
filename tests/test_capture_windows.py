@@ -133,3 +133,66 @@ def test_emit_status_ist_eine_json_zeile():
     stream = io.StringIO()
     emit_status({"level_db": -30.5}, stream)
     assert json.loads(stream.getvalue()) == {"level_db": -30.5}
+
+
+# --- Anbindung an die vorhandene Aufnahme-API (capture.HardwareRecorder) ---
+
+def test_windows_systemton_startet_python_hilfsprozess(tmp_path, monkeypatch):
+    import sys
+    from types import SimpleNamespace
+
+    import koprotokoll.capture as capture
+
+    commands = []
+
+    class FakeProc:
+        def __init__(self, command):
+            commands.append(command)
+            self.stdout = iter([json.dumps({"ready": True}).encode()])
+            self.returncode = 0
+
+        def poll(self):
+            return None
+
+        def wait(self, **kwargs):
+            return 0
+
+        def send_signal(self, sig):
+            pass
+
+        def kill(self):
+            pass
+
+    monkeypatch.setattr(capture.sys, "platform", "win32")
+    monkeypatch.setattr(capture.subprocess, "Popen", lambda command, **kwargs: FakeProc(command))
+    recorder = capture.HardwareRecorder(tmp_path)
+    status = recorder.start(capture.SYSTEM_AUDIO_DEVICE)
+    assert status["active"] is True
+    assert commands[0][:4] == [sys.executable, "-m", "koprotokoll.capture_windows", "--capture-audio"]
+    assert commands[0][4].endswith(".system.wav")
+    assert commands[0][5].endswith(".microphone.wav")
+
+
+def test_windows_geraeteliste_enthält_wasapi_systemton(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    import koprotokoll.capture as capture
+
+    monkeypatch.setattr(capture.sys, "platform", "win32")
+    monkeypatch.setattr(capture.subprocess, "run", lambda *a, **k: SimpleNamespace(
+        stdout='[dshow @ 0] "USB-Mikrofon" (audio)\n', stderr="", returncode=0))
+    recorder = capture.HardwareRecorder(tmp_path)
+    result = recorder.devices()
+    assert result["backend"] == "dshow"
+    assert result["devices"][0] == {"id": capture.SYSTEM_AUDIO_DEVICE,
+                                    "name": "Systemton + Standardmikrofon (Windows WASAPI-Loopback)"}
+    assert result["devices"][1]["name"] == "USB-Mikrofon"
+
+
+def test_linux_systemton_bleibt_abgelehnt(tmp_path, monkeypatch):
+    import koprotokoll.capture as capture
+
+    monkeypatch.setattr(capture.sys, "platform", "linux")
+    recorder = capture.HardwareRecorder(tmp_path)
+    with pytest.raises(ValueError, match="macOS und Windows"):
+        recorder.start(capture.SYSTEM_AUDIO_DEVICE)
