@@ -304,3 +304,15 @@ Einmalig den Zugriff auf Mikrofon und eigenen Mac erlauben. Danach Kurzbefehl
 starten, sprechen, die Aufnahme durch Antippen beenden und nach Abschluss in der
 Ziel-App **Einfügen** wählen. Die Mikrofontaste der offiziellen T3-App bleibt ein
 separater, unveränderter Eingabeweg.
+
+Während der Aufnahme zeigt iOS in der Dynamic Island oben automatisch das orange
+Mikrofon-Symbol an. Dieser Indikator ist bei jedem Mikrofonzugriff aktiv und lässt
+sich nicht abschalten. Beendet wird die Aufnahme durch Antippen der
+Stopp-Schaltfläche in der Aufnahme-Anzeige des Kurzbefehls; der Generator stellt
+das fest auf „Bei Tippen" ein (`WFRecordingEnd: 'On Tap'`). Ein Tap direkt auf die
+Dynamic Island stoppt nur die systemseitige Bildschirmaufnahme (rote Anzeige); die
+Bildschirmaufnahme lässt sich aus einem Kurzbefehl heraus weder starten noch
+stoppen. Zum Start den Kurzbefehl als Icon auf den Home-Bildschirm legen, dann
+bleibt die Kurzbefehle-App im Hintergrund. Wird der Bildschirm während der
+Aufnahme dunkel, die automatische Sperre unter **Einstellungen → Anzeige &
+Helligkeit** höher setzen.
