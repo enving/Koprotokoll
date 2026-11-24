@@ -298,3 +298,20 @@ def test_api_client_http_fehler_und_verbindungsfehler_werden_deutsch(api_server)
     offline = ApiClient("http://127.0.0.1:1", timeout=0.5)
     with pytest.raises(ApiError, match="nicht erreichbar"):
         offline.status()
+
+
+def test_windows_main_ohne_windows_bleibt_mit_deutscher_meldung_stehen(monkeypatch):
+    import sys
+
+    import koprotokoll.desktop_windows as dw
+
+    monkeypatch.setattr(sys, "platform", "darwin")
+    with pytest.raises(SystemExit, match="nur unter Windows"):
+        dw.main()
+
+
+def test_vk_tabelle_deckt_alle_drei_zusatztasten_ab():
+    from koprotokoll.desktop_windows import VK_MODIFIERS, VK_MODIFIER_CODES
+
+    assert set(VK_MODIFIERS) == {"alt", "control", "shift"}
+    assert len(VK_MODIFIER_CODES) == 6
