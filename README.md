@@ -92,6 +92,7 @@ Kanzleien, Behörden oder einfach vertrauliche Team-Meetings ist das oft ein No-
 **🔎 Wiederfinden**
 - Volltextsuche über alle Meetings, Klick springt an die Stelle im Audio
 - Player mit mitlaufendem Transkript
+- **Originalaufnahme herunterladen** (Knopf zeigt Format und Dateigröße)
 - Soundbites, Kommentare und Aufgaben-Markierungen mit Zeitstempel
 - Export als Markdown, TXT, SRT-Untertitel oder JSON
 

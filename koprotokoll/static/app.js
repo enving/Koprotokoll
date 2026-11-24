@@ -33,6 +33,14 @@ function fmt(sec) {
   return hh ? `${hh}:${p(mm)}:${p(ss)}` : `${p(mm)}:${p(ss)}`;
 }
 
+function fmtBytes(bytes) {
+  if (!bytes) return "";
+  const units = ["Byte", "kB", "MB", "GB"];
+  let value = bytes, i = 0;
+  while (value >= 1024 && i < units.length - 1) { value /= 1024; i += 1; }
+  return `${value.toLocaleString("de-DE", { maximumFractionDigits: i ? 1 : 0 })} ${units[i]}`;
+}
+
 function parseTime(str) {
   if (typeof str !== "string") return null;
   const parts = str.split(":").map(Number);
@@ -161,7 +169,17 @@ async function openMeeting(id, { keepTab = false, seekTo = null } = {}) {
       ? `Fehler: ${m.error}` : `${STATUS[m.status] || m.status} … ${Math.round(m.progress * 100)} %`;
   }
   const player = $("#player");
-  if (changedMeeting) player.src = withKey(`/api/meetings/${id}/audio`);
+  const audioLink = $("#m-audio");
+  const audio = m.audio || null;
+  player.hidden = !audio;
+  audioLink.hidden = !audio;
+  if (audio) {
+    audioLink.href = withKey(`/api/meetings/${id}/audio?download=1`);
+    const format = audio.suffix.replace(".", "").toUpperCase();
+    audioLink.textContent = `Audio herunterladen (${format}, ${fmtBytes(audio.bytes)})`;
+    audioLink.title = `Originalaufnahme als ${format}-Datei speichern`;
+  }
+  if (changedMeeting && audio) player.src = withKey(`/api/meetings/${id}/audio`);
 
   renderSummary();
   renderTranscript();

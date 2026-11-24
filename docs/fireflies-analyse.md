@@ -65,7 +65,7 @@ Aus den Accessibility-Texten der Seite ergibt sich das beworbene Kern-Feature-Se
 | Soundbites / Kommentare / Action-Item-Lesezeichen | ✔ mit Zeitstempel | Tabelle `bookmarks` |
 | Player mit synchronem Transkript | ✔ Klick auf Zeitstempel springt, aktuelle Zeile wird hervorgehoben | `<audio>` + `timeupdate` |
 | Redeanteile (Talk-Time) | ✔ | aus Segmentdauern |
-| Download | ✔ Markdown, TXT, SRT, JSON | `/api/meetings/{id}/export` |
+| Download | ✔ Markdown, TXT, SRT, JSON; Originalaufnahme als Audiodatei (Knopf mit Format und Größe) | `/api/meetings/{id}/export`, `/api/meetings/{id}/audio?download=1` |
 | Aufgaben in eigene Programme | ✔ VTODO-Download; CalDAV, Outlook-COM und Microsoft To Do als explizite Exportziele implementiert, reale Anbieter-/Windows-Prüfung offen | `tasks.py`; stabile Kennungen gegen Dubletten |
 | Bot für Microsoft Teams | ✔ Web-Client, Gastbeitritt (setzt erlaubte anonyme Beitritte voraus) | `bot/platforms.py` |
 | Bot für BigBlueButton | Adapter für Greenlight-Gastlinks und „Nur zuhören“ implementiert; Live-Prüfung offen | [Nachweis und Grenzen](nachweise/issue-13-bbb.md) |

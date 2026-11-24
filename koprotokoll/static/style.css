@@ -43,6 +43,11 @@ mark { background: var(--hl); color: inherit; border-radius: 3px; }
 .head-actions { display: flex; gap: 8px; }
 .meeting-head .head-actions { flex-wrap: wrap; max-width: 100%; }
 #m-recap { min-height: 44px; max-width: 100%; }
+.download-link { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 6px 12px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; color: inherit;
+  text-decoration: none; white-space: nowrap; }
+.download-link:hover { background: var(--accent-soft); border-color: var(--accent); }
+.download-link::before { content: "↓"; color: var(--accent); font-weight: 700; }
 .task-export summary, .task-export select, .task-export button { min-height: 44px; cursor: pointer; }
 .task-export select { width: 100%; max-width: 100%; min-width: 0; }
 .task-export .stack { margin-top: 8px; }

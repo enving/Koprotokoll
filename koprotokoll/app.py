@@ -359,6 +359,23 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
             raise HTTPException(404, "Meeting nicht gefunden")
         return m
 
+    def safe_download_name(title: str, suffix: str) -> str:
+        """Dateiname für Downloads: Umlaute aufschreiben, Sonderzeichen ersetzen."""
+        name = title or "aufnahme"
+        for umlaut, ascii_ersatz in (("ä", "ae"), ("ö", "oe"), ("ü", "ue"),
+                                     ("Ä", "Ae"), ("Ö", "Oe"), ("Ü", "Ue"), ("ß", "ss")):
+            name = name.replace(umlaut, ascii_ersatz)
+        name = re.sub(r"[^\w.-]+", "_", name).strip("._")[:80] or "aufnahme"
+        return f"{name}{suffix}"
+
+    def audio_file(meeting_id: int, m: dict) -> Path | None:
+        """Audiodatei eines Meetings: bevorzugt die WAV-Fassung, sonst die Originaldatei."""
+        wav = s.media_dir / f"{meeting_id}.wav"
+        if wav.is_file():
+            return wav
+        path = Path(m.get("audio_path") or "")
+        return path if path.is_file() else None
+
     def finished_meeting(meeting_id: int) -> dict:
         meeting = meeting_or_404(meeting_id)
         if meeting["status"] != "done":
@@ -627,6 +644,9 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
     @api.get("/api/meetings/{meeting_id}")
     def get_meeting(meeting_id: int):
         m = meeting_or_404(meeting_id)
+        audio = audio_file(meeting_id, m)
+        m["audio"] = ({"suffix": audio.suffix.lower() or ".wav", "bytes": audio.stat().st_size}
+                      if audio else None)
         m.pop("audio_path", None)
         m["segments"] = db.get_segments(meeting_id)
         m["bookmarks"] = db.list_bookmarks(meeting_id)
@@ -704,12 +724,14 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
         return {"ok": True}
 
     @api.get("/api/meetings/{meeting_id}/audio")
-    def audio(meeting_id: int):
+    def audio(meeting_id: int, download: bool = False):
         m = meeting_or_404(meeting_id)
-        wav = s.media_dir / f"{meeting_id}.wav"
-        path = wav if wav.exists() else Path(m["audio_path"] or "")
-        if not path.is_file():
+        path = audio_file(meeting_id, m)
+        if path is None:
             raise HTTPException(404, "Audio nicht vorhanden")
+        if download:
+            suffix = path.suffix.lower() or ".wav"
+            return FileResponse(path, filename=safe_download_name(m["title"], suffix))
         return FileResponse(path)
 
     @api.post("/api/meetings/{meeting_id}/summarize")
@@ -743,9 +765,9 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
             body, mime = export(m, db.get_segments(meeting_id), db.list_bookmarks(meeting_id), format)
         except ValueError as e:
             raise HTTPException(400, str(e)) from e
-        filename = re.sub(r"[^\w.-]+", "_", m["title"])[:80] or "meeting"
+        filename = safe_download_name(m["title"], f".{format}")
         return Response(body, media_type=mime,
-                        headers={"Content-Disposition": f'attachment; filename="{filename}.{format}"'})
+                        headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
     @api.get("/api/search")
     def search(q: str, meeting_id: int | None = None):

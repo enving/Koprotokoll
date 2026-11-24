@@ -22,11 +22,12 @@ curl -H "Authorization: Bearer $KEY" http://localhost:8000/api/meetings
 curl -H "Authorization: Bearer $KEY" http://localhost:8000/api/meetings/1
 curl -H "Authorization: Bearer $KEY" "http://localhost:8000/api/search?q=budget"
 curl -H "Authorization: Bearer $KEY" "http://localhost:8000/api/meetings/1/export?format=md"
+curl -H "Authorization: Bearer $KEY" -o aufnahme.wav "http://localhost:8000/api/meetings/1/audio?download=1"
 ```
 
 | Bereich | Endpunkte |
 |---|---|
-| Meetings | `GET/POST /api/meetings`, `GET/PATCH/DELETE /api/meetings/{id}`, `…/audio`, `…/export`, `…/summarize`, `…/ask`, `…/bookmarks` |
+| Meetings | `GET/POST /api/meetings`, `GET/PATCH/DELETE /api/meetings/{id}`, `…/audio` (`?download=1` als Datei), `…/export`, `…/summarize`, `…/ask`, `…/bookmarks` |
 | Suche | `GET /api/search?q=` |
 | Bots | `POST/GET /api/bots`, `GET/DELETE /api/bots/{id}` |
 | Webhooks | `GET/POST /api/webhooks`, `DELETE /api/webhooks/{id}`, `POST /api/webhooks/{id}/test` |
