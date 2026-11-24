@@ -81,6 +81,48 @@ läuft; ein automatischer Start bei der Anmeldung wird nicht eingerichtet.
 Der lokale Server bleibt für die Auswertung und Oberfläche geöffnet. Sein
 Startprotokoll liegt unter `data/desktop/server.log`.
 
+## Windows: per Alt-Doppeltipp aufnehmen (Tray-App)
+
+Unter Windows startet derselbe Befehl die Tray-App:
+
+```bash
+python -m koprotokoll desktop
+```
+
+Voraussetzungen: Windows 10/11, `ffmpeg` im PATH (mischt die beiden Spuren
+beim Stopp) und die optionalen Pakete aus `requirements-windows.txt`
+(`pystray`/`Pillow` für das Tray-Symbol, `pycaw`/`comtypes` für WASAPI):
+
+```bash
+pip install -r requirements-windows.txt
+```
+
+Die App startet den lokalen Koprotokoll-Server, falls er nicht läuft, und
+zeigt im Tray den Zustand an: **Bereit**, **● Aufnahme läuft seit mm:ss** oder
+**Fehler: …**.
+
+1. Im Einstellungsdialog (**Einstellungen …**) ist unter **Audioquelle** die
+   Quelle **Systemton + Standardmikrofon (Windows WASAPI-Loopback)** wählbar;
+   für die Doppeltipp-Aufnahme ist sie der Standard. Unter **Tastenkürzel**
+   lässt sich der globale Doppeltipp abschalten oder auf **Strg (Control)** bzw.
+   **Umschalt** umstellen; Standard ist **Alt zweimal**. Die Einstellungen
+   werden als JSON unter `data/desktop/einstellungen.json` gespeichert und
+   bleiben nach einem Neustart erhalten. Während einer Aufnahme sind sie
+   gesperrt.
+2. **Alt zweimal kurz drücken und loslassen** startet die Aufnahme global, auch
+   wenn eine andere Anwendung den Fokus hat. Kombinationen mit anderen Tasten
+   und längeres Halten lösen nicht aus. **Erneut zweimal** stoppt: Erst dann
+   sichert die App die vollständigen Spuren, startet die vorhandene Auswertung
+   und öffnet das Meeting im Browser (`#meeting=<id>`). Während der Aufnahme
+   läuft keine Transkription.
+3. Systemton (WASAPI-Loopback) und Standardmikrofon werden als zwei getrennte
+   lokale WAV-Spuren erfasst (`data/captures/*.system.wav` und
+   `*.microphone.wav`), im Gleichschritt ausgerichtet und vor der Verarbeitung
+   auf gleiche Länge geprüft (Toleranz 0,5 s). Weichen sie ab oder fehlt ein
+   Gerät, bricht die Aufnahme mit sichtbarer Fehlermeldung ab; die App wechselt
+   nicht still auf eine unvollständige Quelle. Es wird kein Bildschirm
+   aufgenommen und keine Standard-Audiogeräte werden ungefragt geändert.
+
 ## Geeigneten Eingang wählen
 
 1. Vor dem Gespräch alle Beteiligten über die Aufnahme informieren und die
@@ -96,8 +138,9 @@ Startprotokoll liegt unter `data/desktop/server.log`.
    und DirectShow unter Windows. Es wird dabei nichts aufgenommen oder an einen
    Dienst übertragen.
 3. In Koprotokoll **Aufnehmen → Audioeingang dieses Rechners** wählen und eine
-   Quelle auswählen. Unter macOS 15+ gibt es zusätzlich **Systemton +
-   Standardmikrofon**. Die laufende Pegelanzeige bestätigt Samples am Eingang;
+   Quelle auswählen. Unter macOS 15+ und unter Windows (Tray-App, siehe oben)
+   gibt es zusätzlich **Systemton + Standardmikrofon**. Die laufende
+   Pegelanzeige bestätigt Samples am Eingang;
    sie allein bestätigt noch nicht, dass beide Gesprächsseiten enthalten sind.
    Für den eigenständigen Entwickler-/CLI-Test kann eine Quelle gezielt
    ausgewählt werden. Auf macOS ist das die Gerätenummer aus der Liste; unter
@@ -140,9 +183,11 @@ Signalquelle sichtbar sein: etwa über einen vom Betriebssystem oder
   Für diesen nativen Weg braucht der lokale Entwicklungsrechner `swiftc` aus den
   Apple-Entwicklerwerkzeugen; ohne Compiler wird die Option nicht angeboten.
   Die App wählt keinen Treiber und ändert weder Standard-Ein- noch
-  Standard-Ausgabe. Auf Linux und Windows hängt Systemtonzugriff davon ab, ob
-  die Audioinfrastruktur einen Monitor-/Loopback-Eingang anbietet. Auf Geräten
-  ohne passenden Eingang bleibt der Import einer lokalen Aufnahmedatei verfügbar.
+  Standard-Ausgabe. Unter Windows erfasst die Tray-App den Systemton direkt
+  per WASAPI-Loopback (siehe Abschnitt oben); auf Linux hängt der Systemtonzugriff
+  davon ab, ob die Audioinfrastruktur einen Monitor-/Loopback-Eingang anbietet.
+  Auf Geräten ohne passenden Eingang bleibt der Import einer lokalen
+  Aufnahmedatei verfügbar.
 
 ## In Koprotokoll importieren und prüfen
 
