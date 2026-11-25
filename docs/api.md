@@ -48,7 +48,7 @@ gelöscht. Mit `save_meeting=1` wird die Aufnahme zusätzlich als Meeting gespei
 | `file` | Pflicht. WAV (16 kHz wird direkt gelesen), sonst alles, was ffmpeg kann (mp3, m4a, ogg, webm …) |
 | `response_format` | `json` (Standard, `{"text": …, "asr": …}`), `text`, `verbose_json` (mit `segments`, `start`/`end` in Sekunden), `srt`, `vtt` |
 | `language` | optional: `auto`, `de`, `en`; wählt tatsächlich das lokale Backend gemäß [Sprachwahl](einrichtung.md#sprachwahl-und-cpu-modelle); ohne Angabe gilt der Serverstandard |
-| `save_meeting` | optional: `1` legt zusätzlich ein Meeting an – Audio dauerhaft in `data/media`, Titel aus den ersten Worten des Transkripts. Die Antwort bleibt unverändert; zusätzlich wird der Header `X-Koprotokoll-Meeting: <id>` gesetzt |
+| `save_meeting` | optional: `1` speichert die Aufnahme dauerhaft als Meeting – Audio in `data/media`, Titel aus den ersten Worten des Transkripts. Schlank: Segmente kommen direkt aus dieser Transkription, die Pipeline läuft nicht erneut (kein zweites Transkribieren, keine Sprechererkennung, keine Zusammenfassung), Status sofort `done`. Antwort bleibt unverändert, Header `X-Koprotokoll-Meeting: <id>` |
 | `num_speakers` | optional: Sprecherzahl nur für das gespeicherte Meeting; `1` deaktiviert die Sprechertrennung (Monolog) |
 | `model`, `prompt`, `temperature` | Kompatibilitätsfelder ohne Wirkung; `model` überschreibt die Serverkonfiguration nicht |
 

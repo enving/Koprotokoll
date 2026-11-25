@@ -41,10 +41,10 @@ from .microsoft import MicrosoftCalendarSource, MicrosoftClient, MicrosoftError
 from .mail import MailError, MailService
 from .outlook import OutlookComCalendarSource, OutlookError, outlook_available
 from typing import Literal
-from .pipeline import Pipeline
+from .pipeline import Pipeline, meeting_payload
 from .recap import RecapMailer
 from .scheduler import CalendarScheduler
-from .speech import (Diarizer, ModelUnavailable, SherpaDiarizer, Transcriber, create_transcriber,
+from .speech import (Diarizer, ModelUnavailable, SherpaDiarizer, Transcriber, build_utterances, create_transcriber,
                      language_mode, transcription_info)
 from .summarize import LLM, ask
 from .transcriptions import FORMATS, render, transcribe_upload, title_from_transcript
@@ -824,18 +824,28 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
         except Exception as e:
             log.exception("Lokale Transkription fehlgeschlagen (%s)", selected)
             raise HTTPException(503, f"Lokale Transkription fehlgeschlagen: {type(e).__name__}: {e}") from e
+        info = transcription_info(selected, mode)
         meeting_id = None
         if save_meeting:
-            # Aufnahme dauerhaft ablegen: Audio in data/media, Titel aus den ersten Worten.
+            # Schlank ablegen: Audio nach data/media, Segmente direkt aus der
+            # ohnehin berechneten Transkription übernehmen – die Pipeline läuft
+            # nicht erneut (kein zweites Transkribieren, keine Sprechererkennung,
+            # keine Zusammenfassung).
             text = " ".join(w.text for w in words).strip()
             meeting_id = db.create_meeting(title_from_transcript(text), Path(file.filename or "aufnahme").stem,
                                            num_speakers,
-                                           meta={"asr_language": mode, "source": "api-transcription"})
+                                           meta={"asr_language": mode, "source": "api-transcription", "asr": info})
             dst = s.media_dir / f"{meeting_id}{ext}"
             dst.write_bytes(raw)
-            db.update_meeting(meeting_id, audio_path=str(dst))
-            pipeline.submit(meeting_id)
-        info = transcription_info(selected, mode)
+            segments = build_utterances(words, [])
+            db.replace_segments(meeting_id, segments)
+            diarization = ({"status": "fixed", "speaker_count": 1, "requested_speakers": 1, "source": "setting"}
+                           if num_speakers == 1 else {"status": "disabled"})
+            db.merge_speaker_names(meeting_id, {s["speaker"]: f"Sprecher {s['speaker'][1:]}" for s in segments},
+                                   diarization=diarization)
+            db.update_meeting(meeting_id, audio_path=str(dst), duration=duration,
+                              status="done", progress=1.0, error=None)
+            events.emit("meeting.completed", meeting_payload(db.get_meeting(meeting_id)))
         body, mime = render(words, duration, response_format, None)
         headers = {"X-Koprotokoll-ASR-Model": info["model"], "X-Koprotokoll-ASR-Mode": mode,
                    "X-Koprotokoll-ASR-Backend": info["backend"]}

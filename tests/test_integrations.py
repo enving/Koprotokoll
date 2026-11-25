@@ -265,9 +265,13 @@ def test_transcription_save_meeting_keeps_audio_and_transcript_title(client, tmp
     meetings = client.get("/api/meetings").json()
     assert [m["id"] for m in meetings] == [mid]
     assert meetings[0]["title"].startswith("Guten Morgen zusammen")  # erste Worte statt Datum
+    assert meetings[0]["status"] == "done"  # sofort fertig, Pipeline transkribiert nicht erneut
     detail = client.get(f"/api/meetings/{mid}").json()
     assert detail["num_speakers"] == 1
     assert detail["meta"]["source"] == "api-transcription"
+    assert detail["meta"]["diarization"]["status"] == "fixed"
+    assert len(detail["segments"]) > 0 and detail["segments"][0]["text"].startswith("Guten Morgen")
+    assert detail["speakers"] == {"S1": "Sprecher 1"}
     assert list((tmp_path / "media").glob(f"{mid}.*")), "Audio liegt nicht in data/media"
     assert detail["audio"]["bytes"] > 0
     assert list((tmp_path / "tmp").iterdir()) == []
