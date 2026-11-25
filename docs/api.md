@@ -27,7 +27,7 @@ curl -H "Authorization: Bearer $KEY" -o aufnahme.wav "http://localhost:8000/api/
 
 | Bereich | Endpunkte |
 |---|---|
-| Meetings | `GET/POST /api/meetings`, `GET/PATCH/DELETE /api/meetings/{id}`, `…/audio` (`?download=1` als Datei), `…/export`, `…/summarize`, `…/ask`, `…/bookmarks` |
+| Meetings | `GET/POST /api/meetings`, `GET/PATCH/DELETE /api/meetings/{id}`, `POST /api/meetings/bulk-delete` (`{"ids": […]}` löscht mehrere auf einmal), `…/audio` (`?download=1` als Datei), `…/export`, `…/summarize`, `…/ask`, `…/bookmarks` |
 | Suche | `GET /api/search?q=` |
 | Bots | `POST/GET /api/bots`, `GET/DELETE /api/bots/{id}` |
 | Webhooks | `GET/POST /api/webhooks`, `DELETE /api/webhooks/{id}`, `POST /api/webhooks/{id}/test` |
@@ -39,14 +39,17 @@ curl -H "Authorization: Bearer $KEY" -o aufnahme.wav "http://localhost:8000/api/
 ## Diktieren: `/v1/audio/transcriptions` (OpenAI-kompatibel)
 
 Für kurze Aufnahmen – etwa aus **Kodiktat** oder jedem Programm, das die OpenAI-Transkriptions-API
-spricht. Es wird **kein Meeting angelegt**, keine Sprechererkennung und keine Zusammenfassung
-gemacht; die Datei liegt nur während der Anfrage in `data/tmp` und wird danach gelöscht.
+spricht. Standardmäßig wird **kein Meeting angelegt**, keine Sprechererkennung und keine
+Zusammenfassung gemacht; die Datei liegt nur während der Anfrage in `data/tmp` und wird danach
+gelöscht. Mit `save_meeting=1` wird die Aufnahme zusätzlich als Meeting gespeichert (siehe unten).
 
 | Feld (multipart) | Bedeutung |
 |---|---|
 | `file` | Pflicht. WAV (16 kHz wird direkt gelesen), sonst alles, was ffmpeg kann (mp3, m4a, ogg, webm …) |
 | `response_format` | `json` (Standard, `{"text": …, "asr": …}`), `text`, `verbose_json` (mit `segments`, `start`/`end` in Sekunden), `srt`, `vtt` |
 | `language` | optional: `auto`, `de`, `en`; wählt tatsächlich das lokale Backend gemäß [Sprachwahl](einrichtung.md#sprachwahl-und-cpu-modelle); ohne Angabe gilt der Serverstandard |
+| `save_meeting` | optional: `1` legt zusätzlich ein Meeting an – Audio dauerhaft in `data/media`, Titel aus den ersten Worten des Transkripts. Die Antwort bleibt unverändert; zusätzlich wird der Header `X-Koprotokoll-Meeting: <id>` gesetzt |
+| `num_speakers` | optional: Sprecherzahl nur für das gespeicherte Meeting; `1` deaktiviert die Sprechertrennung (Monolog) |
 | `model`, `prompt`, `temperature` | Kompatibilitätsfelder ohne Wirkung; `model` überschreibt die Serverkonfiguration nicht |
 
 ```bash
@@ -305,6 +308,14 @@ Einmalig den Zugriff auf Mikrofon und eigenen Mac erlauben. Danach Kurzbefehl
 starten, sprechen, die Aufnahme durch Antippen beenden und nach Abschluss in der
 Ziel-App **Einfügen** wählen. Die Mikrofontaste der offiziellen T3-App bleibt ein
 separater, unveränderter Eingabeweg.
+
+Die Vorlage sendet `save_meeting=1` und `num_speakers=1`: Jede Aufnahme wird auf
+dem Mac als Meeting gespeichert – Audiodatei dauerhaft in `data/media`, Titel aus
+den ersten Worten des Transkripts (zum schnellen Wiedererkennen), Sprechertrennung
+deaktiviert. In der Oberfläche erscheint sie in der Meeting-Liste, Audio und
+Transkript sind dort erreichbar; der Text landet zusätzlich in der Zwischenablage.
+In der Liste lassen sich mehrere Aufnahmen per Häkchen auswählen und über
+„Ausgewählte löschen“ auf einmal entfernen.
 
 Während der Aufnahme zeigt iOS in der Dynamic Island oben automatisch das orange
 Mikrofon-Symbol an. Dieser Indikator ist bei jedem Mikrofonzugriff aktiv und lässt

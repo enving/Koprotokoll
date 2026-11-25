@@ -24,7 +24,11 @@ input { background: var(--panel); border: 1px solid var(--line); border-radius: 
 .engine { margin-left: auto; font-size: 11px; font-weight: 400; color: var(--muted); }
 .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 #meeting-list { overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 2px; }
-.m-item { padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+#m-bulk { align-items: center; gap: 8px; padding: 4px 10px; }
+#m-bulk button { margin-left: auto; padding: 4px 10px; }
+.m-item { padding: 8px 10px; border-radius: 8px; cursor: pointer; display: flex; gap: 8px; align-items: flex-start; }
+.m-item .m-check { flex: none; margin-top: 4px; }
+.m-item .m-body { flex: 1; min-width: 0; }
 .m-item:hover { background: var(--bg); }
 .m-item.active { background: var(--accent-soft); }
 .m-item .t { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

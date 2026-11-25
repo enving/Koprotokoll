@@ -1,7 +1,9 @@
 """OpenAI-kompatible Kurz-Transkription (``/v1/audio/transcriptions``), z. B. für Kodiktat.
 
-Anders als ein Meeting wird hier nichts gespeichert: keine Sprechererkennung, keine
-Zusammenfassung, die Aufnahme liegt nur während der Anfrage in einem temporären Ordner.
+Standardmäßig wird hier nichts gespeichert: keine Sprechererkennung, keine
+Zusammenfassung, die Aufnahme liegt nur während der Anfrage in einem temporären
+Ordner. Mit ``save_meeting=1`` wird zusätzlich ein Meeting angelegt, das Audio und
+Transkript dauerhaft in ``data/media`` bzw. der Datenbank hält.
 """
 
 from __future__ import annotations
@@ -40,6 +42,12 @@ def _load(src: Path, wav: Path) -> np.ndarray:
     except Exception:  # noqa: BLE001 – kein passendes WAV, dann eben ffmpeg
         to_wav16k(src, wav)
         return load_wav(wav)
+
+
+def title_from_transcript(text: str, max_words: int = 8) -> str:
+    """Titel für gespeicherte Kurzaufnahmen: die ersten Worte des Transkripts statt eines Datums."""
+    title = " ".join(text.split()[:max_words]).strip(" .,;:!?„“”\"'")
+    return title or "Aufnahme"
 
 
 def render(words: list[Word], duration: float, fmt: str, language: str | None) -> tuple[str | dict, str]:

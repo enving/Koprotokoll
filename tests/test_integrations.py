@@ -248,6 +248,64 @@ def test_transcription_converts_other_formats(client, tmp_path):
     assert list((tmp_path / "tmp").iterdir()) == []
 
 
+def test_title_from_transcript_uses_first_words():
+    from koprotokoll.transcriptions import title_from_transcript
+    assert title_from_transcript("") == "Aufnahme"
+    assert title_from_transcript("   ") == "Aufnahme"
+    assert title_from_transcript("Hallo Welt.") == "Hallo Welt"
+    t = title_from_transcript("Guten Morgen zusammen heute besprechen wir das Budget für das Projekt Atlas im Detail")
+    assert t == "Guten Morgen zusammen heute besprechen wir das Budget"
+
+
+def test_transcription_save_meeting_keeps_audio_and_transcript_title(client, tmp_path):
+    r = _transcribe(client, tmp_path, response_format="text", save_meeting="1", num_speakers="1")
+    assert r.status_code == 200 and r.text.startswith("Guten Morgen")
+    assert r.headers["content-type"].startswith("text/plain")
+    mid = int(r.headers["x-koprotokoll-meeting"])
+    meetings = client.get("/api/meetings").json()
+    assert [m["id"] for m in meetings] == [mid]
+    assert meetings[0]["title"].startswith("Guten Morgen zusammen")  # erste Worte statt Datum
+    detail = client.get(f"/api/meetings/{mid}").json()
+    assert detail["num_speakers"] == 1
+    assert detail["meta"]["source"] == "api-transcription"
+    assert list((tmp_path / "media").glob(f"{mid}.*")), "Audio liegt nicht in data/media"
+    assert detail["audio"]["bytes"] > 0
+    assert list((tmp_path / "tmp").iterdir()) == []
+    # ohne save_meeting bleibt alles flüchtig
+    r2 = _transcribe(client, tmp_path)
+    assert "x-koprotokoll-meeting" not in r2.headers
+    assert len(client.get("/api/meetings").json()) == 1
+
+
+def test_transcription_save_meeting_validates_speakers(client, tmp_path):
+    r = _transcribe(client, tmp_path, save_meeting="1", num_speakers="0")
+    assert r.status_code == 400 and "Sprecherzahl" in r.json()["detail"]
+    assert client.get("/api/meetings").json() == []
+
+
+def test_bulk_delete_meetings(client, tmp_path):
+    ids = []
+    for i in range(3):
+        r = client.post("/api/meetings", files={"file": (f"a{i}.wav", wav_bytes(tmp_path, 1), "audio/wav")})
+        assert r.status_code == 201
+        ids.append(r.json()["id"])
+    assert len(client.get("/api/meetings").json()) == 3
+    r = client.post("/api/meetings/bulk-delete", json={"ids": [ids[0], ids[2], ids[0], 999]})
+    assert r.status_code == 200
+    assert r.json() == {"ok": True, "deleted": [ids[0], ids[2]]}
+    rest = client.get("/api/meetings").json()
+    assert [m["id"] for m in rest] == [ids[1]]
+    assert not list((tmp_path / "media").glob(f"{ids[0]}.*"))
+    assert not list((tmp_path / "media").glob(f"{ids[2]}.*"))
+    assert list((tmp_path / "media").glob(f"{ids[1]}.*"))
+    assert client.post("/api/meetings/bulk-delete", json={"ids": []}).json()["deleted"] == []
+    assert client.post("/api/meetings/bulk-delete", json={"ids": [424242]}).json()["deleted"] == []
+    # einzeln löschen funktioniert weiterhin und räumt Dateien auf
+    client.delete(f"/api/meetings/{ids[1]}")
+    assert client.get("/api/meetings").json() == []
+    assert list((tmp_path / "media").iterdir()) == []
+
+
 # --------------------------------------------------------------------------- Webhooks
 class Receiver:
     def __init__(self):

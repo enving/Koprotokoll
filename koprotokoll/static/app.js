@@ -7,7 +7,7 @@ const STATUS = {
 };
 const COLORS = ["--s1", "--s2", "--s3", "--s4", "--s5", "--s6"];
 
-const state = { meetings: [], bots: [], current: null, segEls: [], pollTimer: null };
+const state = { meetings: [], bots: [], current: null, segEls: [], pollTimer: null, selected: new Set() };
 const ACTIVE_BOT = ["scheduled", "joining", "waiting_admit", "recording", "stopping"];
 const BOT_STATUS = {
   scheduled: "geplant", joining: "tritt bei", waiting_admit: "wartet auf Einlass", recording: "nimmt auf",
@@ -107,14 +107,46 @@ async function loadMeetings() {
     return h("div", {
       class: "m-item" + (state.current?.id === m.id ? " active" : ""),
       onclick: () => openMeeting(m.id),
-    }, h("div", { class: "t" }, m.title), h("div", { class: "s" }, sub));
+    },
+      h("input", {
+        type: "checkbox", class: "m-check", title: "Zum Sammellöschen markieren",
+        checked: state.selected.has(m.id) || null,
+        onclick: (e) => e.stopPropagation(),
+        onchange: (e) => {
+          if (e.target.checked) state.selected.add(m.id); else state.selected.delete(m.id);
+          renderBulkBar();
+        },
+      }),
+      h("div", { class: "m-body" }, h("div", { class: "t" }, m.title), h("div", { class: "s" }, sub)));
   }));
+  renderBulkBar();
   const busy = state.meetings.some((m) => !["done", "error"].includes(m.status));
   await loadBots();
   const botsBusy = state.bots.some((b) => ACTIVE_BOT.includes(b.status));
   clearTimeout(state.pollTimer);
   if (busy || botsBusy) state.pollTimer = setTimeout(refresh, botsBusy && !busy ? 3000 : 1500);
 }
+
+function renderBulkBar() {
+  const n = state.selected.size;
+  $("#m-bulk").hidden = n === 0;
+  $("#m-bulk-count").textContent = n ? `${n} ausgewählt` : "";
+}
+
+$("#m-bulk-delete").addEventListener("click", async () => {
+  const ids = [...state.selected];
+  if (!ids.length) return;
+  if (!confirm(`${ids.length} Aufnahme${ids.length > 1 ? "n" : ""} wirklich löschen?`)) return;
+  await api("/api/meetings/bulk-delete", jsonOpts("POST", { ids }));
+  if (state.current && ids.includes(state.current.id)) {
+    state.current = null;
+    $("#player").removeAttribute("src");
+    showView("empty");
+    history.replaceState(null, "", "#");
+  }
+  state.selected.clear();
+  await loadMeetings();
+});
 
 async function refresh() {
   await loadMeetings();
@@ -456,7 +488,9 @@ $("#m-export").addEventListener("change", (e) => {
 
 $("#m-delete").addEventListener("click", async () => {
   if (!state.current || !confirm(`„${state.current.title}“ wirklich löschen?`)) return;
-  await api(`/api/meetings/${state.current.id}`, { method: "DELETE" });
+  const id = state.current.id;
+  await api(`/api/meetings/${id}`, { method: "DELETE" });
+  state.selected.delete(id);
   state.current = null;
   $("#player").removeAttribute("src");
   showView("empty");

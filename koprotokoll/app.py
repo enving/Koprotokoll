@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import logging
 import os
 import re
@@ -46,7 +47,7 @@ from .scheduler import CalendarScheduler
 from .speech import (Diarizer, ModelUnavailable, SherpaDiarizer, Transcriber, create_transcriber,
                      language_mode, transcription_info)
 from .summarize import LLM, ask
-from .transcriptions import FORMATS, render, transcribe_upload
+from .transcriptions import FORMATS, render, transcribe_upload, title_from_transcript
 from .tasks import TaskError, TaskExporter, meeting_tasks, tasks_ics
 
 log = logging.getLogger(__name__)
@@ -78,6 +79,10 @@ class TranscriptVersionIn(BaseModel):
 class MeetingPatch(BaseModel):
     title: str | None = None
     speakers: dict[str, str] | None = None
+
+
+class BulkDeleteIn(BaseModel):
+    ids: list[int]
 
 
 class BookmarkIn(BaseModel):
@@ -358,6 +363,16 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
         if m is None:
             raise HTTPException(404, "Meeting nicht gefunden")
         return m
+
+    def _delete_meeting_files(m: dict) -> None:
+        """Datenbankzeile und Audiodateien eines Meetings entfernen (nur media_dir)."""
+        db.delete_meeting(m["id"])
+        files = list(s.media_dir.glob(f"{m['id']}.*"))
+        if m["audio_path"]:
+            files.append(Path(m["audio_path"]))
+        for p in files:
+            if p.resolve().parent == s.media_dir.resolve():
+                p.unlink(missing_ok=True)
 
     def safe_download_name(title: str, suffix: str) -> str:
         """Dateiname für Downloads: Umlaute aufschreiben, Sonderzeichen ersetzen."""
@@ -696,14 +711,20 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
     @api.delete("/api/meetings/{meeting_id}")
     def delete_meeting(meeting_id: int):
         m = meeting_or_404(meeting_id)
-        db.delete_meeting(meeting_id)
-        files = list(s.media_dir.glob(f"{meeting_id}.*"))
-        if m["audio_path"]:
-            files.append(Path(m["audio_path"]))
-        for p in files:
-            if p.resolve().parent == s.media_dir.resolve():
-                p.unlink(missing_ok=True)
+        _delete_meeting_files(m)
         return {"ok": True, "id": m["id"]}
+
+    @api.post("/api/meetings/bulk-delete")
+    def bulk_delete_meetings(body: BulkDeleteIn):
+        """Mehrere Meetings auf einmal löschen; unbekannte IDs werden übersprungen."""
+        deleted = []
+        for mid in dict.fromkeys(body.ids):
+            m = db.get_meeting(mid)
+            if m is None:
+                continue
+            _delete_meeting_files(m)
+            deleted.append(mid)
+        return {"ok": True, "deleted": deleted}
 
     @api.post("/api/meetings/{meeting_id}/single-speaker")
     def single_speaker(meeting_id: int):
@@ -777,7 +798,8 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
     @api.post("/v1/audio/transcriptions", tags=["openai"])
     def openai_transcribe(file: UploadFile = File(...), model: str = Form(""), language: str | None = Form(None),
                           prompt: str = Form(""), response_format: str = Form("json"),
-                          temperature: float | None = Form(None)):
+                          temperature: float | None = Form(None), save_meeting: bool = Form(False),
+                          num_speakers: int | None = Form(None)):
         # model, prompt und temperature bleiben Kompatibilitätsfelder; language wählt den Modus.
         if response_format not in FORMATS:
             raise HTTPException(400, f"Unbekanntes response_format: {response_format} "
@@ -785,13 +807,16 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
         ext = Path(file.filename or "aufnahme.wav").suffix.lower() or ".wav"
         if ext not in TRANSCRIBE_EXT:
             raise HTTPException(400, f"Dateityp {ext} wird nicht unterstützt")
+        if save_meeting and num_speakers is not None and num_speakers < 1:
+            raise HTTPException(400, "Die Sprecherzahl muss positiv sein")
         try:
             mode = language_mode(language, default_mode)
             selected = select_transcriber(mode)
         except ValueError as e:
             raise HTTPException(400, str(e)) from e
+        raw = file.file.read()
         try:
-            words, duration = transcribe_upload(file.file, ext, selected, s.data_dir / "tmp")
+            words, duration = transcribe_upload(io.BytesIO(raw), ext, selected, s.data_dir / "tmp")
         except ModelUnavailable as e:
             raise HTTPException(503, str(e)) from e
         except RuntimeError as e:
@@ -799,10 +824,23 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
         except Exception as e:
             log.exception("Lokale Transkription fehlgeschlagen (%s)", selected)
             raise HTTPException(503, f"Lokale Transkription fehlgeschlagen: {type(e).__name__}: {e}") from e
+        meeting_id = None
+        if save_meeting:
+            # Aufnahme dauerhaft ablegen: Audio in data/media, Titel aus den ersten Worten.
+            text = " ".join(w.text for w in words).strip()
+            meeting_id = db.create_meeting(title_from_transcript(text), Path(file.filename or "aufnahme").stem,
+                                           num_speakers,
+                                           meta={"asr_language": mode, "source": "api-transcription"})
+            dst = s.media_dir / f"{meeting_id}{ext}"
+            dst.write_bytes(raw)
+            db.update_meeting(meeting_id, audio_path=str(dst))
+            pipeline.submit(meeting_id)
         info = transcription_info(selected, mode)
         body, mime = render(words, duration, response_format, None)
         headers = {"X-Koprotokoll-ASR-Model": info["model"], "X-Koprotokoll-ASR-Mode": mode,
                    "X-Koprotokoll-ASR-Backend": info["backend"]}
+        if meeting_id is not None:
+            headers["X-Koprotokoll-Meeting"] = str(meeting_id)
         if isinstance(body, dict):
             body["asr"] = info
             return JSONResponse(body, headers=headers)

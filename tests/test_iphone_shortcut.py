@@ -26,6 +26,11 @@ def test_shortcut_serializes_audio_file_and_response_tokens_for_apple_import():
     file = form[0]
     assert file['WFItemType'] == 5
     assert file['WFValue']['Value']['Value']['OutputUUID'] == audio['UUID']
+    # Aufnahme wird auf dem Mac als Meeting gespeichert (Audio bleibt erhalten), Monolog ohne Sprechertrennung
+    fields = {f['WFKey']['Value']['string']: f['WFValue']['Value'].get('string')
+              for f in form if f['WFItemType'] != 5}
+    assert fields['save_meeting'] == '1' and fields['num_speakers'] == '1'
+    assert fields['language'] == 'de' and fields['response_format'] == 'text'
     # Ein bloßes WFTextTokenAttachment wird in Apples Textaktion leer dargestellt.
     token = text['WFTextActionText']
     assert token['WFSerializationType'] == 'WFTextTokenString'
