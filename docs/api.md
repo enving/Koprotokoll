@@ -271,11 +271,28 @@ Heuristik aktiv.
 
 `GET /api/llm` liefert Status, Modellliste, `provider`, `timeout`, `api_key_set`,
 `env_overrides`, `external` und `external_confirmed`, niemals den Schlüssel.
-`PUT /api/llm/provider` speichert `provider` (`ollama`, `openai`, `other`), `url`,
-`model`, `timeout` (0,01–3600 Sekunden), optional `api_key` und `external_confirmed`.
-Ein fehlender/null Schlüssel bleibt erhalten, `""` löscht ihn. Externe URLs erfordern
+`PUT /api/llm/provider` speichert `provider` (`ollama`, `mistral`, `openai`, `other`),
+`url`, `model`, `timeout` (0,01–3600 Sekunden), optional `api_key` und `external_confirmed`.
+Das Preset `mistral` füllt `https://api.mistral.ai/v1` als URL vor. Ein fehlender/null
+Schlüssel bleibt erhalten, `""` löscht ihn. Externe URLs erfordern
 `external_confirmed: true`. `POST /api/llm/test` prüft den gespeicherten Anbieter:
 Erreichbarkeit, Modell vorhanden, kurzer Probeaufruf als getrennte Felder.
+
+### Coding CLI als Sprachmodell-Quelle (z. B. Vibe)
+
+- `GET /api/llm/cli-sources`: gefundene CLI-Quellen ohne Schlüsselmaterial, z. B.
+  `{"sources":[{"source":"vibe","label":"Mistral Vibe CLI","provider":"mistral",
+  "url":"https://api.mistral.ai/v1","model":"mistral-large-4-0","models":[…],
+  "key_available":true,"key_source":"macOS-Schlüsselbund (ai.mistral.vibe)",
+  "config":"…/.vibe/config.toml"}]}`. Quelle: `~/.vibe/config.toml` (überschreibbar
+  mit `KOPROTOKOLL_VIBE_CONFIG`); Schlüssel aus `MISTRAL_API_KEY` oder macOS-Schlüsselbund.
+- `POST /api/llm/cli-import` mit `{"source":"vibe","external_confirmed":true}` und
+  optional `api_key` (manuell nachgetragen): übernimmt Endpunkt und Modell und speichert
+  den Schlüssel lokal in `llm-settings.json` (0600). Antwort ist `GET /api/llm`
+  (`api_key_set: true`, niemals der Schlüssel). 400 bei unbekannter Quelle, fehlendem
+  oder ungültigem Schlüssel, ungültigem Modellnamen oder externer URL ohne
+  `external_confirmed: true`. Ohne CLI-Konfiguration oder Schlüssel: manuelle Eingabe
+  über `PUT /api/llm/provider`.
 
 ### Transkript-Nachbesserung
 

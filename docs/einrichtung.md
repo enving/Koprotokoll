@@ -595,8 +595,18 @@ Originalquellen: [Ollama OpenAI-Kompatibilität](https://docs.ollama.com/api/ope
 ### Eigenen Sprachmodell-Anbieter einrichten
 
 Unter **Sprachmodell** eine Vorlage wählen, Basis-URL (einschließlich `/v1`),
-Modellname, optional API-Schlüssel und Timeout eintragen. Die Modellliste kann einen
-Namen übernehmen. Zuerst speichern, dann den gespeicherten Anbieter testen.
+Modellname, optional API-Schlüssel und Timeout eintragen. Als Preset genügt bei
+**„Mistral API“** der Schlüssel von [console.mistral.ai](https://console.mistral.ai) –
+die URL `https://api.mistral.ai/v1` ist vorausgefüllt. Komfortabler geht es über
+**„Sprachmodell einrichten“ → „Konfiguration übernehmen“**: Koprotokoll liest aktives
+Modell und Endpunkt aus `~/.vibe/config.toml` (Coding CLI „Vibe“) und den Schlüssel aus
+der Umgebung `MISTRAL_API_KEY` oder – nur macOS – aus dem Login-Schlüsselbund der CLI
+(`ai.mistral.vibe`; evtl. einmalige System-Freigabe nötig). Fehlt beides, kann der
+Schlüssel einmal manuell eingetragen werden. Der Schlüssel wird nur lokal in
+`llm-settings.json` (Dateirechte 0600) gespeichert und weder angezeigt noch über die
+API zurückgegeben. Bei Mistral-Modellen liest die App nur die Text-Antwort; die
+Denkausgabe (Thinking) wird ignoriert. Die Modellliste kann einen Namen übernehmen. Zuerst speichern, dann
+den gespeicherten Anbieter testen.
 Für externe Adressen die Übertragung von Transkripttext ausdrücklich bestätigen;
 ohne Bestätigung bleibt die Auswertung gesperrt. Externe Auswertungen tragen am
 Meeting-Ergebnis die verwendete Dienstadresse. Lokale Defaults bleiben erhalten.
