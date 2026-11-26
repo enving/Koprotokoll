@@ -1349,7 +1349,7 @@ async function renderLocalModel() {
         await renderLocalModel();
       } catch (err) { message.textContent = err.message; }
     };
-    const provider = h("select", { "aria-label": "Anbieter" }, ...[["ollama", "Ollama lokal"], ["openai", "OpenAI"], ["other", "Anderer OpenAI-kompatibler Server"]].map(([value, label]) => h("option", { value }, label)));
+    const provider = h("select", { "aria-label": "Anbieter" }, ...[["ollama", "Ollama lokal"], ["mistral", "Mistral API"], ["openai", "OpenAI"], ["other", "Anderer OpenAI-kompatibler Server"]].map(([value, label]) => h("option", { value }, label)));
     provider.value = config.provider;
     const url = h("input", { "aria-label": "Basis-URL", value: config.url });
     const name = h("input", { "aria-label": "Modellname", value: config.model });
@@ -1357,7 +1357,7 @@ async function renderLocalModel() {
     const remove = h("input", { type: "checkbox" });
     const timeout = h("input", { type: "number", "aria-label": "Timeout in Sekunden", value: config.timeout, min: "0.01", max: "3600", step: "any" });
     const confirm = h("input", { type: "checkbox" });
-    provider.onchange = () => { if (provider.value === "openai") url.value = "https://api.openai.com/v1"; if (provider.value === "ollama") url.value = "http://localhost:11434/v1"; confirm.checked = false; };
+    provider.onchange = () => { if (provider.value === "openai") url.value = "https://api.openai.com/v1"; if (provider.value === "mistral") url.value = "https://api.mistral.ai/v1"; if (provider.value === "ollama") url.value = "http://localhost:11434/v1"; confirm.checked = false; };
     url.oninput = () => { confirm.checked = false; };
     model.onchange = () => { name.value = model.value; };
     const providerSave = h("button", { type: "button" }, "Anbieter speichern");
@@ -1413,7 +1413,7 @@ async function openLlmSetup() {
   await renderLlmSetup();
 }
 
-async function renderLlmSetup() {
+async function renderLlmSetup(flash = null) {
   const body = $("#llm-setup-body");
   stopLlmSetupPoll();
   body.replaceChildren(h("p", { role: "status" }, "Status wird geprüft …"));
@@ -1422,13 +1422,18 @@ async function renderLlmSetup() {
   catch (err) { body.replaceChildren(h("p", { role: "alert" }, err.message)); return; }
   const kids = [h("p", {},
     "Ein lokales Sprachmodell schreibt Übersicht, Entscheidungen und Aufgaben selbst – es läuft auf diesem Rechner (Download ca. 5 GB, bleibt lokal). Ohne Modell bleibt alles nutzbar; Koprotokoll arbeitet dann mit Regeln.")];
+  if (flash) kids.unshift(h("p", { role: "status" }, flash));
   if (setup.setup_step === "install_server") {
     kids.push(
       h("p", {}, `Der Server unter ${setup.url} ist nicht erreichbar. Damit ein Sprachmodell lokal laufen kann, muss zuerst einer installiert sein:`),
       h("ol", {}, setup.instructions.map((step) => h("li", {},
         h("b", {}, `${step.title}. `), step.text, " ",
         step.link ? h("a", { href: step.link, target: "_blank", rel: "noopener" }, step.link_label || step.link) : null))),
-      h("div", { class: "row" }, h("button", { type: "button", onclick: renderLlmSetup }, "Erneut prüfen")));
+      h("div", { class: "row" }, h("button", { type: "button", onclick: () => renderLlmSetup() }, "Erneut prüfen")));
+  } else if (setup.setup_step === "check_endpoint") {
+    kids.push(
+      h("p", {}, `${setup.message} Endpunkt, Schlüssel und Erreichbarkeit lassen sich unten bzw. in den Einstellungen prüfen.`),
+      h("div", { class: "row" }, h("button", { type: "button", onclick: () => renderLlmSetup() }, "Erneut prüfen")));
   } else if (setup.setup_step === "pull_model" || setup.setup_step === "select_model") {
     const modelInput = h("input", { value: setup.suggested_model, "aria-label": "Modellname" });
     const status = h("p", { role: "status", class: "muted small" }, setup.message);
@@ -1454,7 +1459,7 @@ async function renderLlmSetup() {
         ? `Server erreichbar (${setup.url}), aber das Modell „${setup.model}“ fehlt. Laden aus der App – ca. 5 GB, der genaue Fortschritt erscheint beim Laden; der Download bleibt auf diesem Rechner.`
         : `Server erreichbar (${setup.url}), aber das Modell „${setup.model}“ fehlt. Dieser Anbieter lädt die App nicht selbst – bitte manuell laden und danach „Erneut prüfen“.`),
       h("label", {}, "Modellname ", modelInput),
-      h("div", { class: "row" }, start, cancel, h("button", { type: "button", onclick: renderLlmSetup }, "Erneut prüfen")),
+      h("div", { class: "row" }, start, cancel, h("button", { type: "button", onclick: () => renderLlmSetup() }, "Erneut prüfen")),
       barWrap, status);
     if (setup.setup_step !== "pull_model") start.disabled = true;
   } else if (setup.setup_step === "ready") {
@@ -1464,6 +1469,33 @@ async function renderLlmSetup() {
   } else {
     kids.push(h("p", {}, `${setup.message} Ohne Sprachmodell arbeitet Koprotokoll mit Regeln – alles bleibt nutzbar.`));
   }
+
+  // Eigenen Endpunkt / Coding CLI – in jedem Zustand sichtbar, auch ohne lokalen Server.
+  kids.push(h("h3", {}, "Eigenen Endpunkt oder Coding CLI verwenden"));
+  let sources = [];
+  try { sources = (await api("/api/llm/cli-sources")).sources; } catch { sources = []; }
+  if (sources.length) {
+    for (const src of sources) {
+      const confirm = h("input", { type: "checkbox", "aria-label": "Externe Übertragung bestätigen" });
+      const importBtn = h("button", { type: "button" }, "Konfiguration übernehmen");
+      const st = h("p", { role: "status", class: "muted small" });
+      importBtn.onclick = async () => {
+        importBtn.disabled = true;
+        try {
+          await api("/api/llm/cli-import", jsonOpts("POST", { source: src.source, external_confirmed: confirm.checked }));
+          await renderLlmSetup(`Übernommen: ${src.label} · ${src.url} · Modell „${src.model}“. Jetzt in den Einstellungen den Anbieter testen und die Modellauswahl speichern.`);
+        } catch (err) { st.textContent = err.message; importBtn.disabled = false; }
+      };
+      kids.push(h("div", { class: "cli-source" },
+        h("p", {}, `${src.label}: Modell „${src.model}“, Endpunkt ${src.url} – ${src.key_available ? `Schlüssel gefunden (${src.key_source})` : "kein Schlüssel gefunden (Umgebung/Schlüsselbund)"}. Der Schlüssel wird nur lokal gespeichert und nie angezeigt.`),
+        h("label", {}, confirm, ` Transkripttext wird an ${src.url} gesendet. Ich bestätige die externe Übertragung.`),
+        h("div", { class: "row" }, importBtn), st));
+    }
+  } else {
+    kids.push(h("p", { class: "muted small" }, "Keine Coding-CLI-Konfiguration gefunden (~/.vibe/config.toml)."));
+  }
+  kids.push(h("button", { type: "button", onclick: () => { $("#dlg-llm-setup").close(); location.hash = "#integrations"; } },
+    "Eigenen Endpunkt in den Einstellungen eintragen"));
   body.replaceChildren(...kids);
 }
 

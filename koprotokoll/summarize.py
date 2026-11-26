@@ -101,7 +101,7 @@ class LLM:
         )
         with urllib.request.build_opener(NoRedirect).open(req, timeout=self.s.llm_timeout) as r:
             data = json.load(r)
-        return data["choices"][0]["message"]["content"]
+        return content_text(data["choices"][0]["message"]["content"])
 
     # ------------------------------------------------------------------
     # Modell-Download (nur lokaler Ollama-Server, eigene API ohne /v1)
@@ -181,6 +181,17 @@ def validate_model_name(model: str) -> str:
     if not MODEL_NAME_RE.fullmatch(model) or ".." in model:
         raise ValueError("Ungültiger Modellname.")
     return model
+
+
+def content_text(content) -> str:
+    """Antwort-Content als Text. Manche Anbieter (z. B. Mistral) liefern eine Liste von
+    Teilen – dann nur die Text-Teile; Thinking-Teile werden ignoriert."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(p["text"] for p in content
+                       if isinstance(p, dict) and isinstance(p.get("text"), str))
+    return str(content)
 
 
 def parse_json(text: str) -> dict:

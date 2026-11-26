@@ -17,7 +17,7 @@ from test_koprotokoll import FakeDiarizer, FakeTranscriber
 def ollama():
     """Fake-Ollama: GET /v1/models, POST /v1/chat/completions und POST /api/pull (NDJSON)."""
     state = {"models": [], "pull_lines": [], "pull_delay": 0.0, "pull_body": None,
-             "pull_finished": False, "pull_aborted": False}
+             "pull_finished": False, "pull_aborted": False, "list_content": False}
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
@@ -36,7 +36,13 @@ def ollama():
         def do_POST(self):
             body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             if self.path == "/v1/chat/completions":
-                self._json({"choices": [{"message": {"content": '{"overview":"Erfunden."}'}}]})
+                if state["list_content"]:
+                    # Mistral liefert content als Liste (inkl. Thinking-Teil).
+                    content = [{"type": "thinking", "thinking": [{"type": "text", "text": "Denke nach."}]},
+                               {"type": "text", "text": '{"overview":"Erfunden."}'}]
+                else:
+                    content = '{"overview":"Erfunden."}'
+                self._json({"choices": [{"message": {"content": content}}]})
             elif self.path == "/api/pull":
                 state["pull_body"] = body
                 self.send_response(200)
