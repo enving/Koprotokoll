@@ -185,11 +185,15 @@ sich in der Übersicht als eine Person zusammenführen und bei Bedarf wieder tre
 Das Transkript und der Textexport zeigen **fortlaufenden Text ohne Zeitmarken**.
 Notizen und Soundbites lassen sich im Tab **Markierungen** anlegen.
 
-**Für richtig gute Zusammenfassungen** ein lokales Sprachmodell starten, z. B. mit
-[Ollama](https://ollama.com): `ollama pull qwen2.5:7b-instruct` – Koprotokoll findet es automatisch.
-Ohne LLM gibt es eine einfache, rein lokale Auswertung. Unter **Integrationen & API → Sprachmodell**
+**Für richtig gute Zusammenfassungen** ein lokales Sprachmodell einrichten – am einfachsten
+über den Knopf **„Sprachmodell einrichten“** (am Meeting-Ergebnis und unter
+**Integrationen & API → Sprachmodell**): bei laufendem [Ollama](https://ollama.com) lädt die App
+das Modell direkt (ca. 5 GB, bleibt lokal), sonst zeigt sie die Installationsschritte.
+Manuell geht es mit `ollama pull qwen2.5:7b-instruct` – Koprotokoll findet es automatisch.
+Ohne LLM gibt es eine einfache, rein lokale Auswertung; am Ergebnis steht dann, dass die
+Zusammenfassung mit Regeln erstellt wurde. Unter **Integrationen & API → Sprachmodell**
 kannst du deinen eigenen lokalen oder ausdrücklich bestätigten externen Anbieter eintragen
-([Einrichtung](docs/einrichtung.md#eigenen-sprachmodell-anbieter-einrichten)).
+([Einrichtung](docs/einrichtung.md#lokales-llm-für-zusammenfassungen-empfohlen)).
 
 ➡️ Alles Weitere – Meeting-Bot, Google Kalender & Gmail, Konfiguration – steht in
 **[docs/einrichtung.md](docs/einrichtung.md)**, die API in **[docs/api.md](docs/api.md)**.
