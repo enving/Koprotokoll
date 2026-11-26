@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import threading
 import urllib.error
 import urllib.request
 from collections import Counter
@@ -32,6 +33,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 class LLM:
     def __init__(self, settings: Settings):
         self.s = settings
+        self._pull_response = None
 
     def snapshot(self) -> LLM:
         """Anbieter und Zugang für einen Auswertungslauf unverändert halten."""
@@ -40,22 +42,37 @@ class LLM:
     def status(self) -> dict:
         state = dict(server_reachable=False, model_present=False, available=False,
                      inference="nicht geprüft", model=self.s.llm_model, url=self.s.llm_base_url,
-                     models=[], enabled=self.s.llm_enabled)
-        if not self.s.llm_enabled or (external_llm(self.s.llm_base_url) and not self.s.llm_external_confirmed):
-            state["message"] = "LLM deaktiviert; Heuristik wird verwendet."
+                     models=[], enabled=self.s.llm_enabled, reason="")
+        if not self.s.llm_enabled:
+            state["reason"] = "disabled"
+            state["message"] = "Sprachmodell ausgeschaltet; Heuristik wird verwendet."
+            return state
+        if external_llm(self.s.llm_base_url) and not self.s.llm_external_confirmed:
+            state["reason"] = "external_blocked"
+            state["message"] = "Externe Übertragung nicht bestätigt; Heuristik wird verwendet."
             return state
         try:
             req = urllib.request.Request(self.s.llm_base_url.rstrip("/") + "/models", headers=self._headers())
             with urllib.request.build_opener(NoRedirect).open(req, timeout=2) as response:
                 data = json.load(response)
-            state["models"] = sorted({m["id"] for m in data["data"] if isinstance(m.get("id"), str)})
-            state["server_reachable"] = True
-            state["model_present"] = self.s.llm_model in state["models"]
-            state["available"] = state["model_present"]
-            state["message"] = ("Modell vorhanden; Inferenz noch nicht geprüft." if state["model_present"]
-                                else "Ausgewähltes Modell fehlt; bitte ein vorhandenes Modell wählen.")
-        except (urllib.error.URLError, OSError, ValueError, KeyError, TypeError):
-            state["message"] = "Modellliste nicht abrufbar; Server oder Antwort prüfen."
+        except (urllib.error.URLError, OSError):
+            state["reason"] = "server_unreachable"
+            state["message"] = f"Server nicht erreichbar unter {self.s.llm_base_url}."
+            return state
+        except (ValueError, KeyError, TypeError):
+            state["reason"] = "server_error"
+            state["message"] = f"Modellliste von {self.s.llm_base_url} nicht lesbar; Antwort prüfen."
+            return state
+        state["models"] = sorted({m["id"] for m in data["data"] if isinstance(m.get("id"), str)})
+        state["server_reachable"] = True
+        state["model_present"] = self.s.llm_model in state["models"]
+        state["available"] = state["model_present"]
+        if state["model_present"]:
+            state["reason"] = "ok"
+            state["message"] = "Modell vorhanden; Inferenz noch nicht geprüft."
+        else:
+            state["reason"] = "model_missing"
+            state["message"] = f"Modell „{self.s.llm_model}“ fehlt auf dem Server unter {self.s.llm_base_url}."
         return state
 
     def available(self) -> bool:
@@ -85,6 +102,85 @@ class LLM:
         with urllib.request.build_opener(NoRedirect).open(req, timeout=self.s.llm_timeout) as r:
             data = json.load(r)
         return data["choices"][0]["message"]["content"]
+
+    # ------------------------------------------------------------------
+    # Modell-Download (nur lokaler Ollama-Server, eigene API ohne /v1)
+    # ------------------------------------------------------------------
+    def ollama_root(self) -> str | None:
+        """Basis-URL der Ollama-eigenen API (ohne „/v1“); nur lokal und nur bei Anbieter Ollama."""
+        if self.s.llm_provider != "ollama" or external_llm(self.s.llm_base_url):
+            return None
+        root = self.s.llm_base_url.rstrip("/")
+        return root[:-3] if root.endswith("/v1") else root
+
+    def pull_supported(self) -> bool:
+        return self.ollama_root() is not None
+
+    def pull_model(self, model: str, progress=None, cancel: threading.Event | None = None) -> dict:
+        """Lädt ein Modell über die Ollama-API (POST /api/pull, NDJSON-Fortschrittszeilen).
+
+        Nur für lokale Ollama-Server; externe Ziele werden über ollama_root() abgelehnt.
+        `progress(status, total, completed)` wird pro Zeile aufgerufen, `cancel` bricht ab.
+        """
+        model = validate_model_name(model)
+        root = self.ollama_root()
+        if root is None:
+            raise ValueError("Modell-Download wird nur für einen lokalen Ollama-Server unterstützt.")
+        body = json.dumps({"name": model, "stream": True}).encode()
+        req = urllib.request.Request(root + "/api/pull", data=body, headers=self._headers(), method="POST")
+        response = urllib.request.build_opener(NoRedirect).open(req, timeout=60)
+        self._pull_response = response
+        total = completed = 0
+        status_text = "gestartet"
+        try:
+            for raw in response:
+                if cancel is not None and cancel.is_set():
+                    raise PullCancelled()
+                line = raw.strip()
+                if not line:
+                    continue
+                try:
+                    event = json.loads(line)
+                except ValueError:
+                    continue
+                status_text = str(event.get("status") or status_text)
+                total = int(event.get("total") or total or 0)
+                completed = int(event.get("completed") or completed or 0)
+                if progress is not None:
+                    progress(status_text, total, completed)
+                if status_text == "success":
+                    break
+        finally:
+            self._pull_response = None
+            try:
+                response.close()
+            except Exception:  # noqa: BLE001 – Verbindung ist beim Abbruch bereits zu
+                pass
+        return {"model": model, "status": status_text, "total": total, "completed": completed}
+
+    def cancel_pull(self) -> None:
+        """Bricht einen laufenden pull_model-Lauf ab, indem die Verbindung geschlossen wird."""
+        response = self._pull_response
+        if response is not None:
+            try:
+                response.close()
+            except Exception:  # noqa: BLE001
+                pass
+
+
+class PullCancelled(Exception):
+    """Modell-Download wurde über das Cancel-Event abgebrochen."""
+
+
+# Ollama-Modellnamen: library/name:tag – ohne Pfad-Traversen und Steuerzeichen.
+MODEL_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}")
+
+
+def validate_model_name(model: str) -> str:
+    model = (model or "").strip()
+    if not MODEL_NAME_RE.fullmatch(model) or ".." in model:
+        raise ValueError("Ungültiger Modellname.")
+    return model
 
 
 def parse_json(text: str) -> dict:
@@ -151,17 +247,45 @@ def summarize(segments: list[dict], names: dict[str, str], llm: LLM | None) -> d
     if isinstance(llm, LLM):
         llm = llm.snapshot()
     failure = None
-    if llm is not None and llm.available():
+    state = None
+    if isinstance(llm, LLM):
+        state = llm.status()
+        available = state["available"]
+    else:
+        available = bool(llm is not None and llm.available())
+    if llm is not None and available:
         try:
             return _llm_summary(segments, names, llm)
         except Exception as e:  # noqa: BLE001 – LLM-Fehler dürfen die Verarbeitung nicht abbrechen
             failure = "Modellaufruf fehlgeschlagen (Fehler oder Timeout); Heuristik verwendet."
             log.warning("LLM-Zusammenfassung fehlgeschlagen, nutze Heuristik.")
     result = heuristic_summary(segments, names)
-    if failure and external_llm(llm.s.llm_base_url):
+    if failure and isinstance(llm, LLM) and external_llm(llm.s.llm_base_url):
         result["external_service"] = llm.s.llm_base_url
-    result["warning"] = failure or "Heuristik verwendet: LLM deaktiviert, Modell fehlt oder Server nicht erreichbar."
+    if failure:
+        result["warning"] = failure
+    elif state is not None:
+        result["warning"] = heuristic_warning(state, llm.s)
+    else:
+        result["warning"] = "Heuristik verwendet: kein Sprachmodell konfiguriert."
     return result
+
+
+def heuristic_warning(state: dict, s: Settings) -> str:
+    """Konkreter Grund, warum die Heuristik statt des Sprachmodells lief – statt einer Oder-Liste."""
+    suffix = " – Zusammenfassung mit Regeln (Heuristik) erstellt."
+    reason = state.get("reason")
+    if reason == "disabled":
+        return "Sprachmodell ausgeschaltet" + suffix
+    if reason == "external_blocked":
+        return "Externe Übertragung nicht bestätigt" + suffix
+    if reason == "server_unreachable":
+        return f"Sprachmodell-Server nicht erreichbar unter {s.llm_base_url}" + suffix
+    if reason == "server_error":
+        return f"Antwort des Sprachmodell-Servers ({s.llm_base_url}) nicht lesbar" + suffix
+    if reason == "model_missing":
+        return f"Modell „{s.llm_model}“ fehlt auf dem Server" + suffix
+    return "Kein Sprachmodell verfügbar" + suffix
 
 
 def _llm_summary(segments: list[dict], names: dict[str, str], llm: LLM) -> dict:
