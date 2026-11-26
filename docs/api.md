@@ -22,11 +22,12 @@ curl -H "Authorization: Bearer $KEY" http://localhost:8000/api/meetings
 curl -H "Authorization: Bearer $KEY" http://localhost:8000/api/meetings/1
 curl -H "Authorization: Bearer $KEY" "http://localhost:8000/api/search?q=budget"
 curl -H "Authorization: Bearer $KEY" "http://localhost:8000/api/meetings/1/export?format=md"
+curl -H "Authorization: Bearer $KEY" -o aufnahme.wav "http://localhost:8000/api/meetings/1/audio?download=1"
 ```
 
 | Bereich | Endpunkte |
 |---|---|
-| Meetings | `GET/POST /api/meetings`, `GET/PATCH/DELETE /api/meetings/{id}`, `…/audio`, `…/export`, `…/summarize`, `…/ask`, `…/bookmarks` |
+| Meetings | `GET/POST /api/meetings`, `GET/PATCH/DELETE /api/meetings/{id}`, `POST /api/meetings/bulk-delete` (`{"ids": […]}` löscht mehrere auf einmal), `…/audio` (`?download=1` als Datei), `…/export`, `…/summarize`, `…/ask`, `…/bookmarks` |
 | Suche | `GET /api/search?q=` |
 | Bots | `POST/GET /api/bots`, `GET/DELETE /api/bots/{id}` |
 | Webhooks | `GET/POST /api/webhooks`, `DELETE /api/webhooks/{id}`, `POST /api/webhooks/{id}/test` |
@@ -38,14 +39,17 @@ curl -H "Authorization: Bearer $KEY" "http://localhost:8000/api/meetings/1/expor
 ## Diktieren: `/v1/audio/transcriptions` (OpenAI-kompatibel)
 
 Für kurze Aufnahmen – etwa aus **Kodiktat** oder jedem Programm, das die OpenAI-Transkriptions-API
-spricht. Es wird **kein Meeting angelegt**, keine Sprechererkennung und keine Zusammenfassung
-gemacht; die Datei liegt nur während der Anfrage in `data/tmp` und wird danach gelöscht.
+spricht. Standardmäßig wird **kein Meeting angelegt**, keine Sprechererkennung und keine
+Zusammenfassung gemacht; die Datei liegt nur während der Anfrage in `data/tmp` und wird danach
+gelöscht. Mit `save_meeting=1` wird die Aufnahme zusätzlich als Meeting gespeichert (siehe unten).
 
 | Feld (multipart) | Bedeutung |
 |---|---|
 | `file` | Pflicht. WAV (16 kHz wird direkt gelesen), sonst alles, was ffmpeg kann (mp3, m4a, ogg, webm …) |
 | `response_format` | `json` (Standard, `{"text": …, "asr": …}`), `text`, `verbose_json` (mit `segments`, `start`/`end` in Sekunden), `srt`, `vtt` |
 | `language` | optional: `auto`, `de`, `en`; wählt tatsächlich das lokale Backend gemäß [Sprachwahl](einrichtung.md#sprachwahl-und-cpu-modelle); ohne Angabe gilt der Serverstandard |
+| `save_meeting` | optional: `1` speichert die Aufnahme dauerhaft als Meeting – Audio in `data/media`, Titel aus den ersten Worten des Transkripts. Schlank: Segmente kommen direkt aus dieser Transkription, die Pipeline läuft nicht erneut (kein zweites Transkribieren, keine Sprechererkennung, keine Zusammenfassung), Status sofort `done`. Antwort bleibt unverändert, Header `X-Koprotokoll-Meeting: <id>` |
+| `num_speakers` | optional: Sprecherzahl nur für das gespeicherte Meeting; `1` deaktiviert die Sprechertrennung (Monolog) |
 | `model`, `prompt`, `temperature` | Kompatibilitätsfelder ohne Wirkung; `model` überschreibt die Serverkonfiguration nicht |
 
 ```bash
@@ -275,7 +279,9 @@ vertraulichen Antworten gespeichert. Die Schnittstellen unterliegen der vorhande
 `scripts/create_iphone_shortcut.py` erzeugt eine importierbare Vorlage. Der
 Kurzbefehl nimmt Audio auf, sendet es an die Transkriptions-API und kopiert den
 zurückgegebenen Text in die Zwischenablage. Diesen Text danach z. B. in T3 Code
-einfügen. Die Spracherkennung des iPhones wird dabei nicht verwendet.
+einfügen. Beim Ausführen auf dem iPhone liegt er direkt in dessen Zwischenablage;
+ein Ergebnisfenster muss nicht bestätigt werden. Die Spracherkennung des iPhones
+wird dabei nicht verwendet.
 
 ```bash
 python scripts/create_iphone_shortcut.py \
@@ -299,6 +305,36 @@ kontrollierte HTTPS-Adresse verwenden. Die Vorlage wählt Deutsch; die verfügba
 Sprachmodi beschreibt der Transkriptionsabschnitt oben.
 
 Einmalig den Zugriff auf Mikrofon und eigenen Mac erlauben. Danach Kurzbefehl
-starten, sprechen, die Aufnahme durch Antippen beenden und den angezeigten Text
-in die Ziel-App einfügen. Die Mikrofontaste der offiziellen T3-App bleibt ein
+starten, sprechen, die Aufnahme durch Antippen beenden und nach Abschluss in der
+Ziel-App **Einfügen** wählen. Die Mikrofontaste der offiziellen T3-App bleibt ein
 separater, unveränderter Eingabeweg.
+
+Die Vorlage sendet `save_meeting=1` und `num_speakers=1`: Jede Aufnahme wird auf
+dem Mac als Meeting gespeichert – Audiodatei dauerhaft in `data/media`, Titel aus
+den ersten Worten des Transkripts (zum schnellen Wiedererkennen), Sprechertrennung
+deaktiviert. In der Oberfläche erscheint sie in der Meeting-Liste, Audio und
+Transkript sind dort erreichbar; der Text landet zusätzlich in der Zwischenablage.
+In der Liste lassen sich mehrere Aufnahmen per Häkchen auswählen und über
+„Ausgewählte löschen“ auf einmal entfernen.
+
+Während der Aufnahme zeigt iOS in der Dynamic Island oben automatisch das orange
+Mikrofon-Symbol an. Dieser Indikator ist bei jedem Mikrofonzugriff aktiv und lässt
+sich nicht abschalten. Die Aufnahme-Aktion der Kurzbefehle legt sich während der
+gesamten Aufnahme als Vollbild-Fenster über den Bildschirm („Tippe, um die
+Aufnahme zu beenden“); der Bildschirm ist in dieser Zeit nicht nutzbar, egal ob der
+Kurzbefehl aus der App, vom Home-Bildschirm oder per Back Tap gestartet wird.
+Beendet wird die Aufnahme durch Antippen des Fensters; der Generator stellt das
+fest auf „Bei Tippen“ ein (`WFRecordingEnd: 'On Tap'`). Ein Tap direkt auf die
+Dynamic Island stoppt nur die systemseitige Bildschirmaufnahme (rote Anzeige); die
+Bildschirmaufnahme lässt sich aus einem Kurzbefehl heraus weder starten noch
+stoppen.
+
+Wer den Bildschirm während der Aufnahme weiter nutzen will, zeichnet dafür in
+**Sprachmemos** auf: Dort läuft die Aufnahme im Hintergrund weiter, während andere
+Apps benutzbar bleiben, und das orange Symbol in der Dynamic Island zeigt sie an.
+Beendet wird sie in der Sprachmemos-App. Die fertige m4a-Datei überträgt man per
+AirDrop auf den Mac und lädt sie dort per API hoch
+(`curl http://localhost:8000/v1/audio/transcriptions -H "Authorization: Bearer $KEY" -F file=@aufnahme.m4a`)
+oder importiert sie in der Koprotokoll-Oberfläche. Ein automatisches Senden an den
+Mac ist auf diesem Weg nicht möglich, weil Kurzbefehle nicht auf die
+Sprachmemos-Mediathek zugreifen dürfen.

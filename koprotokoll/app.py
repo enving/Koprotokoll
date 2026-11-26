@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import logging
 import os
 import re
@@ -40,13 +41,13 @@ from .microsoft import MicrosoftCalendarSource, MicrosoftClient, MicrosoftError
 from .mail import MailError, MailService
 from .outlook import OutlookComCalendarSource, OutlookError, outlook_available
 from typing import Literal
-from .pipeline import Pipeline
+from .pipeline import Pipeline, meeting_payload
 from .recap import RecapMailer
 from .scheduler import CalendarScheduler
-from .speech import (Diarizer, ModelUnavailable, SherpaDiarizer, Transcriber, create_transcriber,
+from .speech import (Diarizer, ModelUnavailable, SherpaDiarizer, Transcriber, build_utterances, create_transcriber,
                      language_mode, transcription_info)
 from .summarize import LLM, ask
-from .transcriptions import FORMATS, render, transcribe_upload
+from .transcriptions import FORMATS, render, transcribe_upload, title_from_transcript
 from .tasks import TaskError, TaskExporter, meeting_tasks, tasks_ics
 
 log = logging.getLogger(__name__)
@@ -78,6 +79,10 @@ class TranscriptVersionIn(BaseModel):
 class MeetingPatch(BaseModel):
     title: str | None = None
     speakers: dict[str, str] | None = None
+
+
+class BulkDeleteIn(BaseModel):
+    ids: list[int]
 
 
 class BookmarkIn(BaseModel):
@@ -359,6 +364,33 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
             raise HTTPException(404, "Meeting nicht gefunden")
         return m
 
+    def _delete_meeting_files(m: dict) -> None:
+        """Datenbankzeile und Audiodateien eines Meetings entfernen (nur media_dir)."""
+        db.delete_meeting(m["id"])
+        files = list(s.media_dir.glob(f"{m['id']}.*"))
+        if m["audio_path"]:
+            files.append(Path(m["audio_path"]))
+        for p in files:
+            if p.resolve().parent == s.media_dir.resolve():
+                p.unlink(missing_ok=True)
+
+    def safe_download_name(title: str, suffix: str) -> str:
+        """Dateiname für Downloads: Umlaute aufschreiben, Sonderzeichen ersetzen."""
+        name = title or "aufnahme"
+        for umlaut, ascii_ersatz in (("ä", "ae"), ("ö", "oe"), ("ü", "ue"),
+                                     ("Ä", "Ae"), ("Ö", "Oe"), ("Ü", "Ue"), ("ß", "ss")):
+            name = name.replace(umlaut, ascii_ersatz)
+        name = re.sub(r"[^\w.-]+", "_", name).strip("._")[:80] or "aufnahme"
+        return f"{name}{suffix}"
+
+    def audio_file(meeting_id: int, m: dict) -> Path | None:
+        """Audiodatei eines Meetings: bevorzugt die WAV-Fassung, sonst die Originaldatei."""
+        wav = s.media_dir / f"{meeting_id}.wav"
+        if wav.is_file():
+            return wav
+        path = Path(m.get("audio_path") or "")
+        return path if path.is_file() else None
+
     def finished_meeting(meeting_id: int) -> dict:
         meeting = meeting_or_404(meeting_id)
         if meeting["status"] != "done":
@@ -627,6 +659,9 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
     @api.get("/api/meetings/{meeting_id}")
     def get_meeting(meeting_id: int):
         m = meeting_or_404(meeting_id)
+        audio = audio_file(meeting_id, m)
+        m["audio"] = ({"suffix": audio.suffix.lower() or ".wav", "bytes": audio.stat().st_size}
+                      if audio else None)
         m.pop("audio_path", None)
         m["segments"] = db.get_segments(meeting_id)
         m["bookmarks"] = db.list_bookmarks(meeting_id)
@@ -676,14 +711,20 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
     @api.delete("/api/meetings/{meeting_id}")
     def delete_meeting(meeting_id: int):
         m = meeting_or_404(meeting_id)
-        db.delete_meeting(meeting_id)
-        files = list(s.media_dir.glob(f"{meeting_id}.*"))
-        if m["audio_path"]:
-            files.append(Path(m["audio_path"]))
-        for p in files:
-            if p.resolve().parent == s.media_dir.resolve():
-                p.unlink(missing_ok=True)
+        _delete_meeting_files(m)
         return {"ok": True, "id": m["id"]}
+
+    @api.post("/api/meetings/bulk-delete")
+    def bulk_delete_meetings(body: BulkDeleteIn):
+        """Mehrere Meetings auf einmal löschen; unbekannte IDs werden übersprungen."""
+        deleted = []
+        for mid in dict.fromkeys(body.ids):
+            m = db.get_meeting(mid)
+            if m is None:
+                continue
+            _delete_meeting_files(m)
+            deleted.append(mid)
+        return {"ok": True, "deleted": deleted}
 
     @api.post("/api/meetings/{meeting_id}/single-speaker")
     def single_speaker(meeting_id: int):
@@ -704,12 +745,14 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
         return {"ok": True}
 
     @api.get("/api/meetings/{meeting_id}/audio")
-    def audio(meeting_id: int):
+    def audio(meeting_id: int, download: bool = False):
         m = meeting_or_404(meeting_id)
-        wav = s.media_dir / f"{meeting_id}.wav"
-        path = wav if wav.exists() else Path(m["audio_path"] or "")
-        if not path.is_file():
+        path = audio_file(meeting_id, m)
+        if path is None:
             raise HTTPException(404, "Audio nicht vorhanden")
+        if download:
+            suffix = path.suffix.lower() or ".wav"
+            return FileResponse(path, filename=safe_download_name(m["title"], suffix))
         return FileResponse(path)
 
     @api.post("/api/meetings/{meeting_id}/summarize")
@@ -743,9 +786,9 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
             body, mime = export(m, db.get_segments(meeting_id), db.list_bookmarks(meeting_id), format)
         except ValueError as e:
             raise HTTPException(400, str(e)) from e
-        filename = re.sub(r"[^\w.-]+", "_", m["title"])[:80] or "meeting"
+        filename = safe_download_name(m["title"], f".{format}")
         return Response(body, media_type=mime,
-                        headers={"Content-Disposition": f'attachment; filename="{filename}.{format}"'})
+                        headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
     @api.get("/api/search")
     def search(q: str, meeting_id: int | None = None):
@@ -755,7 +798,8 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
     @api.post("/v1/audio/transcriptions", tags=["openai"])
     def openai_transcribe(file: UploadFile = File(...), model: str = Form(""), language: str | None = Form(None),
                           prompt: str = Form(""), response_format: str = Form("json"),
-                          temperature: float | None = Form(None)):
+                          temperature: float | None = Form(None), save_meeting: bool = Form(False),
+                          num_speakers: int | None = Form(None)):
         # model, prompt und temperature bleiben Kompatibilitätsfelder; language wählt den Modus.
         if response_format not in FORMATS:
             raise HTTPException(400, f"Unbekanntes response_format: {response_format} "
@@ -763,13 +807,16 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
         ext = Path(file.filename or "aufnahme.wav").suffix.lower() or ".wav"
         if ext not in TRANSCRIBE_EXT:
             raise HTTPException(400, f"Dateityp {ext} wird nicht unterstützt")
+        if save_meeting and num_speakers is not None and num_speakers < 1:
+            raise HTTPException(400, "Die Sprecherzahl muss positiv sein")
         try:
             mode = language_mode(language, default_mode)
             selected = select_transcriber(mode)
         except ValueError as e:
             raise HTTPException(400, str(e)) from e
+        raw = file.file.read()
         try:
-            words, duration = transcribe_upload(file.file, ext, selected, s.data_dir / "tmp")
+            words, duration = transcribe_upload(io.BytesIO(raw), ext, selected, s.data_dir / "tmp")
         except ModelUnavailable as e:
             raise HTTPException(503, str(e)) from e
         except RuntimeError as e:
@@ -778,9 +825,32 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
             log.exception("Lokale Transkription fehlgeschlagen (%s)", selected)
             raise HTTPException(503, f"Lokale Transkription fehlgeschlagen: {type(e).__name__}: {e}") from e
         info = transcription_info(selected, mode)
+        meeting_id = None
+        if save_meeting:
+            # Schlank ablegen: Audio nach data/media, Segmente direkt aus der
+            # ohnehin berechneten Transkription übernehmen – die Pipeline läuft
+            # nicht erneut (kein zweites Transkribieren, keine Sprechererkennung,
+            # keine Zusammenfassung).
+            text = " ".join(w.text for w in words).strip()
+            meeting_id = db.create_meeting(title_from_transcript(text), Path(file.filename or "aufnahme").stem,
+                                           num_speakers,
+                                           meta={"asr_language": mode, "source": "api-transcription", "asr": info})
+            dst = s.media_dir / f"{meeting_id}{ext}"
+            dst.write_bytes(raw)
+            segments = build_utterances(words, [])
+            db.replace_segments(meeting_id, segments)
+            diarization = ({"status": "fixed", "speaker_count": 1, "requested_speakers": 1, "source": "setting"}
+                           if num_speakers == 1 else {"status": "disabled"})
+            db.merge_speaker_names(meeting_id, {s["speaker"]: f"Sprecher {s['speaker'][1:]}" for s in segments},
+                                   diarization=diarization)
+            db.update_meeting(meeting_id, audio_path=str(dst), duration=duration,
+                              status="done", progress=1.0, error=None)
+            events.emit("meeting.completed", meeting_payload(db.get_meeting(meeting_id)))
         body, mime = render(words, duration, response_format, None)
         headers = {"X-Koprotokoll-ASR-Model": info["model"], "X-Koprotokoll-ASR-Mode": mode,
                    "X-Koprotokoll-ASR-Backend": info["backend"]}
+        if meeting_id is not None:
+            headers["X-Koprotokoll-Meeting"] = str(meeting_id)
         if isinstance(body, dict):
             body["asr"] = info
             return JSONResponse(body, headers=headers)

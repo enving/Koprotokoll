@@ -154,11 +154,38 @@ def test_full_flow(client, tmp_path):
     assert srt.startswith("1\n00:00:00,000 --> ")
     assert client.get(f"/api/meetings/{mid}/export", params={"format": "exe"}).status_code == 400
 
+    # Audio abspielen und herunterladen
     assert client.get(f"/api/meetings/{mid}/audio").status_code == 200
+    detail = client.get(f"/api/meetings/{mid}").json()
+    assert detail["audio"]["suffix"] == ".wav" and detail["audio"]["bytes"] > 0
+    download = client.get(f"/api/meetings/{mid}/audio", params={"download": "1"})
+    assert download.status_code == 200 and download.content == client.get(f"/api/meetings/{mid}/audio").content
+    assert download.headers["content-disposition"] == 'attachment; filename="Weekly.wav"'
     assert client.delete(f"/api/meetings/{mid}/bookmarks/{b['id']}").status_code == 200
     assert client.delete(f"/api/meetings/{mid}").status_code == 200
     assert client.get(f"/api/meetings/{mid}").status_code == 404
     assert client.get("/api/search", params={"q": "budget"}).json() == []
+
+
+def test_audio_download_names_file_after_title(tmp_path):
+    app = create_app(Settings(data_dir=tmp_path), transcriber=FakeTranscriber(), diarizer=FakeDiarizer(),
+                     llm=NoLLM(), background=False)
+    with TestClient(app) as client:
+        mid = app.state.db.create_meeting("Besprechung Geräte & Größen", "gerät")
+        audio = tmp_path / "media" / f"{mid}.mp3"
+        audio.parent.mkdir(parents=True, exist_ok=True)
+        audio.write_bytes(b"ID3-test")
+        app.state.db.update_meeting(mid, audio_path=str(audio), status="done")
+
+        assert client.get(f"/api/meetings/{mid}").json()["audio"] == {"suffix": ".mp3", "bytes": 8}
+        download = client.get(f"/api/meetings/{mid}/audio", params={"download": "1"})
+        assert download.status_code == 200 and download.content == b"ID3-test"
+        assert download.headers["content-disposition"] == 'attachment; filename="Besprechung_Geraete_Groessen.mp3"'
+
+        audio.unlink()
+        assert client.get(f"/api/meetings/{mid}").json()["audio"] is None
+        assert client.get(f"/api/meetings/{mid}/audio").status_code == 404
+        assert client.get(f"/api/meetings/{mid}/audio", params={"download": "1"}).status_code == 404
 
 
 def test_rejects_unknown_file_type(client):

@@ -1,6 +1,7 @@
 from pathlib import Path
 import json
 import shutil
+import signal
 import subprocess
 import sys
 import wave
@@ -151,3 +152,134 @@ def test_system_helper_errors_end_startup_without_waiting_a_minute(tmp_path, mon
         recorder.start(capture.SYSTEM_AUDIO_DEVICE)
     assert commands[0][:2] == ["/test/Koprotokoll", "--capture-audio"]
     assert recorder.status() == {"active": False}
+
+
+def test_windows_geraete_zeigen_systemton_eintrag(tmp_path, monkeypatch):
+    import koprotokoll.capture as capture
+
+    monkeypatch.setattr(capture.sys, "platform", "win32")
+    monkeypatch.setattr(capture.subprocess, "run", lambda *args, **kwargs: SimpleNamespace(
+        stdout='"Mikrofon (audio)"', stderr="", returncode=0))
+    geraete = capture.HardwareRecorder(tmp_path).devices()
+    assert geraete["devices"][0] == {"id": capture.SYSTEM_AUDIO_DEVICE,
+                                     "name": "Systemton + Standardmikrofon (Windows WASAPI-Loopback)"}
+
+
+def test_windows_start_ruft_python_helfer_mit_stoppzeilen_stdin(tmp_path, monkeypatch):
+    import koprotokoll.capture as capture
+
+    commands = []
+
+    def process(command, **kwargs):
+        commands.append((command, kwargs))
+        return SimpleNamespace(stdout=[], poll=lambda: 1, wait=lambda **_: 1,
+                                stdin=None, returncode=0)
+
+    monkeypatch.setattr(capture.sys, "platform", "win32")
+    monkeypatch.setattr(capture.subprocess, "Popen", process)
+    recorder = capture.HardwareRecorder(tmp_path)
+    with pytest.raises(RuntimeError, match="vor dem ersten Sample"):
+        recorder.start(capture.SYSTEM_AUDIO_DEVICE)
+    command, kwargs = commands[0]
+    assert command[0] == sys.executable
+    assert command[1].endswith("capture_windows.py")
+    assert command[2:] == ["--capture-audio", command[3], command[4]]
+    assert command[3].endswith(".system.wav") and command[4].endswith(".microphone.wav")
+    assert kwargs["stdin"] == subprocess.PIPE
+    assert recorder.status() == {"active": False}
+
+
+def test_windows_stop_schreibt_stoppzeile_und_schliesst_stdin(tmp_path, monkeypatch):
+    import koprotokoll.capture as capture
+
+    geschrieben = []
+
+    class FakeStdin:
+        def write(self, text):
+            geschrieben.append(text)
+
+        def flush(self):
+            pass
+
+        def close(self):
+            geschrieben.append("geschlossen")
+
+    process = SimpleNamespace(poll=lambda: None, wait=lambda **_: 0,
+                              stdin=FakeStdin(), returncode=0)
+    active = capture.ActiveCapture(
+        device=capture.SYSTEM_AUDIO_DEVICE, path=tmp_path / "aufnahme.wav", process=process,
+        channels=2, sample_rate=48_000, started_at=0.0,
+        system_path=tmp_path / "aufnahme.system.wav", mic_path=tmp_path / "aufnahme.microphone.wav")
+    recorder = capture.HardwareRecorder(tmp_path)
+    recorder._active = active
+    monkeypatch.setattr(capture.sys, "platform", "win32")
+    with pytest.raises(RuntimeError, match="keine Audiodatei"):
+        recorder.stop()
+    assert geschrieben == [b"stop\n", "geschlossen"]
+
+
+def _fake_process(aufrufe):
+    class FakeProcess:
+        stdin = None
+        returncode = 0
+        pid = 4242
+
+        def poll(self):
+            return None
+
+        def terminate(self):
+            aufrufe.append("terminate")
+
+        def send_signal(self, sig):
+            aufrufe.append(("signal", sig))
+
+        def wait(self, timeout=None):
+            return 0
+
+        def kill(self):
+            aufrufe.append("kill")
+
+    return FakeProcess()
+
+
+def _stop_aufrufe(tmp_path, monkeypatch, platform):
+    """Stoppt eine einfache ffmpeg-Aufnahme und gibt die Prozessaufrufe zurück."""
+    import koprotokoll.capture as capture
+
+    aufrufe = []
+    monkeypatch.setattr(capture, "_terminate_tree", lambda process: aufrufe.append("tree"))
+    active = capture.ActiveCapture(
+        device="Analogue 1 + 2 (Focusrite USB Audio)", path=tmp_path / "aufnahme.wav",
+        process=_fake_process(aufrufe), channels=2, sample_rate=48_000, started_at=0.0)
+    recorder = capture.HardwareRecorder(tmp_path)
+    recorder._active = active
+    monkeypatch.setattr(capture.sys, "platform", platform)
+    with pytest.raises(RuntimeError, match="keine aufnehmbare Datei"):
+        recorder.stop()
+    return aufrufe
+
+
+def test_windows_stop_beendet_den_prozessbaum_ohne_sigint(tmp_path, monkeypatch):
+    """Windows kennt kein SIGINT für Kindprozesse; der Stopp darf keinen HTTP 500 auslösen."""
+    assert _stop_aufrufe(tmp_path, monkeypatch, "win32") == ["tree"]
+
+
+def test_stop_sendet_ausserhalb_windows_weiter_sigint(tmp_path, monkeypatch):
+    """macOS und Linux beenden ffmpeg weiterhin sauber per SIGINT."""
+    assert _stop_aufrufe(tmp_path, monkeypatch, "linux") == [("signal", signal.SIGINT)]
+
+
+def test_windows_baumabbruch_nutzt_taskkill_und_faellt_auf_terminate_zurueck(monkeypatch):
+    """Chocolatey-Shims starten ffmpeg als Kind; nur taskkill /T beendet den Baum."""
+    import koprotokoll.capture as capture
+
+    befehle, aufrufe = [], []
+
+    def fake_run(command, **kwargs):
+        befehle.append(command)
+        assert kwargs["check"] is False
+
+    monkeypatch.setattr(capture.subprocess, "run", fake_run)
+    capture._terminate_tree(_fake_process(aufrufe))
+    assert befehle == [["taskkill", "/PID", "4242", "/T", "/F"]]
+    assert aufrufe == ["terminate"]

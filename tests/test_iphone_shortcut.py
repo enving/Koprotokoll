@@ -26,11 +26,20 @@ def test_shortcut_serializes_audio_file_and_response_tokens_for_apple_import():
     file = form[0]
     assert file['WFItemType'] == 5
     assert file['WFValue']['Value']['Value']['OutputUUID'] == audio['UUID']
+    # Aufnahme wird auf dem Mac als Meeting gespeichert (Audio bleibt erhalten), Monolog ohne Sprechertrennung
+    fields = {f['WFKey']['Value']['string']: f['WFValue']['Value'].get('string')
+              for f in form if f['WFItemType'] != 5}
+    assert fields['save_meeting'] == '1' and fields['num_speakers'] == '1'
+    assert fields['language'] == 'de' and fields['response_format'] == 'text'
     # Ein bloßes WFTextTokenAttachment wird in Apples Textaktion leer dargestellt.
     token = text['WFTextActionText']
     assert token['WFSerializationType'] == 'WFTextTokenString'
     assert token['Value']['attachmentsByRange']['{0, 1}']['OutputUUID'] == upload['UUID']
     assert workflow['WFWorkflowImportQuestions'][0]['ActionIndex'] == 0
     assert 'BEIM-IMPORT' in key['WFTextActionText']
+    clipboard = actions[-1]
+    assert clipboard['WFWorkflowActionIdentifier'] == 'is.workflow.actions.setclipboard'
+    assert clipboard['WFWorkflowActionParameters']['WFInput']['Value']['OutputUUID'] == text['UUID']
+    assert len(actions) == 5
     assert not any('speech' in a['WFWorkflowActionIdentifier'] or 'dictate' in a['WFWorkflowActionIdentifier']
                    for a in actions)

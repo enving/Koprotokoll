@@ -39,6 +39,7 @@ def backend(platform: str | None = None) -> str:
 
 SYSTEM_AUDIO_DEVICE = "__koprotokoll_system_audio__"
 MACOS_CAPTURE_HELPER = Path(__file__).with_name("capture_macos.swift")
+WINDOWS_CAPTURE_HELPER = Path(__file__).with_name("capture_windows.py")
 
 
 def list_devices_command(platform: str | None = None) -> list[str]:
@@ -117,6 +118,33 @@ def _validate_stem_durations(system_path: Path, mic_path: Path, tolerance: float
             f"({system_duration:.2f} s und {mic_duration:.2f} s); Aufnahme bleibt lokal und wird nicht ausgewertet."
         )
     return system_duration, mic_duration
+
+
+def _terminate_tree(process: subprocess.Popen) -> None:
+    """Beendet unter Windows den ganzen Prozessbaum.
+
+    Chocolatey- und Store-Shims starten ffmpeg als Kindprozess. ``terminate()``
+    trifft nur den Shim; das Kind hielte die Pipe offen und der Leser-Thread
+    wartete vergeblich auf das Dateiende.
+    """
+    subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                   capture_output=True, check=False)
+    if process.poll() is None:
+        process.terminate()
+
+
+def _stop_process(process: subprocess.Popen) -> None:
+    """Beendet ffmpeg oder den Aufnahmehelfer plattformgerecht.
+
+    Windows kann Kindprozessen kein ``SIGINT`` senden (``ValueError: Unsupported
+    signal``) und kennt keine Prozessgruppen-Signale ohne Konsole. Der PCM-Mitschnitt
+    läuft über eine Pipe: Der Prozessbaum wird beendet, der Leser-Thread sieht das
+    Dateiende und schließt die WAV.
+    """
+    if sys.platform == "win32":
+        _terminate_tree(process)
+    else:
+        process.send_signal(signal.SIGINT)
 
 
 def parse_devices(details: str, platform: str | None = None) -> list[dict[str, str]]:
@@ -222,6 +250,9 @@ class HardwareRecorder:
             if major >= 15 and MACOS_CAPTURE_HELPER.exists() and shutil.which("swiftc"):
                 devices.insert(0, {"id": SYSTEM_AUDIO_DEVICE,
                                    "name": "Systemton + Standardmikrofon (macOS)"})
+        if sys.platform == "win32" and WINDOWS_CAPTURE_HELPER.exists():
+            devices.insert(0, {"id": SYSTEM_AUDIO_DEVICE,
+                               "name": "Systemton + Standardmikrofon (Windows WASAPI-Loopback)"})
         return {"backend": backend(), "devices": devices, "details": details}
 
     def status(self) -> dict:
@@ -251,13 +282,20 @@ class HardwareRecorder:
             system_path = self.capture_dir / f"{path.stem}.system.wav"
             mic_path = self.capture_dir / f"{path.stem}.microphone.wav"
             if is_system_mix:
-                if sys.platform != "darwin":
-                    raise ValueError("Systemtonaufnahme ist in dieser Version nur unter macOS verfügbar.")
-                command = [self._system_helper_executable(), "--capture-audio", str(system_path), str(mic_path)]
+                if sys.platform == "darwin":
+                    command = [self._system_helper_executable(), "--capture-audio",
+                               str(system_path), str(mic_path)]
+                elif sys.platform == "win32":
+                    command = [sys.executable, str(WINDOWS_CAPTURE_HELPER), "--capture-audio",
+                               str(system_path), str(mic_path)]
+                else:
+                    raise ValueError(
+                        "Systemtonaufnahme ist in dieser Version nur für macOS und Windows verfügbar.")
             else:
                 command = record_command(device, Path("-"), channels=channels, sample_rate=sample_rate)
+            stdin = subprocess.PIPE if is_system_mix and sys.platform == "win32" else subprocess.DEVNULL
             try:
-                process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                process = subprocess.Popen(command, stdin=stdin, stdout=subprocess.PIPE,
                                            stderr=subprocess.DEVNULL)
             except FileNotFoundError as exc:
                 raise RuntimeError("ffmpeg wurde nicht gefunden") from exc
@@ -272,7 +310,7 @@ class HardwareRecorder:
             if not active.ready.wait(timeout=60 if is_system_mix else 8) or active.error:
                 self._active = None
                 if process.poll() is None:
-                    process.send_signal(signal.SIGINT)
+                    _stop_process(process)
                 try:
                     process.wait(timeout=5)
                 except subprocess.TimeoutExpired:
@@ -345,7 +383,21 @@ class HardwareRecorder:
                 raise RuntimeError("Es läuft keine Hardwareaufnahme.")
             self._active = None
         if active.process.poll() is None:
-            active.process.send_signal(signal.SIGINT)
+            if active.system_path is not None and sys.platform == "win32":
+                # Der Windows-Helfer wird über eine Stoppzeile auf stdin beendet und
+                # zusätzlich über die Stopp-Datei abgesichert; Signale erreichen ihn nicht.
+                stdin = getattr(active.process, "stdin", None)
+                if stdin is not None:
+                    try:
+                        stdin.write(b"stop\n")
+                        stdin.flush()
+                        stdin.close()
+                    except (OSError, ValueError):
+                        pass
+                if active.mic_path is not None:
+                    active.mic_path.with_suffix(".stop").touch()
+            else:
+                _stop_process(active.process)
         try:
             active.process.wait(timeout=15)
         except subprocess.TimeoutExpired:

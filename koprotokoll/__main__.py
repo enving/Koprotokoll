@@ -1,7 +1,9 @@
 """Kommandozeile.
 
     python -m koprotokoll [serve] [--host 127.0.0.1] [--port 8000]   Server starten
-    python -m koprotokoll desktop [--port 8000]                     Mac-Menüleiste starten
+    python -m koprotokoll desktop [--port 8000]                     Desktop-App starten
+                                                                    (Menüleiste macOS, Tray Windows)
+    python -m koprotokoll tray [--port 8000]                        Windows-Infobereich starten
     python -m koprotokoll create-key NAME                            API-Schlüssel erzeugen
     python -m koprotokoll bot-login                                  Google-Konto für den Bot anmelden
     python -m koprotokoll mcp                                        MCP-Server (stdio) starten
@@ -22,17 +24,29 @@ def main() -> None:
         p.add_argument("--port", type=int, default=8000)
     key = sub.add_parser("create-key", help="API-Schlüssel erzeugen")
     key.add_argument("name")
-    desktop = sub.add_parser("desktop", help="Mac-Menüleiste mit Alt-Doppeltipp starten")
+    desktop = sub.add_parser("desktop", help="Desktop-App mit globalem Doppeltipp starten "
+                                              "(Menüleiste unter macOS, Tray unter Windows)")
     desktop.add_argument("--port", type=int, default=8000)
+    tray = sub.add_parser("tray", help="Windows-Infobereich mit Alt-Doppeltipp starten")
+    tray.add_argument("--port", type=int, default=8000)
     sub.add_parser("bot-login", help="Browser öffnen, um das Bot-Google-Konto anzumelden")
     sub.add_parser("mcp", help="MCP-Server über stdio starten (nutzt KOPROTOKOLL_URL / KOPROTOKOLL_API_KEY)")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
     if args.cmd == "desktop":
-        from .desktop import main as desktop_main
+        import sys
+
+        if sys.platform == "win32":
+            from .desktop_windows import main as desktop_main
+        else:
+            from .desktop import main as desktop_main
 
         desktop_main(args.port)
+    elif args.cmd == "tray":
+        from .desktop_windows import main as tray_main
+
+        tray_main(args.port)
     elif args.cmd == "create-key":
         from .auth import create_key
         from .config import Settings

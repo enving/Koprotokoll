@@ -7,7 +7,7 @@ const STATUS = {
 };
 const COLORS = ["--s1", "--s2", "--s3", "--s4", "--s5", "--s6"];
 
-const state = { meetings: [], bots: [], current: null, segEls: [], pollTimer: null };
+const state = { meetings: [], bots: [], current: null, segEls: [], pollTimer: null, selected: new Set() };
 const ACTIVE_BOT = ["scheduled", "joining", "waiting_admit", "recording", "stopping"];
 const BOT_STATUS = {
   scheduled: "geplant", joining: "tritt bei", waiting_admit: "wartet auf Einlass", recording: "nimmt auf",
@@ -31,6 +31,14 @@ function fmt(sec) {
   const hh = Math.floor(sec / 3600), mm = Math.floor((sec % 3600) / 60), ss = sec % 60;
   const p = (n) => String(n).padStart(2, "0");
   return hh ? `${hh}:${p(mm)}:${p(ss)}` : `${p(mm)}:${p(ss)}`;
+}
+
+function fmtBytes(bytes) {
+  if (!bytes) return "";
+  const units = ["Byte", "kB", "MB", "GB"];
+  let value = bytes, i = 0;
+  while (value >= 1024 && i < units.length - 1) { value /= 1024; i += 1; }
+  return `${value.toLocaleString("de-DE", { maximumFractionDigits: i ? 1 : 0 })} ${units[i]}`;
 }
 
 function parseTime(str) {
@@ -99,14 +107,46 @@ async function loadMeetings() {
     return h("div", {
       class: "m-item" + (state.current?.id === m.id ? " active" : ""),
       onclick: () => openMeeting(m.id),
-    }, h("div", { class: "t" }, m.title), h("div", { class: "s" }, sub));
+    },
+      h("input", {
+        type: "checkbox", class: "m-check", title: "Zum Sammellöschen markieren",
+        checked: state.selected.has(m.id) || null,
+        onclick: (e) => e.stopPropagation(),
+        onchange: (e) => {
+          if (e.target.checked) state.selected.add(m.id); else state.selected.delete(m.id);
+          renderBulkBar();
+        },
+      }),
+      h("div", { class: "m-body" }, h("div", { class: "t" }, m.title), h("div", { class: "s" }, sub)));
   }));
+  renderBulkBar();
   const busy = state.meetings.some((m) => !["done", "error"].includes(m.status));
   await loadBots();
   const botsBusy = state.bots.some((b) => ACTIVE_BOT.includes(b.status));
   clearTimeout(state.pollTimer);
   if (busy || botsBusy) state.pollTimer = setTimeout(refresh, botsBusy && !busy ? 3000 : 1500);
 }
+
+function renderBulkBar() {
+  const n = state.selected.size;
+  $("#m-bulk").hidden = n === 0;
+  $("#m-bulk-count").textContent = n ? `${n} ausgewählt` : "";
+}
+
+$("#m-bulk-delete").addEventListener("click", async () => {
+  const ids = [...state.selected];
+  if (!ids.length) return;
+  if (!confirm(`${ids.length} Aufnahme${ids.length > 1 ? "n" : ""} wirklich löschen?`)) return;
+  await api("/api/meetings/bulk-delete", jsonOpts("POST", { ids }));
+  if (state.current && ids.includes(state.current.id)) {
+    state.current = null;
+    $("#player").removeAttribute("src");
+    showView("empty");
+    history.replaceState(null, "", "#");
+  }
+  state.selected.clear();
+  await loadMeetings();
+});
 
 async function refresh() {
   await loadMeetings();
@@ -161,7 +201,17 @@ async function openMeeting(id, { keepTab = false, seekTo = null } = {}) {
       ? `Fehler: ${m.error}` : `${STATUS[m.status] || m.status} … ${Math.round(m.progress * 100)} %`;
   }
   const player = $("#player");
-  if (changedMeeting) player.src = withKey(`/api/meetings/${id}/audio`);
+  const audioLink = $("#m-audio");
+  const audio = m.audio || null;
+  player.hidden = !audio;
+  audioLink.hidden = !audio;
+  if (audio) {
+    audioLink.href = withKey(`/api/meetings/${id}/audio?download=1`);
+    const format = audio.suffix.replace(".", "").toUpperCase();
+    audioLink.textContent = `Audio herunterladen (${format}, ${fmtBytes(audio.bytes)})`;
+    audioLink.title = `Originalaufnahme als ${format}-Datei speichern`;
+  }
+  if (changedMeeting && audio) player.src = withKey(`/api/meetings/${id}/audio`);
 
   renderSummary();
   renderTranscript();
@@ -438,7 +488,9 @@ $("#m-export").addEventListener("change", (e) => {
 
 $("#m-delete").addEventListener("click", async () => {
   if (!state.current || !confirm(`„${state.current.title}“ wirklich löschen?`)) return;
-  await api(`/api/meetings/${state.current.id}`, { method: "DELETE" });
+  const id = state.current.id;
+  await api(`/api/meetings/${id}`, { method: "DELETE" });
+  state.selected.delete(id);
   state.current = null;
   $("#player").removeAttribute("src");
   showView("empty");
@@ -566,7 +618,7 @@ $("#upload-form").addEventListener("submit", async (e) => {
 
 // ---------------------------------------------------------- Aufnahme
 const rec = { recorder: null, streams: [], chunks: [], start: 0, timer: null, ctx: null, raf: null, hardware: false,
-  speechTimer: null, speechSession: 0, autoStopped: false };
+  speechTimer: null, speechSession: 0, autoStopped: false, external: false, poll: null, lastStatus: null, lastKey: "" };
 
 function watchBrowserSpeech(analyser) {
   const session = ++rec.speechSession;
@@ -617,22 +669,76 @@ function drawCaptureLevel(levelDb) {
   g.fillRect(0, 6, c.width * level, 12);
 }
 
-async function pollCaptureLevel() {
-  if (!rec.hardware) return;
-  try {
-    const status = await api("/api/capture");
-    if (!rec.hardware) return;
-    if (!status.active && status.meeting_id) {
-      cleanupRecording();
-      $("#dlg-record").close();
-      await loadMeetings();
-      await openMeeting(status.meeting_id);
-      return;
-    }
-    if (status.warning) $("#rec-silence-status").textContent = status.warning;
+// Ein Abfragetakt pro Sekunde genügt; im Hintergrund-Tab wird nicht abgefragt.
+// Der Zustand wird auch übernommen, wenn die Aufnahme außerhalb dieser Seite
+// (z. B. per Doppeltipp im Infobereich) gestartet wurde.
+async function pollCaptureState() {
+  clearTimeout(rec.poll);
+  if (!document.hidden && !rec.recorder) {
+    try { applyCaptureStatus(await api("/api/capture")); }
+    catch { /* Server nicht erreichbar – die Anzeige bleibt, wie sie ist. */ }
+  }
+  rec.poll = setTimeout(pollCaptureState, 1000);
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) { clearTimeout(rec.poll); pollCaptureState(); }
+});
+
+function captureKey(status) {
+  return [status.active, status.error || "", status.meeting_id || "", status.warning || ""].join("|");
+}
+
+// Nur Zustandswechsel neu zeichnen, damit nichts flackert.
+function applyCaptureStatus(status) {
+  rec.lastStatus = status;
+  const key = captureKey(status);
+  if (status.active) {
+    if (!rec.hardware) startCaptureView(status, true);
+    if (status.error) $("#rec-silence-status").textContent = status.error;
+    else if (status.warning) $("#rec-silence-status").textContent = status.warning;
     drawCaptureLevel(status.level_db ?? -120);
-  } catch { /* Aufnahme läuft unabhängig von der Pegelanzeige weiter. */ }
-  if (rec.hardware) rec.raf = setTimeout(pollCaptureLevel, 250);
+  } else if (rec.hardware && key !== rec.lastKey) {
+    endCaptureView(status).catch(() => { /* Anzeige bleibt sonst unverändert. */ });
+  } else if (key !== rec.lastKey && status.error && !status.meeting_id) {
+    $("#rec-silence-status").textContent = status.error;
+  }
+  rec.lastKey = key;
+}
+
+// Anzeige für eine laufende Hardwareaufnahme – egal, wer sie gestartet hat.
+function startCaptureView(status, external) {
+  rec.hardware = true;
+  rec.external = external;
+  rec.start = (Number(status.started_at) || Date.now() / 1000) * 1000;
+  clearInterval(rec.timer);
+  rec.timer = setInterval(() => { $("#rec-time").textContent = fmt((Date.now() - rec.start) / 1000); }, 500);
+  $("#rec-time").textContent = fmt(Math.max(0, Date.now() - rec.start) / 1000);
+  $("#rec-dot").classList.add("on");
+  $("#rec-start").hidden = true;
+  $("#rec-start").disabled = true;
+  $("#rec-busy").hidden = !external;
+  $("#rec-stop").hidden = false;
+  $("#rec-stop").textContent = "Stopp & auswerten";
+  $("#rec-cancel").hidden = true;
+  $("#rec-method").disabled = true;
+  $("#rec-device").disabled = true;
+  $("#rec-source").disabled = true;
+  $("#rec-language").disabled = true;
+  drawCaptureLevel(status.level_db ?? -120);
+}
+
+// Aufnahme endete (z. B. per Doppeltipp): genauso aufräumen wie nach einem Klick.
+async function endCaptureView(status) {
+  const meetingId = status.meeting_id || null;
+  cleanupRecording();
+  await loadMeetings();
+  if (meetingId) {
+    $("#dlg-record").close();
+    await openMeeting(meetingId);
+  } else if (status.error) {
+    $("#rec-silence-status").textContent = status.error;
+  }
 }
 
 function selectRecordingMethod() {
@@ -676,7 +782,7 @@ async function startRecording() {
   if ($("#rec-method").value === "hardware") {
     const device = $("#rec-device").value;
     if (!device) throw new Error("Bitte einen Audioeingang auswählen.");
-    await api("/api/capture/start", jsonOpts("POST", {
+    const state = await api("/api/capture/start", jsonOpts("POST", {
       device,
       title: $("#rec-title").value,
       num_speakers: Number($("#rec-speakers").value) || null,
@@ -684,18 +790,7 @@ async function startRecording() {
       channels: 2,
       sample_rate: 48000,
     }));
-    rec.hardware = true;
-    $("#rec-language").disabled = true;
-    rec.start = Date.now();
-    rec.timer = setInterval(() => { $("#rec-time").textContent = fmt((Date.now() - rec.start) / 1000); }, 500);
-    $("#rec-dot").classList.add("on");
-    $("#rec-start").hidden = true;
-    $("#rec-stop").hidden = false;
-    $("#rec-cancel").hidden = true;
-    $("#rec-method").disabled = true;
-    $("#rec-device").disabled = true;
-    $("#rec-stop").textContent = "Stopp & auswerten";
-    pollCaptureLevel();
+    startCaptureView(state, false);
     return;
   }
   const mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
@@ -753,8 +848,11 @@ function cleanupRecording() {
   rec.ctx?.close();
   rec.recorder = null;
   rec.hardware = false;
+  rec.external = false;
   $("#rec-dot").classList.remove("on");
   $("#rec-start").hidden = false;
+  $("#rec-start").disabled = false;
+  $("#rec-busy").hidden = true;
   $("#rec-stop").hidden = true;
   $("#rec-cancel").hidden = false;
   $("#rec-method").disabled = false;
@@ -769,6 +867,7 @@ $("#btn-record").addEventListener("click", async () => {
   $("#rec-speakers").value = preferredSpeakers();
   selectRecordingMethod();
   $("#dlg-record").showModal();
+  if (rec.lastStatus) applyCaptureStatus(rec.lastStatus);
   await loadCaptureDevices();
 });
 $("#rec-start").addEventListener("click", () => startRecording().catch((err) => {
@@ -1258,6 +1357,7 @@ window.addEventListener("hashchange", () => route());
   } catch { /* Server-Status optional */ }
   await loadMeetings();
   await route();
+  pollCaptureState();
 })();
 
 async function renderLocalModel() {

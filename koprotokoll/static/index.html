@@ -24,6 +24,10 @@
     <input id="global-search" type="search" placeholder="Alle Meetings durchsuchen …" autocomplete="off">
     <div id="search-results" hidden></div>
     <div id="bot-live"></div>
+    <div id="m-bulk" class="row small" hidden>
+      <span id="m-bulk-count"></span>
+      <button id="m-bulk-delete" class="danger" title="Alle ausgewählten Meetings löschen">Ausgewählte löschen</button>
+    </div>
     <nav id="meeting-list" aria-label="Meetings"></nav>
     <button id="btn-integrations" class="nav-link" title="Integrationen &amp; API öffnen bzw. schließen">⚙ Integrationen &amp; API</button>
   </aside>
@@ -150,6 +154,7 @@
           <div id="m-meta" class="meta"></div>
         </div>
         <div class="head-actions">
+          <a id="m-audio" class="download-link" href="#" download hidden>Audio herunterladen</a>
           <select id="m-recap" aria-label="Als E-Mail öffnen">
             <option value="">Als E-Mail öffnen …</option>
           </select>
@@ -281,6 +286,7 @@
       <div class="rec-state"><span id="rec-dot" class="dot"></span> <span id="rec-time">00:00</span>
         <canvas id="rec-level" width="200" height="24"></canvas></div>
       <p id="rec-silence-status" class="small muted" role="status">Stoppt nach 5 Minuten ohne erkannte Sprache und wertet die Aufnahme aus.</p>
+      <p id="rec-busy" class="small" role="alert" hidden>Es läuft bereits eine Aufnahme.</p>
       <menu>
         <button value="cancel" id="rec-cancel" formnovalidate>Abbrechen</button>
         <button type="button" id="rec-start" class="primary">Start</button>

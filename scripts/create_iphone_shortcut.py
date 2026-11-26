@@ -8,7 +8,13 @@ from urllib.parse import urlsplit
 
 
 def create_shortcut(endpoint: str) -> dict:
-    """Audio als Multipart senden; API-Schlüssel erst beim Import abfragen."""
+    """Audio als Multipart senden; API-Schlüssel erst beim Import abfragen.
+
+    save_meeting=1 legt die Aufnahme auf dem Mac als Meeting ab (Audio und
+    Transkript bleiben erhalten, Titel aus den ersten Worten des Transkripts),
+    num_speakers=1 deaktiviert die Sprechertrennung für Monologe. Der Text landet
+    trotzdem wie bisher in der Zwischenablage.
+    """
     url = urlsplit(endpoint)
     if url.scheme != 'https' or not url.hostname or url.username or url.password or url.query or url.fragment:
         raise ValueError('Eine HTTPS-Adresse ohne Zugangsdaten, Suchparameter oder Fragment angeben.')
@@ -51,10 +57,10 @@ def create_shortcut(endpoint: str) -> dict:
                               'WFHTTPHeaders': dictionary([field('Authorization', headers)]),
                               'WFHTTPBodyType': 'Form', 'WFFormValues': dictionary([
                                   field('file', audio, 5), field('language', text('de')),
+                                  field('save_meeting', text('1')), field('num_speakers', text('1')),
                                   field('response_format', text('text'))])}),
         action('gettext', {'UUID': text_id, 'WFTextActionText': token_text(upload_id, 'Inhalte von URL')}),
         action('setclipboard', {'WFInput': output(text_id, 'Text')}),
-        action('showresult', {'Text': token_text(text_id, 'Text')}),
     ]
     return {
         'WFWorkflowClientVersion': '4110.0.1', 'WFWorkflowMinimumClientVersion': 900,
