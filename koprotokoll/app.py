@@ -25,6 +25,7 @@ from fastapi.exception_handlers import request_validation_exception_handler
 from pydantic import BaseModel
 
 from . import auth
+from . import cli_llm
 from .activity import SILENCE_SECONDS, SilenceTimer, SpeechDetector
 from .bot.platforms import SUPPORTED, detect_platform, find_meeting_url, link_hint
 from .caldav_source import CalDavCalendarSource, CalDavError, normalize_server_url
@@ -46,7 +47,7 @@ from .recap import RecapMailer
 from .scheduler import CalendarScheduler
 from .speech import (Diarizer, ModelUnavailable, SherpaDiarizer, Transcriber, build_utterances, create_transcriber,
                      language_mode, transcription_info)
-from .summarize import LLM, ask
+from .summarize import LLM, ask, validate_model_name
 from .transcriptions import FORMATS, render, transcribe_upload, title_from_transcript
 from .tasks import TaskError, TaskExporter, meeting_tasks, tasks_ics
 
@@ -203,6 +204,30 @@ class LocalModelIn(BaseModel):
     max_tokens: int | None = None
     reasoning_effort: str | None = None
     compatible_parameters: bool = False
+
+
+class PullIn(BaseModel):
+    model: str
+
+
+class CliImportIn(BaseModel):
+    source: str
+    external_confirmed: bool = False
+    api_key: str | None = None
+
+
+# Deutsche Anleitung für den Fall, dass kein lokaler LLM-Server läuft (Standard: Ollama).
+OLLAMA_SETUP_STEPS = [
+    {"title": "Ollama installieren",
+     "text": "Gratis-Download für Mac, Windows und Linux unter",
+     "link": "https://ollama.com/download", "link_label": "ollama.com/download"},
+    {"title": "Ollama starten",
+     "text": "Die Ollama-App öffnen oder „ollama serve“ im Terminal ausführen – "
+             "der Server läuft dann lokal unter http://localhost:11434."},
+    {"title": "Danach hier „Erneut prüfen“",
+     "text": "Sobald der Server erreichbar ist, kann die App das Modell direkt laden "
+             "(ca. 5 GB Download, bleibt auf diesem Rechner)."},
+]
 
 
 def create_app(settings: Settings | None = None, transcriber: Transcriber | None = None,
@@ -480,7 +505,7 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
         if (parsed.scheme not in ("http", "https") or not parsed.hostname or parsed.username
                 or parsed.password or parsed.query or parsed.fragment):
             raise HTTPException(400, "Bitte eine HTTP(S)-Basis-URL ohne Zugangsdaten eingeben.")
-        if body.provider not in ("ollama", "openai", "other") or not body.model.strip():
+        if body.provider not in ("ollama", "openai", "mistral", "other") or not body.model.strip():
             raise HTTPException(400, "Anbieter und Modellname prüfen.")
         if not math.isfinite(body.timeout) or not 0.01 <= body.timeout <= 3600:
             raise HTTPException(400, "Timeout muss zwischen 0,01 und 3600 Sekunden liegen.")
@@ -529,6 +554,127 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
         if (body.max_tokens is not None or body.reasoning_effort is not None) and not body.compatible_parameters:
             raise HTTPException(400, "Unterstützung der optionalen Parameter für Server und Modell bestätigen.")
         s.save_llm(body.model, body.max_tokens, body.reasoning_effort)
+        return local_model()
+
+    # ---------------------------------------------- Sprachmodell einrichten
+    pull_lock = threading.Lock()
+    pull_state: dict = {"running": False, "model": None, "status": "", "total": 0, "completed": 0,
+                        "done": False, "error": None, "cancel": None}
+
+    def pull_snapshot() -> dict:
+        with pull_lock:
+            return {k: v for k, v in pull_state.items() if k != "cancel"}
+
+    def _pull_progress(model: str, status_text: str, total: int, completed: int) -> None:
+        with pull_lock:
+            pull_state.update(running=True, model=model, status=status_text, total=total,
+                              completed=completed, done=False, error=None)
+
+    def _run_pull(model: str) -> None:
+        cancel = threading.Event()
+        with pull_lock:
+            pull_state.update(running=True, model=model, status="gestartet", total=0, completed=0,
+                              done=False, error=None, cancel=cancel)
+        try:
+            llm.pull_model(model, progress=lambda st, t, c: _pull_progress(model, st, t, c), cancel=cancel)
+            with pull_lock:
+                pull_state.update(running=False, status="success", done=True)
+        except Exception as e:  # noqa: BLE001 – ein abgebrochener/fehlerhafter Download darf den Server nicht stoppen
+            with pull_lock:
+                pull_state.update(running=False, done=True,
+                                  status="abgebrochen" if cancel.is_set() else "fehler",
+                                  error=None if cancel.is_set() else str(e)[:300])
+        finally:
+            with pull_lock:
+                pull_state["cancel"] = None
+
+    @api.get("/api/llm/setup")
+    def llm_setup():
+        """Was fehlt, damit ein lokales Sprachmodell läuft – und welcher Schritt als Nächstes ansteht."""
+        if isinstance(llm, LLM):
+            state = llm.status()
+        else:
+            state = dict(models=[], model=s.llm_model, url=s.llm_base_url, available=False, enabled=True,
+                         reason="unavailable", server_reachable=False, model_present=False,
+                         message="Modellstatus nicht verfügbar.")
+        supported = isinstance(llm, LLM) and llm.pull_supported()
+        reason = state.get("reason")
+        from .config import external_llm
+        if reason in ("disabled", "external_blocked", "unavailable"):
+            step = "disabled"
+        elif not state.get("server_reachable"):
+            # Ohne lokalen Server: Ollama-Anleitung; externer Endpunkt: Verbindung prüfen.
+            step = "install_server" if not external_llm(s.llm_base_url) else "check_endpoint"
+        elif not state.get("model_present"):
+            step = "pull_model" if supported else "select_model"
+        else:
+            step = "ready"
+        return {**state, "provider": s.llm_provider, "pull_supported": supported, "setup_step": step,
+                "suggested_model": s.llm_model, "size_hint": "ca. 5 GB",
+                "instructions": OLLAMA_SETUP_STEPS if step == "install_server" else []}
+
+    @api.post("/api/llm/pull", status_code=201)
+    def start_pull(body: PullIn):
+        """Lädt das Modell über die lokale Ollama-API; Fortschritt siehe GET /api/llm/pull."""
+        if not isinstance(llm, LLM) or not llm.pull_supported():
+            raise HTTPException(400, "Modell-Download wird nur für einen lokalen Ollama-Server unterstützt "
+                                     "(Anbieter „ollama“, lokale URL).")
+        try:
+            model = validate_model_name(body.model)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from e
+        with pull_lock:
+            if pull_state["running"]:
+                raise HTTPException(409, "Es läuft bereits ein Modell-Download.")
+            pull_state.update(running=True, model=model, status="gestartet", total=0, completed=0,
+                              done=False, error=None)
+        threading.Thread(target=_run_pull, args=(model,), name="llm-pull", daemon=True).start()
+        return pull_snapshot()
+
+    @api.get("/api/llm/pull")
+    def pull_progress():
+        return {**pull_snapshot(), "supported": isinstance(llm, LLM) and llm.pull_supported()}
+
+    @api.post("/api/llm/pull/cancel")
+    def cancel_pull():
+        with pull_lock:
+            running = pull_state["running"]
+            cancel = pull_state.get("cancel")
+        if not running or cancel is None:
+            raise HTTPException(409, "Es läuft gerade kein Download.")
+        cancel.set()
+        if isinstance(llm, LLM):
+            llm.cancel_pull()
+        return {"cancelled": True}
+
+    @api.get("/api/llm/cli-sources")
+    def llm_cli_sources():
+        """Gefundene Coding-CLI-Quellen (z. B. Vibe) – ohne Schlüsselmaterial."""
+        return {"sources": cli_llm.cli_sources()}
+
+    @api.post("/api/llm/cli-import")
+    def llm_cli_import(body: CliImportIn):
+        """Übernimmt Endpunkt und Modell aus der Coding CLI; Schlüssel bleibt lokal (0600)."""
+        from .config import external_llm
+        try:
+            imported = cli_llm.import_cli_source(body.source)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from e
+        model = imported["model"].strip()
+        if not model or len(model) > 200:
+            raise HTTPException(400, "Modellname aus der CLI-Konfiguration ist ungültig.")
+        key = (body.api_key or "").strip() or imported["api_key"] or ""
+        if not key:
+            raise HTTPException(400, "In der CLI wurde kein API-Schlüssel gefunden (Umgebung "
+                                     "MISTRAL_API_KEY oder macOS-Schlüsselbund). Bitte einmal direkt eintragen.")
+        if not cli_llm.valid_api_key(key):
+            raise HTTPException(400, "API-Schlüssel enthält ungültige Zeichen.")
+        effective = os.environ.get("KOPROTOKOLL_LLM_URL", imported["url"])
+        if external_llm(effective) and not body.external_confirmed:
+            raise HTTPException(400, "Transkripttext wird an diesen Dienst gesendet. Bitte ausdrücklich bestätigen.")
+        s.save_provider(dict(provider=imported["provider"], url=imported["url"], model=model,
+                             timeout=s.llm_timeout, api_key=key,
+                             confirmed_url=effective if body.external_confirmed else None))
         return local_model()
 
     @api.get("/api/status")

@@ -153,6 +153,16 @@ pre { background: var(--bg); padding: 8px 10px; border-radius: 8px; overflow-x: 
 #local-model p { overflow-wrap: anywhere; }
 
 #local-model input[type=checkbox] { width: auto; margin-right: 8px; }
+.llm-hint { border-color: var(--accent); }
+.llm-hint p { margin: 0 0 10px; }
+#dlg-llm-setup .progress { margin: 10px 0; }
+#llm-setup-body label { display: block; margin: 8px 0; font-size: 14px; }
+#llm-setup-body ol { margin: 8px 0; padding-left: 22px; }
+#llm-setup-body li { margin: 6px 0; }
+#llm-setup-body h3 { font-size: 16px; margin: 14px 0 4px; }
+#llm-setup-body .cli-source { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 10px; }
+#llm-setup-body .cli-source label { display: flex; gap: 8px; align-items: baseline; font-size: 13px; }
+#llm-setup-body .cli-source input[type=checkbox] { width: auto; flex: none; }
 #local-model input:not([type=checkbox]) { width: 100%; min-width: 0; max-width: 100%; }
 #local-model label { min-width: 0; overflow-wrap: anywhere; }
 #local-model textarea { width: 100%; max-width: 100%; min-height: 80px; font: inherit; color: inherit; background: var(--panel); }

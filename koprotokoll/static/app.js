@@ -8,6 +8,8 @@ const STATUS = {
 const COLORS = ["--s1", "--s2", "--s3", "--s4", "--s5", "--s6"];
 
 const state = { meetings: [], bots: [], current: null, segEls: [], pollTimer: null, selected: new Set() };
+// Erklaerung, die am Meeting-Ergebnis und in den Einstellungen steht, wenn die Heuristik lief.
+const LLM_HINT = "Diese Zusammenfassung wurde mit Regeln erstellt (ohne Sprachmodell). Ein lokales Sprachmodell schreibt Übersicht, Entscheidungen und Aufgaben – es läuft auf diesem Rechner, ca. 5 GB.";
 const ACTIVE_BOT = ["scheduled", "joining", "waiting_admit", "recording", "stopping"];
 const BOT_STATUS = {
   scheduled: "geplant", joining: "tritt bei", waiting_admit: "wartet auf Einlass", recording: "nimmt auf",
@@ -308,6 +310,12 @@ function renderSummary() {
   ];
   if (m.meta.summary_speakers_changed) {
     left.unshift(h("p", { role: "status", class: "muted" }, "Die Sprecherzuordnung wurde geändert. Die vorhandene Zusammenfassung bei Bedarf über „Zusammenfassung neu erstellen“ aktualisieren."));
+  }
+  if (s.engine === "heuristik") {
+    // Ergebnis ohne Sprachmodell sichtbar als solches kennzeichnen (#57).
+    left.unshift(h("div", { class: "card llm-hint" },
+      h("p", {}, LLM_HINT),
+      h("button", { type: "button", class: "primary", onclick: openLlmSetup }, "Sprachmodell einrichten")));
   }
   if (s.action_items?.length) {
     left.push(h("div", { class: "card" }, h("h3", {}, `Action Items (${s.action_items.length})`),
@@ -1389,7 +1397,7 @@ async function renderLocalModel() {
         await renderLocalModel();
       } catch (err) { message.textContent = err.message; }
     };
-    const provider = h("select", { "aria-label": "Anbieter" }, ...[["ollama", "Ollama lokal"], ["openai", "OpenAI"], ["other", "Anderer OpenAI-kompatibler Server"]].map(([value, label]) => h("option", { value }, label)));
+    const provider = h("select", { "aria-label": "Anbieter" }, ...[["ollama", "Ollama lokal"], ["mistral", "Mistral API"], ["openai", "OpenAI"], ["other", "Anderer OpenAI-kompatibler Server"]].map(([value, label]) => h("option", { value }, label)));
     provider.value = config.provider;
     const url = h("input", { "aria-label": "Basis-URL", value: config.url });
     const name = h("input", { "aria-label": "Modellname", value: config.model });
@@ -1397,7 +1405,7 @@ async function renderLocalModel() {
     const remove = h("input", { type: "checkbox" });
     const timeout = h("input", { type: "number", "aria-label": "Timeout in Sekunden", value: config.timeout, min: "0.01", max: "3600", step: "any" });
     const confirm = h("input", { type: "checkbox" });
-    provider.onchange = () => { if (provider.value === "openai") url.value = "https://api.openai.com/v1"; if (provider.value === "ollama") url.value = "http://localhost:11434/v1"; confirm.checked = false; };
+    provider.onchange = () => { if (provider.value === "openai") url.value = "https://api.openai.com/v1"; if (provider.value === "mistral") url.value = "https://api.mistral.ai/v1"; if (provider.value === "ollama") url.value = "http://localhost:11434/v1"; confirm.checked = false; };
     url.oninput = () => { confirm.checked = false; };
     model.onchange = () => { name.value = model.value; };
     const providerSave = h("button", { type: "button" }, "Anbieter speichern");
@@ -1411,6 +1419,8 @@ async function renderLocalModel() {
     const test = h("button", { type: "button" }, "Gespeicherten Anbieter testen");
     test.onclick = async () => { try { const result = await api("/api/llm/test", { method: "POST" }); message.textContent = `Server: ${result.server_reachable ? "erreichbar" : "nicht erreichbar"} · Modell: ${result.model_present ? "vorhanden" : "fehlt"} · Probeaufruf: ${result.inference}`; } catch (err) { message.textContent = err.message; } };
     box.replaceChildren(h("h2", {}, "Sprachmodell"),
+      h("p", {}, "Ohne Sprachmodell erstellt die App die Zusammenfassung mit Regeln. Ein lokales Sprachmodell schreibt Übersicht, Entscheidungen und Aufgaben selbst – es läuft auf diesem Rechner (Download ca. 5 GB, bleibt lokal). Ohne Modell bleibt alles nutzbar."),
+      h("button", { type: "button", onclick: openLlmSetup }, "Sprachmodell einrichten"),
       h("p", {}, config.external ? `Externer Dienst: ${config.url} (${config.external_confirmed ? "bestätigt" : "Übertragung gesperrt"})` : "Lokaler Dienst"),
       h("p", {}, config.env_overrides.length ? `Vom Server vorgegeben: ${config.env_overrides.join(", ")}` : "Eigene Einstellungen"),
       h("label", {}, "Anbieter ", provider), h("label", {}, "Basis-URL ", url),
@@ -1429,3 +1439,136 @@ async function renderLocalModel() {
   } catch (err) { box.textContent = err.message; }
 }
 renderLocalModel();
+
+// ---------------------------------------------- Sprachmodell einrichten (#57)
+const PULL_STATUS_DE = {
+  "pulling manifest": "Manifest wird geladen",
+  "downloading": "Download läuft",
+  "verifying sha256 digest": "Prüfsumme wird kontrolliert",
+  "writing manifest": "Manifest wird geschrieben",
+  "removing any unused layers": "Unbenutzte Ebenen werden entfernt",
+  "success": "Fertig",
+};
+let llmSetupTimer = null;
+
+function stopLlmSetupPoll() {
+  if (llmSetupTimer) { clearInterval(llmSetupTimer); llmSetupTimer = null; }
+}
+
+async function openLlmSetup() {
+  const dlg = $("#dlg-llm-setup");
+  if (!dlg.open) dlg.showModal();
+  await renderLlmSetup();
+}
+
+async function renderLlmSetup(flash = null) {
+  const body = $("#llm-setup-body");
+  stopLlmSetupPoll();
+  body.replaceChildren(h("p", { role: "status" }, "Status wird geprüft …"));
+  let setup;
+  try { setup = await api("/api/llm/setup"); }
+  catch (err) { body.replaceChildren(h("p", { role: "alert" }, err.message)); return; }
+  const kids = [h("p", {},
+    "Ein lokales Sprachmodell schreibt Übersicht, Entscheidungen und Aufgaben selbst – es läuft auf diesem Rechner (Download ca. 5 GB, bleibt lokal). Ohne Modell bleibt alles nutzbar; Koprotokoll arbeitet dann mit Regeln.")];
+  if (flash) kids.unshift(h("p", { role: "status" }, flash));
+  if (setup.setup_step === "install_server") {
+    kids.push(
+      h("p", {}, `Der Server unter ${setup.url} ist nicht erreichbar. Damit ein Sprachmodell lokal laufen kann, muss zuerst einer installiert sein:`),
+      h("ol", {}, setup.instructions.map((step) => h("li", {},
+        h("b", {}, `${step.title}. `), step.text, " ",
+        step.link ? h("a", { href: step.link, target: "_blank", rel: "noopener" }, step.link_label || step.link) : null))),
+      h("div", { class: "row" }, h("button", { type: "button", onclick: () => renderLlmSetup() }, "Erneut prüfen")));
+  } else if (setup.setup_step === "check_endpoint") {
+    kids.push(
+      h("p", {}, `${setup.message} Endpunkt, Schlüssel und Erreichbarkeit lassen sich unten bzw. in den Einstellungen prüfen.`),
+      h("div", { class: "row" }, h("button", { type: "button", onclick: () => renderLlmSetup() }, "Erneut prüfen")));
+  } else if (setup.setup_step === "pull_model" || setup.setup_step === "select_model") {
+    const modelInput = h("input", { value: setup.suggested_model, "aria-label": "Modellname" });
+    const status = h("p", { role: "status", class: "muted small" }, setup.message);
+    const barWrap = h("div", { class: "progress", hidden: true },
+      h("div", { class: "bar" }, h("div")), h("span", {}, ""));
+    const start = h("button", { type: "button", class: "primary" }, "Modell laden");
+    const cancel = h("button", { type: "button" }, "Abbrechen");
+    const reset = () => { start.disabled = setup.setup_step !== "pull_model"; cancel.disabled = false; };
+    start.onclick = async () => {
+      start.disabled = true; cancel.disabled = true;
+      try {
+        await api("/api/llm/pull", jsonOpts("POST", { model: modelInput.value.trim() }));
+        barWrap.hidden = false;
+        pollLlmPull(barWrap, status, reset);
+      } catch (err) { status.textContent = err.message; reset(); }
+    };
+    cancel.onclick = async () => {
+      try { await api("/api/llm/pull/cancel", { method: "POST" }); }
+      catch (err) { status.textContent = err.message; }
+    };
+    kids.push(
+      h("p", {}, setup.setup_step === "pull_model"
+        ? `Server erreichbar (${setup.url}), aber das Modell „${setup.model}“ fehlt. Laden aus der App – ca. 5 GB, der genaue Fortschritt erscheint beim Laden; der Download bleibt auf diesem Rechner.`
+        : `Server erreichbar (${setup.url}), aber das Modell „${setup.model}“ fehlt. Dieser Anbieter lädt die App nicht selbst – bitte manuell laden und danach „Erneut prüfen“.`),
+      h("label", {}, "Modellname ", modelInput),
+      h("div", { class: "row" }, start, cancel, h("button", { type: "button", onclick: () => renderLlmSetup() }, "Erneut prüfen")),
+      barWrap, status);
+    if (setup.setup_step !== "pull_model") start.disabled = true;
+  } else if (setup.setup_step === "ready") {
+    kids.push(
+      h("p", {}, `Server erreichbar (${setup.url}) und Modell „${setup.model}“ ist vorhanden. Jetzt in der Modellliste auswählen und speichern – das nächste Meeting schreibt dann eine echte Zusammenfassung (Engine „llm:<Modell>“).`),
+      h("button", { type: "button", onclick: () => { $("#dlg-llm-setup").close(); location.hash = "#integrations"; } }, "Zur Modellauswahl"));
+  } else {
+    kids.push(h("p", {}, `${setup.message} Ohne Sprachmodell arbeitet Koprotokoll mit Regeln – alles bleibt nutzbar.`));
+  }
+
+  // Eigenen Endpunkt / Coding CLI – in jedem Zustand sichtbar, auch ohne lokalen Server.
+  kids.push(h("h3", {}, "Eigenen Endpunkt oder Coding CLI verwenden"));
+  let sources = [];
+  try { sources = (await api("/api/llm/cli-sources")).sources; } catch { sources = []; }
+  if (sources.length) {
+    for (const src of sources) {
+      const confirm = h("input", { type: "checkbox", "aria-label": "Externe Übertragung bestätigen" });
+      const importBtn = h("button", { type: "button" }, "Konfiguration übernehmen");
+      const st = h("p", { role: "status", class: "muted small" });
+      importBtn.onclick = async () => {
+        importBtn.disabled = true;
+        try {
+          await api("/api/llm/cli-import", jsonOpts("POST", { source: src.source, external_confirmed: confirm.checked }));
+          await renderLlmSetup(`Übernommen: ${src.label} · ${src.url} · Modell „${src.model}“. Jetzt in den Einstellungen den Anbieter testen und die Modellauswahl speichern.`);
+        } catch (err) { st.textContent = err.message; importBtn.disabled = false; }
+      };
+      kids.push(h("div", { class: "cli-source" },
+        h("p", {}, `${src.label}: Modell „${src.model}“, Endpunkt ${src.url} – ${src.key_available ? `Schlüssel gefunden (${src.key_source})` : "kein Schlüssel gefunden (Umgebung/Schlüsselbund)"}. Der Schlüssel wird nur lokal gespeichert und nie angezeigt.`),
+        h("label", {}, confirm, ` Transkripttext wird an ${src.url} gesendet. Ich bestätige die externe Übertragung.`),
+        h("div", { class: "row" }, importBtn), st));
+    }
+  } else {
+    kids.push(h("p", { class: "muted small" }, "Keine Coding-CLI-Konfiguration gefunden (~/.vibe/config.toml)."));
+  }
+  kids.push(h("button", { type: "button", onclick: () => { $("#dlg-llm-setup").close(); location.hash = "#integrations"; } },
+    "Eigenen Endpunkt in den Einstellungen eintragen"));
+  body.replaceChildren(...kids);
+}
+
+function pollLlmPull(barWrap, status, done) {
+  stopLlmSetupPoll();
+  const bar = barWrap.querySelector(".bar div");
+  const label = barWrap.querySelector("span");
+  llmSetupTimer = setInterval(async () => {
+    let st;
+    try { st = await api("/api/llm/pull"); } catch { stopLlmSetupPoll(); return; }
+    const frac = st.total ? st.completed / st.total : 0;
+    bar.style.transform = `scaleX(${Math.max(0, Math.min(1, frac))})`;
+    const parts = [PULL_STATUS_DE[st.status] || st.status || ""];
+    if (st.total) parts.push(`${fmtBytes(st.completed)} / ${fmtBytes(st.total)}`);
+    label.textContent = parts.filter(Boolean).join(" – ");
+    if (st.done) {
+      stopLlmSetupPoll();
+      status.textContent = st.error ? st.error
+        : st.status === "success" ? "Modell geladen. Jetzt in der Liste auswählen und speichern."
+        : "Download beendet.";
+      done();
+    } else {
+      status.textContent = "Lädt … abbrechbar über „Abbrechen“.";
+    }
+  }, 1000);
+}
+
+$("#dlg-llm-setup").addEventListener("close", stopLlmSetupPoll);
