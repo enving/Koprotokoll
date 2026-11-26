@@ -281,6 +281,21 @@ def test_transcription_save_meeting_keeps_audio_and_transcript_title(client, tmp
     assert len(client.get("/api/meetings").json()) == 1
 
 
+def test_meeting_list_shows_first_spoken_words_as_preview(client, tmp_path):
+    r = _transcribe(client, tmp_path, response_format="text", save_meeting="1", num_speakers="1")
+    mid = int(r.headers["x-koprotokoll-meeting"])
+    m = next(x for x in client.get("/api/meetings").json() if x["id"] == mid)
+    # Vorschau sind die ersten gesprochenen Wörter, auf 10 Wörter begrenzt
+    assert m["preview"] == "Guten Morgen zusammen, heute besprechen wir das Budget für das"
+    # Meeting ohne Segmente (noch in Arbeit) liefert leere Vorschau statt Absturz
+    from koprotokoll.db import Database
+    db = Database(tmp_path / "koprotokoll.sqlite3")
+    other = db.create_meeting("Läuft noch", "test")
+    db.update_meeting(other, status="transcribing", progress=0.4)
+    m2 = next(x for x in client.get("/api/meetings").json() if x["id"] == other)
+    assert m2["preview"] == ""
+
+
 def test_transcription_save_meeting_validates_speakers(client, tmp_path):
     r = _transcribe(client, tmp_path, save_meeting="1", num_speakers="0")
     assert r.status_code == 400 and "Sprecherzahl" in r.json()["detail"]

@@ -36,6 +36,11 @@ curl -H "Authorization: Bearer $KEY" -o aufnahme.wav "http://localhost:8000/api/
 | Google | `GET/DELETE /api/integrations/google`, `PUT …/client`, `GET …/connect`, `PATCH …/settings`, `POST …/sync` |
 | Kalender-Quellen | `GET/POST /api/calendars`, `GET /api/calendars/presets`, `PATCH/DELETE /api/calendars/{id}`, `GET/POST /api/calendars/{id}/test`, `POST /api/calendars/sync` |
 
+`GET /api/meetings` liefert pro Meeting `id`, `title`, `created_at`, `duration`, `status`,
+`progress`, `error` und zusätzlich `preview` – die ersten gesprochenen Wörter des Transkripts
+(max. 10 Wörter, leer solange die Aufnahme noch verarbeitet wird), die die Oberfläche in der
+Meeting-Liste anzeigt.
+
 ## Diktieren: `/v1/audio/transcriptions` (OpenAI-kompatibel)
 
 Für kurze Aufnahmen – etwa aus **Kodiktat** oder jedem Programm, das die OpenAI-Transkriptions-API
@@ -319,7 +324,10 @@ Kurzbefehl nimmt Audio auf, sendet es an die Transkriptions-API und kopiert den
 zurückgegebenen Text in die Zwischenablage. Diesen Text danach z. B. in T3 Code
 einfügen. Beim Ausführen auf dem iPhone liegt er direkt in dessen Zwischenablage;
 ein Ergebnisfenster muss nicht bestätigt werden. Die Spracherkennung des iPhones
-wird dabei nicht verwendet.
+wird dabei nicht verwendet. Die Vorlage sendet zusätzlich `save_meeting=1`:
+Audio und Transkript landen dann dauerhaft als Meeting in Koprotokoll (Titel aus
+den ersten Worten des Transkripts, Antwort-Header `X-Koprotokoll-Meeting`); dafür
+muss der Server mindestens den Stand vom 25.11.2026 laufen.
 
 ```bash
 python scripts/create_iphone_shortcut.py \

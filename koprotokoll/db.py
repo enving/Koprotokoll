@@ -192,6 +192,23 @@ class Database:
             rows = self._conn.execute("SELECT * FROM meetings ORDER BY created_at DESC").fetchall()
         return [_meeting(r) for r in rows]
 
+    def meeting_previews(self, max_words: int = 10) -> dict[int, str]:
+        """Erste gesprochene Wörter je Meeting als Vorschau für die Meeting-Liste."""
+        sql = (
+            "SELECT meeting_id, text FROM ("
+            "  SELECT meeting_id, text, ROW_NUMBER() OVER (PARTITION BY meeting_id ORDER BY idx) AS rn"
+            "  FROM segments"
+            ") WHERE rn <= 3"
+        )
+        with self._lock:
+            rows = self._conn.execute(sql).fetchall()
+        words: dict[int, list[str]] = {}
+        for row in rows:
+            bucket = words.setdefault(row["meeting_id"], [])
+            if len(bucket) < max_words:
+                bucket.extend(row["text"].split())
+        return {mid: " ".join(w[:max_words]) for mid, w in words.items()}
+
     def set_single_speaker(self, meeting_id: int, *, restore: bool = False) -> None:
         """Nur Sprecherlabels ändern; Texte, Wortzeiten und Suchindex bleiben erhalten."""
         keys = ("diarization", "manual_speakers", "automatic_speakers")

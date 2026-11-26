@@ -688,8 +688,13 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
 
     @api.get("/api/meetings")
     def list_meetings():
-        return [{k: m[k] for k in ("id", "title", "created_at", "duration", "status", "progress", "error")}
-                for m in db.list_meetings()]
+        previews = db.meeting_previews()
+        out = []
+        for m in db.list_meetings():
+            row = {k: m[k] for k in ("id", "title", "created_at", "duration", "status", "progress", "error")}
+            row["preview"] = previews.get(m["id"], "")
+            out.append(row)
+        return out
 
     @api.get("/api/capture/devices", tags=["recording"])
     def capture_devices():

@@ -119,7 +119,10 @@ async function loadMeetings() {
           renderBulkBar();
         },
       }),
-      h("div", { class: "m-body" }, h("div", { class: "t" }, m.title), h("div", { class: "s" }, sub)));
+      h("div", { class: "m-body" },
+        h("div", { class: "t" }, m.title),
+        m.preview ? h("div", { class: "p", title: m.preview }, `„${m.preview}“`) : null,
+        h("div", { class: "s" }, sub)));
   }));
   renderBulkBar();
   const busy = state.meetings.some((m) => !["done", "error"].includes(m.status));

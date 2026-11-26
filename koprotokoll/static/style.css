@@ -27,11 +27,12 @@ input { background: var(--panel); border: 1px solid var(--line); border-radius: 
 #m-bulk { align-items: center; gap: 8px; padding: 4px 10px; }
 #m-bulk button { margin-left: auto; padding: 4px 10px; }
 .m-item { padding: 8px 10px; border-radius: 8px; cursor: pointer; display: flex; gap: 8px; align-items: flex-start; }
-.m-item .m-check { flex: none; margin-top: 4px; }
+.m-item .m-check { flex: none; margin-top: 4px; width: auto; }
 .m-item .m-body { flex: 1; min-width: 0; }
 .m-item:hover { background: var(--bg); }
 .m-item.active { background: var(--accent-soft); }
 .m-item .t { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.m-item .p { font-size: 12px; font-style: italic; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .m-item .s { font-size: 12px; color: var(--muted); }
 #search-results { max-height: 45vh; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; }
 .hit { padding: 8px 10px; border-bottom: 1px solid var(--line); cursor: pointer; font-size: 13px; }
