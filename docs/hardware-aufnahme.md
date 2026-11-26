@@ -81,47 +81,87 @@ läuft; ein automatischer Start bei der Anmeldung wird nicht eingerichtet.
 Der lokale Server bleibt für die Auswertung und Oberfläche geöffnet. Sein
 Startprotokoll liegt unter `data/desktop/server.log`.
 
-## Windows: per Alt-Doppeltipp aufnehmen (Tray-App)
+## Windows: per Alt-Doppeltipp aufnehmen (Infobereich)
 
-Unter Windows startet derselbe Befehl die Tray-App:
+Unter Windows starten beide Befehle dieselbe App im Infobereich:
 
-```bash
-python -m koprotokoll desktop
+```powershell
+python -m koprotokoll tray        # Windows-Infobereich
+python -m koprotokoll desktop     # auf Windows dasselbe, auf dem Mac die Menüleiste
 ```
 
-Voraussetzungen: Windows 10/11, `ffmpeg` im PATH (mischt die beiden Spuren
-beim Stopp) und die optionalen Pakete aus `requirements-windows.txt`
-(`pystray`/`Pillow` für das Tray-Symbol, `pycaw`/`comtypes` für WASAPI):
+Koprotokoll legt ein Symbol im Infobereich an. Es verwendet einen bereits
+laufenden lokalen Server oder startet ihn; das Symbol erscheint sofort und
+zeigt währenddessen **Server wird gestartet …**. Das Startprotokoll liegt unter
+`data/desktop/server.log`. Zusätzliche Pakete sind nicht nötig (die Aufnahme
+läuft über reines ctypes/WASAPI, nur `numpy`; mit installiertem
+`pycaw`/`comtypes` aus `requirements-windows.txt` steht alternativ der
+pycaw-Weg in `capture_windows.py` bereit). Ein zweiter Start meldet
+„Koprotokoll läuft bereits im Infobereich.“
 
-```bash
-pip install -r requirements-windows.txt
+Ein Klick mit der linken oder rechten Maustaste öffnet das Menü:
+
+1. **Aufnahme starten** (bzw. **Aufnahme stoppen**) – die Aufnahme beginnt erst
+   nach diesem ausdrücklichen Klick oder dem Tastenkürzel.
+2. **Audioquelle** – ein Untermenü mit allen Eingängen, die Windows über
+   `ffmpeg` meldet, darunter **Systemton + Standardmikrofon (Windows
+   WASAPI-Loopback)**. Die Quelle wird über ihren Namen in
+   `data/desktop/windows-einstellungen.json` gespeichert und vor jeder Aufnahme
+   neu zugeordnet. Ist sie nicht mehr vorhanden oder nicht eindeutig, bricht der
+   Start mit einer deutschen Meldung ab; es wird keine andere Quelle ersatzweise
+   aufgenommen. **Audioquellen aktualisieren** liest die Liste neu ein, etwa nach
+   dem Anstecken eines USB-Interfaces; solange das dauert, steht im Symbol
+   **Audioquellen werden geladen …**.
+3. **Tastenkürzel** – **Aktiviert** schaltet das globale Kürzel ein oder aus;
+   darunter lässt sich **Alt zweimal**, **Strg zweimal** oder
+   **Umschalt zweimal** wählen. Änderungen gelten sofort und ohne Neustart.
+   Während einer Aufnahme ist das Untermenü gesperrt.
+4. **Koprotokoll öffnen** zeigt die Weboberfläche im Standardbrowser.
+5. **Beenden** entfernt das Symbol; **Strg+C** in der Konsole wirkt genauso.
+   Während einer Aufnahme weist eine Sprechblase darauf hin, zuerst zu stoppen
+   und zu sichern; läuft gerade ein Start oder Stopp, bittet sie zu warten.
+
+**Die gewählte Taste zweimal kurz drücken und loslassen** startet die Aufnahme,
+dieselbe Taste zweimal stoppt und sichert sie. Im Symbol erscheint **●** mit der
+Aufnahmedauer (ab einer Stunde `H:MM:SS`), abwechselnd mit dem Status. Längeres
+Halten, Kombinationen mit anderen Tasten und ein zu großer Abstand lösen keine
+Aufnahme aus. Das Kürzel fragt nur den Tastenzustand ab
+(`GetAsyncKeyState`, siehe `windows_hotkey.py`), zeichnet keine Tasten auf und
+braucht keine Freigabe. Es gilt, solange das Symbol läuft; ein automatischer
+Start bei der Anmeldung wird nicht eingerichtet. Erst der ausdrückliche Stopp
+stößt über die vorhandene API die Auswertung an und öffnet das Meeting im
+Browser (`#meeting=<id>`); während der Aufnahme läuft keine Transkription.
+
+Systemton (WASAPI-Loopback) und Standardmikrofon werden als zwei getrennte
+lokale WAV-Spuren erfasst (`data/captures/*.system.wav` und `*.microphone.wav`),
+auf den Moment beschnitten, in dem beide Geräte bereit waren, und vor der
+Verarbeitung auf gleiche Länge geprüft (Toleranz 0,5 s). Weichen sie ab oder
+fehlt ein Gerät, bricht die Aufnahme mit sichtbarer Fehlermeldung ab; die App
+wechselt nicht still auf eine unvollständige Quelle. Es wird kein Bildschirm
+aufgenommen und keine Standard-Audiogeräte werden ungefragt geändert.
+
+Fehler zeigt Koprotokoll als Sprechblase am Symbol und als Statuszeile im Menü;
+nach dem nächsten erfolgreichen Schritt verschwindet die Meldung. Das Beenden
+des Symbols beendet den Server nicht – die Auswertung und die Oberfläche
+bleiben erreichbar. Das Symbol steuert die Aufnahme ausschließlich über
+`/api/capture*`; die Weboberfläche kann parallel starten und stoppen. Das
+Symbol fragt den Zustand etwa alle zehn Sekunden im Hintergrund ab, Menü und
+Dauer folgen also auch einer dort gestarteten Aufnahme; ein Klick im Tray
+übernimmt den tatsächlichen Zustand des Servers. Die Dauer misst die monotone
+Uhr und springt deshalb nicht, wenn Windows die Systemzeit abgleicht.
+
+Verlangt der Server einen API-Schlüssel (`KOPROTOKOLL_REQUIRE_KEY=1`), braucht
+ihn auch das Symbol. Einmalig
+
+```powershell
+python -m koprotokoll create-key tray
 ```
 
-Die App startet den lokalen Koprotokoll-Server, falls er nicht läuft, und
-zeigt im Tray den Zustand an: **Bereit**, **● Aufnahme läuft seit mm:ss** oder
-**Fehler: …**.
-
-1. Im Einstellungsdialog (**Einstellungen …**) ist unter **Audioquelle** die
-   Quelle **Systemton + Standardmikrofon (Windows WASAPI-Loopback)** wählbar;
-   für die Doppeltipp-Aufnahme ist sie der Standard. Unter **Tastenkürzel**
-   lässt sich der globale Doppeltipp abschalten oder auf **Strg (Control)** bzw.
-   **Umschalt** umstellen; Standard ist **Alt zweimal**. Die Einstellungen
-   werden als JSON unter `data/desktop/einstellungen.json` gespeichert und
-   bleiben nach einem Neustart erhalten. Während einer Aufnahme sind sie
-   gesperrt.
-2. **Alt zweimal kurz drücken und loslassen** startet die Aufnahme global, auch
-   wenn eine andere Anwendung den Fokus hat. Kombinationen mit anderen Tasten
-   und längeres Halten lösen nicht aus. **Erneut zweimal** stoppt: Erst dann
-   sichert die App die vollständigen Spuren, startet die vorhandene Auswertung
-   und öffnet das Meeting im Browser (`#meeting=<id>`). Während der Aufnahme
-   läuft keine Transkription.
-3. Systemton (WASAPI-Loopback) und Standardmikrofon werden als zwei getrennte
-   lokale WAV-Spuren erfasst (`data/captures/*.system.wav` und
-   `*.microphone.wav`), im Gleichschritt ausgerichtet und vor der Verarbeitung
-   auf gleiche Länge geprüft (Toleranz 0,5 s). Weichen sie ab oder fehlt ein
-   Gerät, bricht die Aufnahme mit sichtbarer Fehlermeldung ab; die App wechselt
-   nicht still auf eine unvollständige Quelle. Es wird kein Bildschirm
-   aufgenommen und keine Standard-Audiogeräte werden ungefragt geändert.
+ausführen und den angezeigten Schlüssel als Umgebungsvariable
+`KOPROTOKOLL_API_KEY` setzen oder in `data/desktop/api-schluessel.txt` ablegen;
+die Umgebungsvariable hat Vorrang. Fehlt der Schlüssel, nennt die Sprechblase
+diesen Weg. Die Datei enthält nur diesen Schlüssel und ist wie die
+Einstellungen für den eigenen Benutzer vorgesehen.
 
 ## Geeigneten Eingang wählen
 
@@ -138,10 +178,9 @@ zeigt im Tray den Zustand an: **Bereit**, **● Aufnahme läuft seit mm:ss** ode
    und DirectShow unter Windows. Es wird dabei nichts aufgenommen oder an einen
    Dienst übertragen.
 3. In Koprotokoll **Aufnehmen → Audioeingang dieses Rechners** wählen und eine
-   Quelle auswählen. Unter macOS 15+ und unter Windows (Tray-App, siehe oben)
+   Quelle auswählen. Unter macOS 15+ und unter Windows (Infobereich, siehe oben)
    gibt es zusätzlich **Systemton + Standardmikrofon**. Die laufende
-   Pegelanzeige bestätigt Samples am Eingang;
-   sie allein bestätigt noch nicht, dass beide Gesprächsseiten enthalten sind.
+   Pegelanzeige bestätigt Samples am Eingang;   sie allein bestätigt noch nicht, dass beide Gesprächsseiten enthalten sind.
    Für den eigenständigen Entwickler-/CLI-Test kann eine Quelle gezielt
    ausgewählt werden. Auf macOS ist das die Gerätenummer aus der Liste; unter
    Linux und Windows der Gerätename:
@@ -153,9 +192,10 @@ zeigt im Tray den Zustand an: **Bereit**, **● Aufnahme läuft seit mm:ss** ode
 
    Die Originaldatei ist verlustfreies WAV (standardmäßig 48 kHz, Stereo) und
    wird wegen `ffmpeg -n` nie überschrieben. Sie bleibt vor der Konvertierung
-   erhalten. Bei der macOS-Systemtonaufnahme vergleicht Koprotokoll vor dem Start
-   der Pipeline die Dauer der beiden Spuren. Weichen sie um mehr als 0,5 Sekunden
-   ab, wird das Meeting nicht angelegt; die Spuren bleiben lokal für die Prüfung.
+   erhalten. Bei der Systemtonaufnahme (macOS und Windows) vergleicht
+   Koprotokoll vor dem Start der Pipeline die Dauer der beiden Spuren. Weichen
+   sie um mehr als 0,5 Sekunden ab, wird das Meeting nicht angelegt; die Spuren
+   bleiben lokal für die Prüfung.
 4. Sofort prüfen, ob sie wirklich beide Seiten enthält:
 
    ```bash
@@ -182,13 +222,18 @@ Signalquelle sichtbar sein: etwa über einen vom Betriebssystem oder
   kann in den macOS-Einstellungen weiterhin aufgeführt sein.
   Für diesen nativen Weg braucht der lokale Entwicklungsrechner `swiftc` aus den
   Apple-Entwicklerwerkzeugen; ohne Compiler wird die Option nicht angeboten.
-  Die App wählt keinen Treiber und ändert weder Standard-Ein- noch
-  Standard-Ausgabe. Unter Windows erfasst die Tray-App den Systemton direkt
-  per WASAPI-Loopback (siehe Abschnitt oben); auf Linux hängt der Systemtonzugriff
-  davon ab, ob die Audioinfrastruktur einen Monitor-/Loopback-Eingang anbietet.
-  Auf Geräten ohne passenden Eingang bleibt der Import einer lokalen
-  Aufnahmedatei verfügbar.
-
+  Unter Windows läuft derselbe Weg über WASAPI: Der Helfer
+  `koprotokoll/capture_windows.py` nimmt den Loopback des
+  Standardwiedergabegeräts und das Standardmikrofon als getrennte Spuren auf
+  (reines ctypes, nur Python und `numpy`, keine Treiberinstallation, keine
+  Freigabedialoge; mit `pycaw`/`comtypes` alternativ über `run_capture`).
+  Beide Spuren werden auf den Moment beschnitten, in dem beide Geräte bereit
+  waren; ein Rückstau im Loopback und ein später öffnendes USB-Mikrofon
+  verschieben die Spuren dadurch nicht mehr gegeneinander. Die App wählt keinen
+  Treiber und ändert weder Standard-Ein- noch Standard-Ausgabe. Unter Linux
+  hängt der Systemtonzugriff davon ab, ob die Audioinfrastruktur einen Monitor-/
+  Loopback-Eingang anbietet. Auf Geräten ohne passenden Eingang bleibt der
+  Import einer lokalen Aufnahmedatei verfügbar.
 ## In Koprotokoll importieren und prüfen
 
 Die WAV-Datei über **Hochladen** importieren oder lokal per API senden:
@@ -255,7 +300,7 @@ oder doppelte Stimmen müssen zusätzlich am Originalton geprüft werden.
 | Weg | Voraussetzung | Ausweichweg |
 | --- | --- | --- |
 | Direkter Hardwareeingang | Betriebssystem sieht Mikrofon/Interface/Loopback | WAV auf einem anderen Gerät aufnehmen und importieren |
-| Systemton | macOS 15+ mit Systemaudio- und Mikrofonfreigabe; andernorts Monitor-/Loopback-Eingang | Freigegebene lokale Aufnahmedatei importieren |
+| Systemton | macOS 15+ (Systemaudio- und Mikrofonfreigabe) oder Windows 10/11 (Standardgeräte, kein Dialog); Linux mit Monitor-/Loopback-Eingang | Freigegebene lokale Aufnahmedatei importieren |
 | Browseraufnahme | Sichere Seite, Browser-Berechtigung, passende Audiofreigabe | Hardware-WAV importieren |
 | Mobiles Gerät | Lokale Aufnahme-App oder geeigneter Eingang | Datei in das lokale Netz übertragen und importieren |
 
