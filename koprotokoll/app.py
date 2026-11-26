@@ -46,7 +46,7 @@ from .recap import RecapMailer
 from .scheduler import CalendarScheduler
 from .speech import (Diarizer, ModelUnavailable, SherpaDiarizer, Transcriber, build_utterances, create_transcriber,
                      language_mode, transcription_info)
-from .summarize import LLM, ask
+from .summarize import LLM, ask, validate_model_name
 from .transcriptions import FORMATS, render, transcribe_upload, title_from_transcript
 from .tasks import TaskError, TaskExporter, meeting_tasks, tasks_ics
 
@@ -203,6 +203,24 @@ class LocalModelIn(BaseModel):
     max_tokens: int | None = None
     reasoning_effort: str | None = None
     compatible_parameters: bool = False
+
+
+class PullIn(BaseModel):
+    model: str
+
+
+# Deutsche Anleitung für den Fall, dass kein lokaler LLM-Server läuft (Standard: Ollama).
+OLLAMA_SETUP_STEPS = [
+    {"title": "Ollama installieren",
+     "text": "Gratis-Download für Mac, Windows und Linux unter",
+     "link": "https://ollama.com/download", "link_label": "ollama.com/download"},
+    {"title": "Ollama starten",
+     "text": "Die Ollama-App öffnen oder „ollama serve“ im Terminal ausführen – "
+             "der Server läuft dann lokal unter http://localhost:11434."},
+    {"title": "Danach hier „Erneut prüfen“",
+     "text": "Sobald der Server erreichbar ist, kann die App das Modell direkt laden "
+             "(ca. 5 GB Download, bleibt auf diesem Rechner)."},
+]
 
 
 def create_app(settings: Settings | None = None, transcriber: Transcriber | None = None,
@@ -530,6 +548,95 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
             raise HTTPException(400, "Unterstützung der optionalen Parameter für Server und Modell bestätigen.")
         s.save_llm(body.model, body.max_tokens, body.reasoning_effort)
         return local_model()
+
+    # ---------------------------------------------- Sprachmodell einrichten
+    pull_lock = threading.Lock()
+    pull_state: dict = {"running": False, "model": None, "status": "", "total": 0, "completed": 0,
+                        "done": False, "error": None, "cancel": None}
+
+    def pull_snapshot() -> dict:
+        with pull_lock:
+            return {k: v for k, v in pull_state.items() if k != "cancel"}
+
+    def _pull_progress(model: str, status_text: str, total: int, completed: int) -> None:
+        with pull_lock:
+            pull_state.update(running=True, model=model, status=status_text, total=total,
+                              completed=completed, done=False, error=None)
+
+    def _run_pull(model: str) -> None:
+        cancel = threading.Event()
+        with pull_lock:
+            pull_state.update(running=True, model=model, status="gestartet", total=0, completed=0,
+                              done=False, error=None, cancel=cancel)
+        try:
+            llm.pull_model(model, progress=lambda st, t, c: _pull_progress(model, st, t, c), cancel=cancel)
+            with pull_lock:
+                pull_state.update(running=False, status="success", done=True)
+        except Exception as e:  # noqa: BLE001 – ein abgebrochener/fehlerhafter Download darf den Server nicht stoppen
+            with pull_lock:
+                pull_state.update(running=False, done=True,
+                                  status="abgebrochen" if cancel.is_set() else "fehler",
+                                  error=None if cancel.is_set() else str(e)[:300])
+        finally:
+            with pull_lock:
+                pull_state["cancel"] = None
+
+    @api.get("/api/llm/setup")
+    def llm_setup():
+        """Was fehlt, damit ein lokales Sprachmodell läuft – und welcher Schritt als Nächstes ansteht."""
+        if isinstance(llm, LLM):
+            state = llm.status()
+        else:
+            state = dict(models=[], model=s.llm_model, url=s.llm_base_url, available=False, enabled=True,
+                         reason="unavailable", server_reachable=False, model_present=False,
+                         message="Modellstatus nicht verfügbar.")
+        supported = isinstance(llm, LLM) and llm.pull_supported()
+        reason = state.get("reason")
+        if reason in ("disabled", "external_blocked", "unavailable"):
+            step = "disabled"
+        elif not state.get("server_reachable"):
+            step = "install_server"
+        elif not state.get("model_present"):
+            step = "pull_model" if supported else "select_model"
+        else:
+            step = "ready"
+        return {**state, "provider": s.llm_provider, "pull_supported": supported, "setup_step": step,
+                "suggested_model": s.llm_model, "size_hint": "ca. 5 GB",
+                "instructions": OLLAMA_SETUP_STEPS if step == "install_server" else []}
+
+    @api.post("/api/llm/pull", status_code=201)
+    def start_pull(body: PullIn):
+        """Lädt das Modell über die lokale Ollama-API; Fortschritt siehe GET /api/llm/pull."""
+        if not isinstance(llm, LLM) or not llm.pull_supported():
+            raise HTTPException(400, "Modell-Download wird nur für einen lokalen Ollama-Server unterstützt "
+                                     "(Anbieter „ollama“, lokale URL).")
+        try:
+            model = validate_model_name(body.model)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from e
+        with pull_lock:
+            if pull_state["running"]:
+                raise HTTPException(409, "Es läuft bereits ein Modell-Download.")
+            pull_state.update(running=True, model=model, status="gestartet", total=0, completed=0,
+                              done=False, error=None)
+        threading.Thread(target=_run_pull, args=(model,), name="llm-pull", daemon=True).start()
+        return pull_snapshot()
+
+    @api.get("/api/llm/pull")
+    def pull_progress():
+        return {**pull_snapshot(), "supported": isinstance(llm, LLM) and llm.pull_supported()}
+
+    @api.post("/api/llm/pull/cancel")
+    def cancel_pull():
+        with pull_lock:
+            running = pull_state["running"]
+            cancel = pull_state.get("cancel")
+        if not running or cancel is None:
+            raise HTTPException(409, "Es läuft gerade kein Download.")
+        cancel.set()
+        if isinstance(llm, LLM):
+            llm.cancel_pull()
+        return {"cancelled": True}
 
     @api.get("/api/status")
     def status():
