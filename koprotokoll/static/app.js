@@ -308,13 +308,13 @@ function openItemMenu(m, x, y, itemEl) {
       const text = await apiText(`/api/meetings/${m.id}/export?format=txt`);
       if (!text.trim()) return toast("Noch kein Transkript vorhanden.");
       if (await copyText(text)) toast("Transkript in die Zwischenablage kopiert.");
-      else toast("Kopieren nicht möglich – bitte im Meeting manuell markieren.", true);
+      else toast("Zwischenablage nicht direkt beschreibbar – Text ist markiert, bitte „Kopieren“ tippen.", true);
     }),
     entry("Zusammenfassung kopieren", async () => {
       const full = await api(`/api/meetings/${m.id}`);
       if (!full.summary) return toast("Noch keine Zusammenfassung vorhanden.");
       if (await copyText(summaryText(full))) toast("Zusammenfassung in die Zwischenablage kopiert.");
-      else toast("Kopieren nicht möglich – bitte im Meeting manuell markieren.", true);
+      else toast("Zwischenablage nicht direkt beschreibbar – Text ist markiert, bitte „Kopieren“ tippen.", true);
     }, { disabled: m.status !== "done" || null }),
     entry("Transkript als Textdatei speichern",
       () => { window.location = withKey(`/api/meetings/${m.id}/export?format=txt`); }),
@@ -350,11 +350,14 @@ async function apiText(path) {
   return res.text();
 }
 
-// Zwischenablage – navigator.clipboard braucht einen sicheren Kontext (localhost
-// zählt dazu); als Fallback dient execCommand.
+// Zwischenablage – navigator.clipboard braucht einen sicheren Kontext (https/localhost;
+// bei http über LAN-IP ist sie undefined). Fallbacks: execCommand (nur innerhalb der
+// User-Aktivierung, nach awaits auf iOS oft wirkungslos) und schließlich ein Dialog mit
+// markiertem Text, über den der Nutzer „Kopieren“ tippen kann.
 async function copyText(text) {
-  try { await navigator.clipboard.writeText(text); return true; }
-  catch { /* Fallback unten */ }
+  try {
+    if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(text); return true; }
+  } catch { /* Fallback unten */ }
   const ta = h("textarea", { style: "position:fixed;top:0;left:0;opacity:0" }, text);
   document.body.append(ta);
   ta.focus();
@@ -362,7 +365,29 @@ async function copyText(text) {
   let ok = false;
   try { ok = document.execCommand("copy"); } catch { ok = false; }
   ta.remove();
-  return ok;
+  if (ok) return true;
+  showCopyDialog(text);
+  return false;
+}
+
+// Letzter Fallback: Text in readonly-Textarea anzeigen und markieren – das native
+// „Kopieren“ des Browsers (iOS-Lupe) funktioniert darüber zuverlässig.
+function showCopyDialog(text) {
+  let dlg = $("#dlg-copy");
+  if (!dlg) {
+    const ta = h("textarea", { id: "dlg-copy-text", readonly: true, rows: 14, style: "width:100%;resize:vertical" });
+    dlg = h("dialog", { id: "dlg-copy" },
+      h("h2", {}, "Kopieren"),
+      h("p", { class: "muted small" }, "Text ist markiert – „Kopieren“ tippen, um ihn in die Zwischenablage zu legen."),
+      ta,
+      h("menu", {}, h("button", { type: "button", onclick: () => dlg.close() }, "Schließen")));
+    document.body.append(dlg);
+  }
+  const area = $("#dlg-copy-text");
+  area.value = text;
+  if (!dlg.open) dlg.showModal();
+  area.focus();
+  area.select();
 }
 
 // Zusammenfassung als Klartext – dieselben Inhalte wie im Markdown-Export.
