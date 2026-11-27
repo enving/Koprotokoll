@@ -36,6 +36,16 @@ curl -H "Authorization: Bearer $KEY" -o aufnahme.wav "http://localhost:8000/api/
 | Google | `GET/DELETE /api/integrations/google`, `PUT …/client`, `GET …/connect`, `PATCH …/settings`, `POST …/sync` |
 | Kalender-Quellen | `GET/POST /api/calendars`, `GET /api/calendars/presets`, `PATCH/DELETE /api/calendars/{id}`, `GET/POST /api/calendars/{id}/test`, `POST /api/calendars/sync` |
 
+`GET /api/meetings` liefert pro Meeting `id`, `title`, `created_at`, `duration`, `status`,
+`progress`, `error` und zusätzlich `preview` – die ersten gesprochenen Wörter des Transkripts
+(max. 10 Wörter, leer solange die Aufnahme noch verarbeitet wird), die die Oberfläche in der
+Meeting-Liste anzeigt.
+
+`GET /api/labels` liefert das aktive Klassifikations-Label-Set: `source` (Dateipfad oder
+`standard`), `threshold` und `labels` (je `name`, `description`, `examples`). Ein
+ungültiges Label-Set liefert `400` mit deutscher Fehlermeldung. Schema und Anleitung:
+docs/einrichtung.md („Eigene Klassifikation“).
+
 ## Diktieren: `/v1/audio/transcriptions` (OpenAI-kompatibel)
 
 Für kurze Aufnahmen – etwa aus **Kodiktat** oder jedem Programm, das die OpenAI-Transkriptions-API
@@ -233,28 +243,66 @@ Links `/#meeting={id}&t={Sekunden}` öffnen die zugehörige Player-Stelle.
 ### Lokales Textmodell
 
 `GET /api/llm` liefert `models`, `model`, `url`, `enabled`, `server_reachable`,
-`model_present`, `available`, `inference`, `message`, `model_env_override`,
+`model_present`, `available`, `inference`, `message`, `reason`, `model_env_override`,
 `max_tokens` und `reasoning_effort`. `available` bedeutet ausschließlich: aktiviert
 und ausgewähltes Modell in der Serverliste vorhanden. `inference` bleibt bei dieser
-reinen Listenprüfung „nicht geprüft“. Das tatsächliche Ergebnis steht im Meeting
-unter `summary.engine` und bei Heuristik unter `summary.warning`.
+reinen Listenprüfung „nicht geprüft“. `reason` nennt den konkreten Zustand:
+`disabled`, `external_blocked`, `server_unreachable`, `server_error`, `model_missing`
+oder `ok`; `message` nennt dabei URL bzw. Modellnamen. Das tatsächliche Ergebnis steht
+im Meeting unter `summary.engine`; bei Heuristik übernimmt `summary.warning` denselben
+konkreten Grund.
 
 `PUT /api/llm` speichert zum Beispiel `{"model":"testmodell"}` lokal. Optionale
 Felder: `max_tokens` (1–32768 oder null), `reasoning_effort` (null, `none`, `low`,
 `medium`, `high`). Für gesetzte optionale Parameter muss
 `compatible_parameters: true` ihre Unterstützung bestätigen. Unbekannte Modelle
 oder ungültige Parameter ergeben 400; fehlerhafte Body-Typen 422.
-Alle Endpunkte verwenden die bestehende API-Authentifizierung. Keine Downloads.
+Alle Endpunkte verwenden die bestehende API-Authentifizierung.
+
+### Sprachmodell aus der App laden (nur lokaler Ollama)
+
+- `GET /api/llm/setup`: Status plus `setup_step` (`install_server`, `pull_model`,
+  `select_model`, `ready` oder `disabled`), `pull_supported`, `suggested_model`,
+  `size_hint` („ca. 5 GB“) und bei `install_server` die deutschen `instructions`
+  (Installationsschritte inklusive Link).
+- `POST /api/llm/pull` mit `{"model":"qwen2.5:7b-instruct"}`: startet den Download
+  über die Ollama-API (`POST /api/pull`, NDJSON). Antwort 201 mit Status-Snapshot.
+  400 bei nicht lokalem Ollama-Server oder ungültigem Modellnamen, 422 bei falschem
+  Body-Typ, 409 wenn bereits ein Download läuft.
+- `GET /api/llm/pull`: `running`, `model`, `status`, `total`, `completed`, `done`,
+  `error` und `supported` – Fortschritt in Bytes aus dem NDJSON-Stream.
+- `POST /api/llm/pull/cancel`: bricht den laufenden Download ab; 409 wenn keiner läuft.
+
+Nur lokale Ollama-Server (Anbieter „ollama“, lokale URL) werden angefragt; externe
+Ziele und Umleitungen werden abgelehnt. Kein Cloud-Zwang: Ohne Modell bleibt die
+Heuristik aktiv.
 
 ### Sprachmodell-Anbieter
 
 `GET /api/llm` liefert Status, Modellliste, `provider`, `timeout`, `api_key_set`,
 `env_overrides`, `external` und `external_confirmed`, niemals den Schlüssel.
-`PUT /api/llm/provider` speichert `provider` (`ollama`, `openai`, `other`), `url`,
-`model`, `timeout` (0,01–3600 Sekunden), optional `api_key` und `external_confirmed`.
-Ein fehlender/null Schlüssel bleibt erhalten, `""` löscht ihn. Externe URLs erfordern
+`PUT /api/llm/provider` speichert `provider` (`ollama`, `mistral`, `openai`, `other`),
+`url`, `model`, `timeout` (0,01–3600 Sekunden), optional `api_key` und `external_confirmed`.
+Das Preset `mistral` füllt `https://api.mistral.ai/v1` als URL vor. Ein fehlender/null
+Schlüssel bleibt erhalten, `""` löscht ihn. Externe URLs erfordern
 `external_confirmed: true`. `POST /api/llm/test` prüft den gespeicherten Anbieter:
 Erreichbarkeit, Modell vorhanden, kurzer Probeaufruf als getrennte Felder.
+
+### Coding CLI als Sprachmodell-Quelle (z. B. Vibe)
+
+- `GET /api/llm/cli-sources`: gefundene CLI-Quellen ohne Schlüsselmaterial, z. B.
+  `{"sources":[{"source":"vibe","label":"Mistral Vibe CLI","provider":"mistral",
+  "url":"https://api.mistral.ai/v1","model":"mistral-large-4-0","models":[…],
+  "key_available":true,"key_source":"macOS-Schlüsselbund (ai.mistral.vibe)",
+  "config":"…/.vibe/config.toml"}]}`. Quelle: `~/.vibe/config.toml` (überschreibbar
+  mit `KOPROTOKOLL_VIBE_CONFIG`); Schlüssel aus `MISTRAL_API_KEY` oder macOS-Schlüsselbund.
+- `POST /api/llm/cli-import` mit `{"source":"vibe","external_confirmed":true}` und
+  optional `api_key` (manuell nachgetragen): übernimmt Endpunkt und Modell und speichert
+  den Schlüssel lokal in `llm-settings.json` (0600). Antwort ist `GET /api/llm`
+  (`api_key_set: true`, niemals der Schlüssel). 400 bei unbekannter Quelle, fehlendem
+  oder ungültigem Schlüssel, ungültigem Modellnamen oder externer URL ohne
+  `external_confirmed: true`. Ohne CLI-Konfiguration oder Schlüssel: manuelle Eingabe
+  über `PUT /api/llm/provider`.
 
 ### Transkript-Nachbesserung
 
@@ -281,7 +329,10 @@ Kurzbefehl nimmt Audio auf, sendet es an die Transkriptions-API und kopiert den
 zurückgegebenen Text in die Zwischenablage. Diesen Text danach z. B. in T3 Code
 einfügen. Beim Ausführen auf dem iPhone liegt er direkt in dessen Zwischenablage;
 ein Ergebnisfenster muss nicht bestätigt werden. Die Spracherkennung des iPhones
-wird dabei nicht verwendet.
+wird dabei nicht verwendet. Die Vorlage sendet zusätzlich `save_meeting=1`:
+Audio und Transkript landen dann dauerhaft als Meeting in Koprotokoll (Titel aus
+den ersten Worten des Transkripts, Antwort-Header `X-Koprotokoll-Meeting`); dafür
+muss der Server mindestens den Stand vom 25.11.2026 laufen.
 
 ```bash
 python scripts/create_iphone_shortcut.py \

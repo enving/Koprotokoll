@@ -366,6 +366,27 @@ class SherpaDiarizer:
 SENTENCE_END = (".", "?", "!", "…")
 
 
+def talk_shares(turns: list[Turn]) -> dict[int, float]:
+    """Redezeit-Anteil je Sprecher über die erkannten Turns (Summe 1)."""
+    totals: dict[int, float] = {}
+    total = 0.0
+    for t in turns:
+        dur = max(0.0, t.end - t.start)
+        totals[t.speaker] = totals.get(t.speaker, 0.0) + dur
+        total += dur
+    if not total:
+        return {spk: 0.0 for spk in totals}
+    return {spk: dur / total for spk, dur in totals.items()}
+
+
+def dominant_speaker(turns: list[Turn]) -> tuple[int | None, float]:
+    """Sprecher mit dem größten Redeanteil und sein Anteil (bei Gleichstand der erste)."""
+    shares = talk_shares(turns)
+    if not shares:
+        return None, 0.0
+    return max(shares.items(), key=lambda item: item[1])
+
+
 def speaker_for(word: Word, turns: list[Turn]) -> int | None:
     """Sprecher mit der größten zeitlichen Überlappung; sonst der nächstgelegene."""
     best, best_overlap = None, 0.0

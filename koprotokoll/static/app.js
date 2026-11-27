@@ -8,6 +8,8 @@ const STATUS = {
 const COLORS = ["--s1", "--s2", "--s3", "--s4", "--s5", "--s6"];
 
 const state = { meetings: [], bots: [], current: null, segEls: [], pollTimer: null, selected: new Set() };
+// Erklaerung, die am Meeting-Ergebnis und in den Einstellungen steht, wenn die Heuristik lief.
+const LLM_HINT = "Diese Zusammenfassung wurde mit Regeln erstellt (ohne Sprachmodell). Ein lokales Sprachmodell schreibt Übersicht, Entscheidungen und Aufgaben – es läuft auf diesem Rechner, ca. 5 GB.";
 const ACTIVE_BOT = ["scheduled", "joining", "waiting_admit", "recording", "stopping"];
 const BOT_STATUS = {
   scheduled: "geplant", joining: "tritt bei", waiting_admit: "wartet auf Einlass", recording: "nimmt auf",
@@ -99,39 +101,139 @@ function tsLink(sec, label) {
 // --------------------------------------------------------- Meeting-Liste
 async function loadMeetings() {
   state.meetings = await api("/api/meetings");
+  renderList();
+  await loadBots();
+  schedulePoll();
+}
+
+// Sortierung/Filter der Liste – als Drop-down oben in der Sidebar, damit es nicht
+// dauerhaft Platz wegnimmt; die Wahl liegt lokal im Browser (localStorage).
+function listPrefs() {
+  try {
+    return { sort: localStorage.getItem("koprotokoll-sort") || "new",
+             filter: localStorage.getItem("koprotokoll-filter") || "all" };
+  } catch { return { sort: "new", filter: "all" }; }
+}
+
+try {
+  $("#sort-order").value = localStorage.getItem("koprotokoll-sort") || "new";
+  $("#filter-status").value = localStorage.getItem("koprotokoll-filter") || "all";
+} catch { /* ohne Browserspeicher bleiben die Vorgabewerte stehen */ }
+$("#sort-order").addEventListener("change", (e) => {
+  try { localStorage.setItem("koprotokoll-sort", e.target.value); } catch { /* optional */ }
+  renderList();
+});
+$("#filter-status").addEventListener("change", (e) => {
+  try { localStorage.setItem("koprotokoll-filter", e.target.value); } catch { /* optional */ }
+  renderList();
+});
+
+function normText(s) {
+  return (s || "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+}
+
+// Vorschau nur anzeigen, wenn sie den Titel nicht nur wiederholt (Titel = erste Wörter).
+function previewOf(m) {
+  const p = normText(m.preview), t = normText(m.title);
+  if (!p || !t || t.includes(p) || p.includes(t)) return "";
+  return m.preview;
+}
+
+function visibleMeetings() {
+  const { sort, filter } = listPrefs();
+  const view = state.meetings.filter((m) =>
+    filter === "all" ? true
+      : filter === "processing" ? !["done", "error"].includes(m.status)
+      : m.status === filter);
+  const by = {
+    new: (a, b) => b.created_at - a.created_at,
+    old: (a, b) => a.created_at - b.created_at,
+    title: (a, b) => a.title.localeCompare(b.title, "de"),
+    duration: (a, b) => (b.duration || 0) - (a.duration || 0),
+  }[sort] || ((a, b) => b.created_at - a.created_at);
+  return [...view].sort(by);
+}
+
+function renderList() {
   const list = $("#meeting-list");
-  list.replaceChildren(...state.meetings.map((m) => {
-    const sub = m.status === "done"
-      ? `${new Date(m.created_at * 1000).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" })} · ${fmt(m.duration)}`
+  const items = visibleMeetings().map((m) => {
+    const when = new Date(m.created_at * 1000);
+    const dateFull = when.toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" });
+    const dateShort = when.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" });
+    const info = m.status === "done"
+      ? fmt(m.duration)
       : `${STATUS[m.status] || m.status}${m.status !== "error" ? ` · ${Math.round(m.progress * 100)} %` : ""}`;
+    const preview = previewOf(m);
     return h("div", {
-      class: "m-item" + (state.current?.id === m.id ? " active" : ""),
-      onclick: () => openMeeting(m.id),
+      class: "m-item" + (state.current?.id === m.id ? " active" : "") + (state.selected.has(m.id) ? " selected" : ""),
+      "data-id": String(m.id),
+      onclick: (e) => {
+        // Auswahlmodus (ab der ersten Markierung): Tippen irgendwo auf die Zeile
+        // schaltet die Markierung um, statt das Meeting zu öffnen.
+        if (state.selected.size > 0) toggleSelect(m.id, e.currentTarget);
+        else openMeeting(m.id);
+      },
     },
       h("input", {
         type: "checkbox", class: "m-check", title: "Zum Sammellöschen markieren",
         checked: state.selected.has(m.id) || null,
         onclick: (e) => e.stopPropagation(),
-        onchange: (e) => {
-          if (e.target.checked) state.selected.add(m.id); else state.selected.delete(m.id);
-          renderBulkBar();
-        },
+        onchange: (e) => toggleSelect(m.id, e.target),
       }),
-      h("div", { class: "m-body" }, h("div", { class: "t" }, m.title), h("div", { class: "s" }, sub)));
-  }));
+      h("div", { class: "m-body" },
+        h("div", { class: "t" }, m.title),
+        preview ? h("div", { class: "p", title: m.preview }, `„${preview}“`) : null,
+        h("div", { class: "s" },
+          h("span", { class: "s-date" }, `${dateFull} · `),
+          h("span", { class: "s-info" }, info))),
+      h("span", { class: "m-date", title: dateFull }, dateShort));
+  });
+  if (!items.length) items.push(h("div", { class: "muted small", style: "padding:8px 10px" },
+    state.meetings.length
+      ? "Keine Meetings passen zum Filter."
+      : "Noch keine Meetings – oben „Aufnehmen“, „Hochladen“ oder einen Meet-Link für den Bot nutzen."));
+  list.replaceChildren(...items);
   renderBulkBar();
-  const busy = state.meetings.some((m) => !["done", "error"].includes(m.status));
-  await loadBots();
-  const botsBusy = state.bots.some((b) => ACTIVE_BOT.includes(b.status));
-  clearTimeout(state.pollTimer);
-  if (busy || botsBusy) state.pollTimer = setTimeout(refresh, botsBusy && !busy ? 3000 : 1500);
 }
+
+// Liste aktualisieren sich von selbst: im Hintergrund-Tab pausiert, beim
+// Sichtbarwerden sofort; im Leerlauf alle 5 s, während Verarbeitung/Bot aktiv 1,5–3 s.
+function schedulePoll() {
+  clearTimeout(state.pollTimer);
+  if (document.hidden) return;
+  const busy = state.meetings.some((m) => !["done", "error"].includes(m.status));
+  const botsBusy = state.bots.some((b) => ACTIVE_BOT.includes(b.status));
+  state.pollTimer = setTimeout(refresh, busy ? 1500 : botsBusy ? 3000 : 5000);
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) refresh().catch(() => { /* Server evtl. nicht erreichbar */ });
+});
 
 function renderBulkBar() {
   const n = state.selected.size;
   $("#m-bulk").hidden = n === 0;
   $("#m-bulk-count").textContent = n ? `${n} ausgewählt` : "";
 }
+
+// Markierung eines Listeneintrags umschalten – egal ob über das Kästchen oder,
+// im Auswahlmodus, über einen Tipp irgendwo auf die Zeile.
+function toggleSelect(id, el) {
+  if (state.selected.has(id)) state.selected.delete(id); else state.selected.add(id);
+  const item = el?.closest?.(".m-item");
+  if (item) {
+    item.classList.toggle("selected", state.selected.has(id));
+    const check = item.querySelector(".m-check");
+    if (check) check.checked = state.selected.has(id);
+  }
+  renderBulkBar();
+}
+
+$("#m-bulk-done").addEventListener("click", async () => {
+  state.selected.clear();
+  renderBulkBar();
+  await loadMeetings();
+});
 
 $("#m-bulk-delete").addEventListener("click", async () => {
   const ids = [...state.selected];
@@ -180,11 +282,15 @@ async function openMeeting(id, { keepTab = false, seekTo = null } = {}) {
   } else if (diarization?.status === "disabled") {
     diarizationText = "Sprechererkennung deaktiviert.";
   }
+  const own = diarization?.own_voice;
+  const ownText = own?.status === "collapsed"
+    ? `Eigene Stimme erkannt (${Math.round((own.share || 0) * 100)} % Redeanteil) – als „Ich“ zusammengefasst`
+    : own?.status === "single" ? "Nur eine Stimme erkannt – als „Ich“ übernommen" : null;
   $("#m-meta").textContent = [created, m.duration ? fmt(m.duration) : null,
     Object.keys(m.speakers).length ? `${Object.keys(m.speakers).length} Sprecher` : null,
     m.meta?.asr_language ? `Transkriptionsmodus: ${LANGUAGE_LABELS[m.meta.asr_language] || m.meta.asr_language}` : null,
     m.meta?.stop_reason === "silence" ? "Automatisch nach 5 Minuten ohne Sprache gestoppt" : null,
-    diarizationText,
+    diarizationText, ownText,
     m.summary?.engine ? `Zusammenfassung: ${m.summary.engine}` : null, m.summary?.warning, m.summary?.external_service ? `Auswertung durch externen Dienst: ${m.summary.external_service}` : null].filter(Boolean).join(" · ");
 
   const done = m.status === "done";
@@ -220,8 +326,8 @@ async function openMeeting(id, { keepTab = false, seekTo = null } = {}) {
   if (changedMeeting) await renderDraftTargets();
   if (changedMeeting) $("#ask-answer").replaceChildren();
   if (!keepTab) showTab(done ? "summary" : "transcript");
-  document.querySelectorAll(".m-item").forEach((el, i) =>
-    el.classList.toggle("active", state.meetings[i]?.id === id));
+  document.querySelectorAll(".m-item").forEach((el) =>
+    el.classList.toggle("active", el.dataset.id === String(id)));
   if (seekTo !== null) { showTab("transcript"); seek(seekTo); }
 }
 
@@ -308,6 +414,12 @@ function renderSummary() {
   ];
   if (m.meta.summary_speakers_changed) {
     left.unshift(h("p", { role: "status", class: "muted" }, "Die Sprecherzuordnung wurde geändert. Die vorhandene Zusammenfassung bei Bedarf über „Zusammenfassung neu erstellen“ aktualisieren."));
+  }
+  if (s.engine === "heuristik") {
+    // Ergebnis ohne Sprachmodell sichtbar als solches kennzeichnen (#57).
+    left.unshift(h("div", { class: "card llm-hint" },
+      h("p", {}, LLM_HINT),
+      h("button", { type: "button", class: "primary", onclick: openLlmSetup }, "Sprachmodell einrichten")));
   }
   if (s.action_items?.length) {
     left.push(h("div", { class: "card" }, h("h3", {}, `Action Items (${s.action_items.length})`),
@@ -734,8 +846,10 @@ async function endCaptureView(status) {
   cleanupRecording();
   await loadMeetings();
   if (meetingId) {
-    $("#dlg-record").close();
+    // Erst das Meeting öffnen (setzt den Hash), dann den Dialog schließen –
+    // so kann ein reload dazwischen nicht auf der Listenansicht landen.
     await openMeeting(meetingId);
+    $("#dlg-record").close();
   } else if (status.error) {
     $("#rec-silence-status").textContent = status.error;
   }
@@ -911,8 +1025,16 @@ $("#dlg-record").addEventListener("cancel", (e) => { if (rec.hardware || rec.rec
 function showView(name) {
   for (const v of ["empty", "meeting", "integrations"]) $(`#${v}`).hidden = v !== name;
   $("#btn-integrations").classList.toggle("active", name === "integrations");
+  // Auf dem Handy ist die Liste die Startansicht; Meeting/Integrationen sind eigene Vollbild-Ansichten.
+  document.body.classList.toggle("detail", name !== "empty");
   if (name !== "meeting") document.querySelectorAll(".m-item").forEach((el) => el.classList.remove("active"));
 }
+
+// Zurück zur Liste (nur auf dem Handy sichtbar): Hash zurücksetzen, route() zeigt die Listenansicht.
+$("#m-back").addEventListener("click", () => {
+  if (location.hash && location.hash !== "#") location.hash = "#";
+  else showView("empty");
+});
 
 // ---------------------------------------------------------- Bots
 async function loadBots() {
@@ -961,6 +1083,26 @@ $("#bot-form").addEventListener("submit", async (e) => {
 });
 
 // ---------------------------------------------------------- Integrationen
+// Aktives Klassifikations-Label-Set (JSON) – die Klassifikation selbst läuft lokal (#61).
+async function renderLabels() {
+  const box = $("#labels-box");
+  try {
+    const ls = await api("/api/labels");
+    box.replaceChildren(
+      h("p", { class: "muted small" },
+        `Aktives Label-Set: ${ls.source === "standard" ? "Standard (eingebaut)" : ls.source} · Schwelle ${Math.round(ls.threshold * 100)} %`),
+      h("div", { class: "chips" }, ls.labels.map((l) => h("span", {
+        class: "chip",
+        title: [l.description, l.examples?.length ? `Beispiele: ${l.examples.join("; ")}` : null].filter(Boolean).join(" – "),
+      }, l.name))),
+      h("p", { class: "muted small" },
+        "Eigenes Set: labels.json im Datenordner oder Pfad in KOPROTOKOLL_LABELS_FILE. Schema und Anleitung: docs/einrichtung.md („Eigene Klassifikation“); Beispiel: labels.example.json im Repo."));
+  } catch (err) {
+    box.replaceChildren(h("p", { role: "alert" }, err.message),
+      h("button", { onclick: renderLabels }, "Erneut laden"));
+  }
+}
+
 async function openIntegrations() {
   showView("integrations");
   // pushState statt replaceState: Die Zurück-Taste des Browsers führt zurück (route() bei hashchange).
@@ -969,7 +1111,7 @@ async function openIntegrations() {
   const err = params.get("google_error") || params.get("microsoft_error");
   if (err) alert(`Anmeldung abgebrochen: ${err}`);
   renderBots();
-  await Promise.all([renderGoogle(), renderMicrosoft(), renderEmail(), renderSources(), renderKeys(), renderHooks()]);
+  await Promise.all([renderGoogle(), renderMicrosoft(), renderEmail(), renderLabels(), renderSources(), renderKeys(), renderHooks()]);
 }
 
 async function renderEmail() {
@@ -1274,13 +1416,13 @@ $("#ics-form").addEventListener("submit", async (e) => {
 
 async function renderUpcoming() {
   const events = await api("/api/upcoming");
-  const list = $("#upcoming-list");
+  const lists = [$("#upcoming-list"), $("#upcoming-list-mobile")].filter(Boolean);
   if (!events.length) {
-    list.replaceChildren(h("li", { class: "muted small" },
+    for (const list of lists) list.replaceChildren(h("li", { class: "muted small" },
       "Keine Termine in den nächsten 7 Tagen. Verbundene Kalender werden automatisch angezeigt."));
     return;
   }
-  list.replaceChildren(...events.map((e) => {
+  for (const list of lists) list.replaceChildren(...events.map((e) => {
     const when = new Date(e.start * 1000).toLocaleString("de-DE",
       { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
     return h("li", {},
@@ -1344,7 +1486,8 @@ async function route() {
     await openMeeting(+m[1], { seekTo: timestamp !== null && Number.isFinite(timestamp) && timestamp >= 0 ? timestamp : null }).catch(() => showView("empty"));
   }
   else if (hash.startsWith("#integrations")) await openIntegrations();
-  else { showView("empty"); await renderUpcoming(); }
+  // Zurück in der Listenansicht (z. B. „Zurück" vom Handy): Liste frischen Stand laden.
+  else { showView("empty"); await loadMeetings(); await renderUpcoming(); }
 }
 window.addEventListener("hashchange", () => route());
 
@@ -1389,7 +1532,7 @@ async function renderLocalModel() {
         await renderLocalModel();
       } catch (err) { message.textContent = err.message; }
     };
-    const provider = h("select", { "aria-label": "Anbieter" }, ...[["ollama", "Ollama lokal"], ["openai", "OpenAI"], ["other", "Anderer OpenAI-kompatibler Server"]].map(([value, label]) => h("option", { value }, label)));
+    const provider = h("select", { "aria-label": "Anbieter" }, ...[["ollama", "Ollama lokal"], ["mistral", "Mistral API"], ["openai", "OpenAI"], ["other", "Anderer OpenAI-kompatibler Server"]].map(([value, label]) => h("option", { value }, label)));
     provider.value = config.provider;
     const url = h("input", { "aria-label": "Basis-URL", value: config.url });
     const name = h("input", { "aria-label": "Modellname", value: config.model });
@@ -1397,7 +1540,7 @@ async function renderLocalModel() {
     const remove = h("input", { type: "checkbox" });
     const timeout = h("input", { type: "number", "aria-label": "Timeout in Sekunden", value: config.timeout, min: "0.01", max: "3600", step: "any" });
     const confirm = h("input", { type: "checkbox" });
-    provider.onchange = () => { if (provider.value === "openai") url.value = "https://api.openai.com/v1"; if (provider.value === "ollama") url.value = "http://localhost:11434/v1"; confirm.checked = false; };
+    provider.onchange = () => { if (provider.value === "openai") url.value = "https://api.openai.com/v1"; if (provider.value === "mistral") url.value = "https://api.mistral.ai/v1"; if (provider.value === "ollama") url.value = "http://localhost:11434/v1"; confirm.checked = false; };
     url.oninput = () => { confirm.checked = false; };
     model.onchange = () => { name.value = model.value; };
     const providerSave = h("button", { type: "button" }, "Anbieter speichern");
@@ -1411,6 +1554,8 @@ async function renderLocalModel() {
     const test = h("button", { type: "button" }, "Gespeicherten Anbieter testen");
     test.onclick = async () => { try { const result = await api("/api/llm/test", { method: "POST" }); message.textContent = `Server: ${result.server_reachable ? "erreichbar" : "nicht erreichbar"} · Modell: ${result.model_present ? "vorhanden" : "fehlt"} · Probeaufruf: ${result.inference}`; } catch (err) { message.textContent = err.message; } };
     box.replaceChildren(h("h2", {}, "Sprachmodell"),
+      h("p", {}, "Ohne Sprachmodell erstellt die App die Zusammenfassung mit Regeln. Ein lokales Sprachmodell schreibt Übersicht, Entscheidungen und Aufgaben selbst – es läuft auf diesem Rechner (Download ca. 5 GB, bleibt lokal). Ohne Modell bleibt alles nutzbar."),
+      h("button", { type: "button", onclick: openLlmSetup }, "Sprachmodell einrichten"),
       h("p", {}, config.external ? `Externer Dienst: ${config.url} (${config.external_confirmed ? "bestätigt" : "Übertragung gesperrt"})` : "Lokaler Dienst"),
       h("p", {}, config.env_overrides.length ? `Vom Server vorgegeben: ${config.env_overrides.join(", ")}` : "Eigene Einstellungen"),
       h("label", {}, "Anbieter ", provider), h("label", {}, "Basis-URL ", url),
@@ -1429,3 +1574,136 @@ async function renderLocalModel() {
   } catch (err) { box.textContent = err.message; }
 }
 renderLocalModel();
+
+// ---------------------------------------------- Sprachmodell einrichten (#57)
+const PULL_STATUS_DE = {
+  "pulling manifest": "Manifest wird geladen",
+  "downloading": "Download läuft",
+  "verifying sha256 digest": "Prüfsumme wird kontrolliert",
+  "writing manifest": "Manifest wird geschrieben",
+  "removing any unused layers": "Unbenutzte Ebenen werden entfernt",
+  "success": "Fertig",
+};
+let llmSetupTimer = null;
+
+function stopLlmSetupPoll() {
+  if (llmSetupTimer) { clearInterval(llmSetupTimer); llmSetupTimer = null; }
+}
+
+async function openLlmSetup() {
+  const dlg = $("#dlg-llm-setup");
+  if (!dlg.open) dlg.showModal();
+  await renderLlmSetup();
+}
+
+async function renderLlmSetup(flash = null) {
+  const body = $("#llm-setup-body");
+  stopLlmSetupPoll();
+  body.replaceChildren(h("p", { role: "status" }, "Status wird geprüft …"));
+  let setup;
+  try { setup = await api("/api/llm/setup"); }
+  catch (err) { body.replaceChildren(h("p", { role: "alert" }, err.message)); return; }
+  const kids = [h("p", {},
+    "Ein lokales Sprachmodell schreibt Übersicht, Entscheidungen und Aufgaben selbst – es läuft auf diesem Rechner (Download ca. 5 GB, bleibt lokal). Ohne Modell bleibt alles nutzbar; Koprotokoll arbeitet dann mit Regeln.")];
+  if (flash) kids.unshift(h("p", { role: "status" }, flash));
+  if (setup.setup_step === "install_server") {
+    kids.push(
+      h("p", {}, `Der Server unter ${setup.url} ist nicht erreichbar. Damit ein Sprachmodell lokal laufen kann, muss zuerst einer installiert sein:`),
+      h("ol", {}, setup.instructions.map((step) => h("li", {},
+        h("b", {}, `${step.title}. `), step.text, " ",
+        step.link ? h("a", { href: step.link, target: "_blank", rel: "noopener" }, step.link_label || step.link) : null))),
+      h("div", { class: "row" }, h("button", { type: "button", onclick: () => renderLlmSetup() }, "Erneut prüfen")));
+  } else if (setup.setup_step === "check_endpoint") {
+    kids.push(
+      h("p", {}, `${setup.message} Endpunkt, Schlüssel und Erreichbarkeit lassen sich unten bzw. in den Einstellungen prüfen.`),
+      h("div", { class: "row" }, h("button", { type: "button", onclick: () => renderLlmSetup() }, "Erneut prüfen")));
+  } else if (setup.setup_step === "pull_model" || setup.setup_step === "select_model") {
+    const modelInput = h("input", { value: setup.suggested_model, "aria-label": "Modellname" });
+    const status = h("p", { role: "status", class: "muted small" }, setup.message);
+    const barWrap = h("div", { class: "progress", hidden: true },
+      h("div", { class: "bar" }, h("div")), h("span", {}, ""));
+    const start = h("button", { type: "button", class: "primary" }, "Modell laden");
+    const cancel = h("button", { type: "button" }, "Abbrechen");
+    const reset = () => { start.disabled = setup.setup_step !== "pull_model"; cancel.disabled = false; };
+    start.onclick = async () => {
+      start.disabled = true; cancel.disabled = true;
+      try {
+        await api("/api/llm/pull", jsonOpts("POST", { model: modelInput.value.trim() }));
+        barWrap.hidden = false;
+        pollLlmPull(barWrap, status, reset);
+      } catch (err) { status.textContent = err.message; reset(); }
+    };
+    cancel.onclick = async () => {
+      try { await api("/api/llm/pull/cancel", { method: "POST" }); }
+      catch (err) { status.textContent = err.message; }
+    };
+    kids.push(
+      h("p", {}, setup.setup_step === "pull_model"
+        ? `Server erreichbar (${setup.url}), aber das Modell „${setup.model}“ fehlt. Laden aus der App – ca. 5 GB, der genaue Fortschritt erscheint beim Laden; der Download bleibt auf diesem Rechner.`
+        : `Server erreichbar (${setup.url}), aber das Modell „${setup.model}“ fehlt. Dieser Anbieter lädt die App nicht selbst – bitte manuell laden und danach „Erneut prüfen“.`),
+      h("label", {}, "Modellname ", modelInput),
+      h("div", { class: "row" }, start, cancel, h("button", { type: "button", onclick: () => renderLlmSetup() }, "Erneut prüfen")),
+      barWrap, status);
+    if (setup.setup_step !== "pull_model") start.disabled = true;
+  } else if (setup.setup_step === "ready") {
+    kids.push(
+      h("p", {}, `Server erreichbar (${setup.url}) und Modell „${setup.model}“ ist vorhanden. Jetzt in der Modellliste auswählen und speichern – das nächste Meeting schreibt dann eine echte Zusammenfassung (Engine „llm:<Modell>“).`),
+      h("button", { type: "button", onclick: () => { $("#dlg-llm-setup").close(); location.hash = "#integrations"; } }, "Zur Modellauswahl"));
+  } else {
+    kids.push(h("p", {}, `${setup.message} Ohne Sprachmodell arbeitet Koprotokoll mit Regeln – alles bleibt nutzbar.`));
+  }
+
+  // Eigenen Endpunkt / Coding CLI – in jedem Zustand sichtbar, auch ohne lokalen Server.
+  kids.push(h("h3", {}, "Eigenen Endpunkt oder Coding CLI verwenden"));
+  let sources = [];
+  try { sources = (await api("/api/llm/cli-sources")).sources; } catch { sources = []; }
+  if (sources.length) {
+    for (const src of sources) {
+      const confirm = h("input", { type: "checkbox", "aria-label": "Externe Übertragung bestätigen" });
+      const importBtn = h("button", { type: "button" }, "Konfiguration übernehmen");
+      const st = h("p", { role: "status", class: "muted small" });
+      importBtn.onclick = async () => {
+        importBtn.disabled = true;
+        try {
+          await api("/api/llm/cli-import", jsonOpts("POST", { source: src.source, external_confirmed: confirm.checked }));
+          await renderLlmSetup(`Übernommen: ${src.label} · ${src.url} · Modell „${src.model}“. Jetzt in den Einstellungen den Anbieter testen und die Modellauswahl speichern.`);
+        } catch (err) { st.textContent = err.message; importBtn.disabled = false; }
+      };
+      kids.push(h("div", { class: "cli-source" },
+        h("p", {}, `${src.label}: Modell „${src.model}“, Endpunkt ${src.url} – ${src.key_available ? `Schlüssel gefunden (${src.key_source})` : "kein Schlüssel gefunden (Umgebung/Schlüsselbund)"}. Der Schlüssel wird nur lokal gespeichert und nie angezeigt.`),
+        h("label", {}, confirm, ` Transkripttext wird an ${src.url} gesendet. Ich bestätige die externe Übertragung.`),
+        h("div", { class: "row" }, importBtn), st));
+    }
+  } else {
+    kids.push(h("p", { class: "muted small" }, "Keine Coding-CLI-Konfiguration gefunden (~/.vibe/config.toml)."));
+  }
+  kids.push(h("button", { type: "button", onclick: () => { $("#dlg-llm-setup").close(); location.hash = "#integrations"; } },
+    "Eigenen Endpunkt in den Einstellungen eintragen"));
+  body.replaceChildren(...kids);
+}
+
+function pollLlmPull(barWrap, status, done) {
+  stopLlmSetupPoll();
+  const bar = barWrap.querySelector(".bar div");
+  const label = barWrap.querySelector("span");
+  llmSetupTimer = setInterval(async () => {
+    let st;
+    try { st = await api("/api/llm/pull"); } catch { stopLlmSetupPoll(); return; }
+    const frac = st.total ? st.completed / st.total : 0;
+    bar.style.transform = `scaleX(${Math.max(0, Math.min(1, frac))})`;
+    const parts = [PULL_STATUS_DE[st.status] || st.status || ""];
+    if (st.total) parts.push(`${fmtBytes(st.completed)} / ${fmtBytes(st.total)}`);
+    label.textContent = parts.filter(Boolean).join(" – ");
+    if (st.done) {
+      stopLlmSetupPoll();
+      status.textContent = st.error ? st.error
+        : st.status === "success" ? "Modell geladen. Jetzt in der Liste auswählen und speichern."
+        : "Download beendet.";
+      done();
+    } else {
+      status.textContent = "Lädt … abbrechbar über „Abbrechen“.";
+    }
+  }, 1000);
+}
+
+$("#dlg-llm-setup").addEventListener("close", stopLlmSetupPoll);

@@ -57,8 +57,9 @@ Aus den Accessibility-Texten der Seite ergibt sich das beworbene Kern-Feature-Se
 | Datei-Upload (MP3, MP4, WAV, M4A …) | ✔ | ffmpeg → 16 kHz Mono |
 | Transkription | ✔ Standard: deutsches **Parakeet primeline**; optional NVIDIA **Parakeet TDT 0.6B v3** (25 Sprachen) | `sherpa-onnx`; v3 über `onnx-asr` + Silero-VAD |
 | Transkript nachbessern | ✔ Optionales eigenes Sprachmodell, Wortliste, getrenntes Original und markierte Korrektur | Schutzgrenzen und Vergleich: [#44](nachweise/issue-44.md) |
-| Sprechererkennung | ✔ automatisch oder feste Sprecheranzahl; „Nur ich“ ohne automatische Aufteilung, Auswahl gespeichert; Namen umbenennbar | `sherpa-onnx` (pyannote-Segmentierung + ERes2Net-Embeddings) |
+| Sprechererkennung | ✔ automatisch oder feste Sprecheranzahl; „Nur ich“ ohne automatische Aufteilung, Auswahl gespeichert; Namen umbenennbar; Ich-Klassifikation: dominante Stimme (≥ 80 % Redeanteil, nur „Automatisch“) wird rückgängig-bar als „Ich“ zusammengefasst | `sherpa-onnx` (pyannote-Segmentierung + ERes2Net-Embeddings), `pipeline.py` |
 | Sprechernamen aus der Plattform | Google-Meet-Zeitreihe und konservative Zuordnung implementiert; Live-Prüfung offen | `bot/capture.js`, `speaker_names.py`; manuelle Namen geschützt |
+| Klassifikation der Einträge | ✔ Label-Sets als JSON konfigurierbar (Standard-Set + eigene Datei via `labels.json`/`KOPROTOKOLL_LABELS_FILE`), Anzeige in Integrationen & API, Doku mit Anleitung; Modell und Backfill in Arbeit | `labels.py`, `labels.example.json`, #61/#62/#63 |
 | AI Summary (Überblick, Stichwörter, Gliederung, Action Items, Entscheidungen, Fragen) | ✔ lokales LLM; Offline-Heuristik mit deutschen Aufgaben, Zuständigkeit und Frist als Fallback | OpenAI-kompatible API (Ollama, llama.cpp, LM Studio) |
 | Suche über alle Meetings | ✔ Volltext mit Präfixsuche und Trefferhervorhebung | SQLite FTS5 |
 | AskFred | ✔ „Frag das Meeting“ | LLM mit Transkript-Kontext; ohne LLM Suchtreffer |
