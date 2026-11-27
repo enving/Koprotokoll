@@ -107,17 +107,19 @@ async function loadMeetings() {
       ? `${new Date(m.created_at * 1000).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" })} · ${fmt(m.duration)}`
       : `${STATUS[m.status] || m.status}${m.status !== "error" ? ` · ${Math.round(m.progress * 100)} %` : ""}`;
     return h("div", {
-      class: "m-item" + (state.current?.id === m.id ? " active" : ""),
-      onclick: () => openMeeting(m.id),
+      class: "m-item" + (state.current?.id === m.id ? " active" : "") + (state.selected.has(m.id) ? " selected" : ""),
+      onclick: (e) => {
+        // Auswahlmodus (ab der ersten Markierung): Tippen irgendwo auf die Zeile
+        // schaltet die Markierung um, statt das Meeting zu öffnen.
+        if (state.selected.size > 0) toggleSelect(m.id, e.currentTarget);
+        else openMeeting(m.id);
+      },
     },
       h("input", {
         type: "checkbox", class: "m-check", title: "Zum Sammellöschen markieren",
         checked: state.selected.has(m.id) || null,
         onclick: (e) => e.stopPropagation(),
-        onchange: (e) => {
-          if (e.target.checked) state.selected.add(m.id); else state.selected.delete(m.id);
-          renderBulkBar();
-        },
+        onchange: (e) => toggleSelect(m.id, e.target),
       }),
       h("div", { class: "m-body" },
         h("div", { class: "t" }, m.title),
@@ -140,6 +142,25 @@ function renderBulkBar() {
   $("#m-bulk").hidden = n === 0;
   $("#m-bulk-count").textContent = n ? `${n} ausgewählt` : "";
 }
+
+// Markierung eines Listeneintrags umschalten – egal ob über das Kästchen oder,
+// im Auswahlmodus, über einen Tipp irgendwo auf die Zeile.
+function toggleSelect(id, el) {
+  if (state.selected.has(id)) state.selected.delete(id); else state.selected.add(id);
+  const item = el?.closest?.(".m-item");
+  if (item) {
+    item.classList.toggle("selected", state.selected.has(id));
+    const check = item.querySelector(".m-check");
+    if (check) check.checked = state.selected.has(id);
+  }
+  renderBulkBar();
+}
+
+$("#m-bulk-done").addEventListener("click", async () => {
+  state.selected.clear();
+  renderBulkBar();
+  await loadMeetings();
+});
 
 $("#m-bulk-delete").addEventListener("click", async () => {
   const ids = [...state.selected];
@@ -1366,7 +1387,8 @@ async function route() {
     await openMeeting(+m[1], { seekTo: timestamp !== null && Number.isFinite(timestamp) && timestamp >= 0 ? timestamp : null }).catch(() => showView("empty"));
   }
   else if (hash.startsWith("#integrations")) await openIntegrations();
-  else { showView("empty"); await renderUpcoming(); }
+  // Zurück in der Listenansicht (z. B. „Zurück" vom Handy): Liste frischen Stand laden.
+  else { showView("empty"); await loadMeetings(); await renderUpcoming(); }
 }
 window.addEventListener("hashchange", () => route());
 
