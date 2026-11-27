@@ -23,6 +23,27 @@
     </form>
     <input id="global-search" type="search" placeholder="Alle Meetings durchsuchen …" autocomplete="off">
     <div id="search-results" hidden></div>
+    <details id="list-options">
+      <summary title="Sortierung und Filter für die Meeting-Liste">⚙ Sortieren &amp; Filtern</summary>
+      <div class="list-options">
+        <label for="sort-order">Sortieren
+          <select id="sort-order">
+            <option value="new">Neueste zuerst</option>
+            <option value="old">Älteste zuerst</option>
+            <option value="title">Titel A–Z</option>
+            <option value="duration">Längste zuerst</option>
+          </select>
+        </label>
+        <label for="filter-status">Anzeigen
+          <select id="filter-status">
+            <option value="all">Alle Meetings</option>
+            <option value="processing">In Verarbeitung</option>
+            <option value="done">Fertig</option>
+            <option value="error">Nur Fehler</option>
+          </select>
+        </label>
+      </div>
+    </details>
     <div id="bot-live"></div>
     <details id="upcoming-card" class="card">
       <summary>Nächste Termine (7 Tage)</summary>

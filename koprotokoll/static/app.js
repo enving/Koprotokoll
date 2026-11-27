@@ -101,13 +101,72 @@ function tsLink(sec, label) {
 // --------------------------------------------------------- Meeting-Liste
 async function loadMeetings() {
   state.meetings = await api("/api/meetings");
+  renderList();
+  await loadBots();
+  schedulePoll();
+}
+
+// Sortierung/Filter der Liste – als Drop-down oben in der Sidebar, damit es nicht
+// dauerhaft Platz wegnimmt; die Wahl liegt lokal im Browser (localStorage).
+function listPrefs() {
+  try {
+    return { sort: localStorage.getItem("koprotokoll-sort") || "new",
+             filter: localStorage.getItem("koprotokoll-filter") || "all" };
+  } catch { return { sort: "new", filter: "all" }; }
+}
+
+try {
+  $("#sort-order").value = localStorage.getItem("koprotokoll-sort") || "new";
+  $("#filter-status").value = localStorage.getItem("koprotokoll-filter") || "all";
+} catch { /* ohne Browserspeicher bleiben die Vorgabewerte stehen */ }
+$("#sort-order").addEventListener("change", (e) => {
+  try { localStorage.setItem("koprotokoll-sort", e.target.value); } catch { /* optional */ }
+  renderList();
+});
+$("#filter-status").addEventListener("change", (e) => {
+  try { localStorage.setItem("koprotokoll-filter", e.target.value); } catch { /* optional */ }
+  renderList();
+});
+
+function normText(s) {
+  return (s || "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+}
+
+// Vorschau nur anzeigen, wenn sie den Titel nicht nur wiederholt (Titel = erste Wörter).
+function previewOf(m) {
+  const p = normText(m.preview), t = normText(m.title);
+  if (!p || !t || t.includes(p) || p.includes(t)) return "";
+  return m.preview;
+}
+
+function visibleMeetings() {
+  const { sort, filter } = listPrefs();
+  const view = state.meetings.filter((m) =>
+    filter === "all" ? true
+      : filter === "processing" ? !["done", "error"].includes(m.status)
+      : m.status === filter);
+  const by = {
+    new: (a, b) => b.created_at - a.created_at,
+    old: (a, b) => a.created_at - b.created_at,
+    title: (a, b) => a.title.localeCompare(b.title, "de"),
+    duration: (a, b) => (b.duration || 0) - (a.duration || 0),
+  }[sort] || ((a, b) => b.created_at - a.created_at);
+  return [...view].sort(by);
+}
+
+function renderList() {
   const list = $("#meeting-list");
-  const items = state.meetings.map((m) => {
-    const sub = m.status === "done"
-      ? `${new Date(m.created_at * 1000).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" })} · ${fmt(m.duration)}`
+  const items = visibleMeetings().map((m) => {
+    const when = new Date(m.created_at * 1000);
+    const dateFull = when.toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" });
+    const dateShort = when.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" });
+    const info = m.status === "done"
+      ? fmt(m.duration)
       : `${STATUS[m.status] || m.status}${m.status !== "error" ? ` · ${Math.round(m.progress * 100)} %` : ""}`;
+    const preview = previewOf(m);
     return h("div", {
       class: "m-item" + (state.current?.id === m.id ? " active" : "") + (state.selected.has(m.id) ? " selected" : ""),
+      "data-id": String(m.id),
       onclick: (e) => {
         // Auswahlmodus (ab der ersten Markierung): Tippen irgendwo auf die Zeile
         // schaltet die Markierung um, statt das Meeting zu öffnen.
@@ -123,19 +182,33 @@ async function loadMeetings() {
       }),
       h("div", { class: "m-body" },
         h("div", { class: "t" }, m.title),
-        m.preview ? h("div", { class: "p", title: m.preview }, `„${m.preview}“`) : null,
-        h("div", { class: "s" }, sub)));
+        preview ? h("div", { class: "p", title: m.preview }, `„${preview}“`) : null,
+        h("div", { class: "s" },
+          h("span", { class: "s-date" }, `${dateFull} · `),
+          h("span", { class: "s-info" }, info))),
+      h("span", { class: "m-date", title: dateFull }, dateShort));
   });
   if (!items.length) items.push(h("div", { class: "muted small", style: "padding:8px 10px" },
-    "Noch keine Meetings – oben „Aufnehmen“, „Hochladen“ oder einen Meet-Link für den Bot nutzen."));
+    state.meetings.length
+      ? "Keine Meetings passen zum Filter."
+      : "Noch keine Meetings – oben „Aufnehmen“, „Hochladen“ oder einen Meet-Link für den Bot nutzen."));
   list.replaceChildren(...items);
   renderBulkBar();
-  const busy = state.meetings.some((m) => !["done", "error"].includes(m.status));
-  await loadBots();
-  const botsBusy = state.bots.some((b) => ACTIVE_BOT.includes(b.status));
-  clearTimeout(state.pollTimer);
-  if (busy || botsBusy) state.pollTimer = setTimeout(refresh, botsBusy && !busy ? 3000 : 1500);
 }
+
+// Liste aktualisieren sich von selbst: im Hintergrund-Tab pausiert, beim
+// Sichtbarwerden sofort; im Leerlauf alle 5 s, während Verarbeitung/Bot aktiv 1,5–3 s.
+function schedulePoll() {
+  clearTimeout(state.pollTimer);
+  if (document.hidden) return;
+  const busy = state.meetings.some((m) => !["done", "error"].includes(m.status));
+  const botsBusy = state.bots.some((b) => ACTIVE_BOT.includes(b.status));
+  state.pollTimer = setTimeout(refresh, busy ? 1500 : botsBusy ? 3000 : 5000);
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) refresh().catch(() => { /* Server evtl. nicht erreichbar */ });
+});
 
 function renderBulkBar() {
   const n = state.selected.size;
@@ -253,8 +326,8 @@ async function openMeeting(id, { keepTab = false, seekTo = null } = {}) {
   if (changedMeeting) await renderDraftTargets();
   if (changedMeeting) $("#ask-answer").replaceChildren();
   if (!keepTab) showTab(done ? "summary" : "transcript");
-  document.querySelectorAll(".m-item").forEach((el, i) =>
-    el.classList.toggle("active", state.meetings[i]?.id === id));
+  document.querySelectorAll(".m-item").forEach((el) =>
+    el.classList.toggle("active", el.dataset.id === String(id)));
   if (seekTo !== null) { showTab("transcript"); seek(seekTo); }
 }
 
