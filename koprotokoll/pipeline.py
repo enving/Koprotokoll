@@ -11,7 +11,8 @@ from typing import Callable
 from .audio import SAMPLE_RATE, load_wav, to_wav16k
 from .db import Database
 from .events import EventBus
-from .speech import Diarizer, Transcriber, build_utterances, language_mode, transcription_info
+from .speech import (Diarizer, Transcriber, build_utterances, dominant_speaker, language_mode,
+                     transcription_info)
 from .speaker_names import names_from_activity
 from .summarize import LLM, summarize
 from .correction import correct
@@ -26,10 +27,11 @@ class Pipeline:
     def __init__(self, db: Database, media_dir: Path, transcriber: Transcriber,
                  diarizer: Diarizer | None, llm: LLM | None, events: EventBus | None = None,
                  select_transcriber: Callable[[str], Transcriber] | None = None,
-                 default_language: str = "auto"):
+                 default_language: str = "auto", dominant_share: float = 0.8):
         self.db, self.media_dir, self.events = db, media_dir, events
         self.transcriber, self.diarizer, self.llm = transcriber, diarizer, llm
         self.select_transcriber, self.default_language = select_transcriber, default_language
+        self.dominant_share = dominant_share
         self._queue: queue.Queue[int] = queue.Queue()
         self._thread = threading.Thread(target=self._run, name="pipeline", daemon=True)
         self._thread.start()
@@ -87,6 +89,7 @@ class Pipeline:
             words = transcriber.transcribe(audio, self._step(meeting_id, "transcribing"))
 
             turns = []
+            detected = 0
             diarization: dict = {"status": "disabled" if self.diarizer is None else "skipped"}
             if self.diarizer is not None and not words:
                 diarization["reason"] = "Keine Wörter erkannt; Sprechererkennung nicht ausgeführt."
@@ -123,11 +126,34 @@ class Pipeline:
             segments = build_utterances(words, turns, speaker_labels=labels)
             self.db.replace_segments(meeting_id, segments)
             current = self.db.get_meeting(meeting_id)
+            # Ich-Klassifikation (nur im Modus „Automatisch“): eine Stimme mit zu hohem
+            # Redeanteil ist die eigene – Sprachmemos landen so nicht als Fehlaufteilung.
+            own_voice = None
+            if turns and meeting.get("num_speakers") is None and diarization.get("status") == "completed":
+                top_raw, share = dominant_speaker(turns)
+                top_label = labels.get(top_raw)
+                if detected == 1:
+                    own_voice = {"status": "single", "speaker": top_label, "share": 1.0}
+                elif share >= self.dominant_share:
+                    own_voice = {"status": "collapsed", "speaker": top_label,
+                                 "share": round(share, 3), "speakers_before": detected}
+            collapsed = False
+            if own_voice and own_voice["status"] == "collapsed":
+                collapsed = self.db.collapse_to_single_speaker(meeting_id, name="Ich", diarization=diarization)
+                if collapsed:
+                    diarization["own_voice"] = own_voice
+                    labels = {}
+                    segments = self.db.get_segments(meeting_id)
+            elif own_voice:
+                diarization["own_voice"] = own_voice
             # Äußerungen verlieren überlappende Turns und können Pausen einschließen.
             # Die Zuordnung braucht deshalb die echten Sprecherzeiten, mit identischen Labels.
             speaker_turns = [{"start": turn.start, "end": turn.end,
                               "speaker": labels.get(turn.speaker, f"unmapped:{turn.speaker}")} for turn in turns]
-            automatic = names_from_activity(speaker_turns, current["meta"].get("speaker_activity", [])) if turns else {}
+            automatic = {} if collapsed else (
+                names_from_activity(speaker_turns, current["meta"].get("speaker_activity", [])) if turns else {})
+            if own_voice and own_voice["status"] == "single" and own_voice.get("speaker") not in automatic:
+                automatic[own_voice["speaker"]] = "Ich"
             names = {segment["speaker"]: automatic.get(segment["speaker"], f"Sprecher {segment['speaker'][1:]}")
                      for segment in segments}
             speakers = self.db.merge_speaker_names(meeting_id, names, diarization=diarization)

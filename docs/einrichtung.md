@@ -108,6 +108,16 @@ Beitritt samt Tonaufnahme steht noch aus ([Nachweis](nachweise/issue-13-bbb.md))
 > Hinweis: Aufzeichnungen nur mit Einverständnis der Teilnehmenden. Der Bot tritt sichtbar
 > unter seinem Namen bei.
 
+### Ich-Klassifikation bei dominanter Stimme
+
+Im Modus „Automatisch“ (keine Sprecherzahl vorgegeben) vergleicht die Pipeline nach der
+Sprechererkennung die Redeanteile: Hält eine Stimme mindestens `KOPROTOKOLL_DOMINANT_SPEAKER_SHARE`
+(default 0.8) der Redezeit, wird sie als eigene Stimme zusammengefasst und heißt **„Ich“**
+(statt einer Fehlaufteilung in mehrere Labels – typisch für Sprachmemos). Das ist rückgängig:
+Über „Frühere Sprecheraufteilung wiederherstellen“ im Meeting kommt die ursprüngliche
+Aufteilung zurück. Wird nur eine Stimme erkannt, heißt sie direkt „Ich“. Bei explizit
+vorgegebener Sprecherzahl (> 1) greift die Klassifikation nicht.
+
 ### Sprechernamen aus Google Meet
 
 Der Meet-Adapter liest alle 500 ms sichtbare Sprechindikatoren und Namen aus der
@@ -540,6 +550,7 @@ Qualitätstest mit echten Meetings, Akzenten und überlappender Sprache.
 | `KOPROTOKOLL_ASR_VAD_PATH` | `models/silero-vad-onnx` im Datenordner | lokales Silero-VAD für v3 |
 | `KOPROTOKOLL_DIARIZATION` | `1` | `0` schaltet Sprechererkennung ab |
 | `KOPROTOKOLL_DIARIZATION_THRESHOLD` | `0.8` | kleiner = mehr Sprecher |
+| `KOPROTOKOLL_DOMINANT_SPEAKER_SHARE` | `0.8` | Redeanteil, ab dem eine Stimme im Modus „Automatisch“ als eigene Stimme („Ich“) zusammengefasst wird |
 | `KOPROTOKOLL_LLM` | `1` | `0` = nur Offline-Heuristik |
 | `KOPROTOKOLL_LLM_URL` | `http://localhost:11434/v1` | OpenAI-kompatibler Endpunkt |
 | `KOPROTOKOLL_LLM_MODEL` | `qwen2.5:7b-instruct` | Modellname |

@@ -233,6 +233,9 @@ class Database:
                         meta[key] = saved["meta"][key]
                     else:
                         meta.pop(key, None)
+                if isinstance(meta.get("diarization"), dict):
+                    # Nach dem Wiederherstellen ist die Ich-Zusammenfassung nicht mehr aktiv.
+                    meta["diarization"] = {k: v for k, v in meta["diarization"].items() if k != "own_voice"}
                 meta.pop("speaker_correction")
             else:
                 if saved:
@@ -253,6 +256,42 @@ class Database:
             meta["summary_speakers_changed"] = True
             self._conn.execute("UPDATE meetings SET speakers = ?, num_speakers = ?, meta = ? WHERE id = ?",
                                (json.dumps(names, ensure_ascii=False), count, json.dumps(meta, ensure_ascii=False), meeting_id))
+
+    def collapse_to_single_speaker(self, meeting_id: int, name: str = "Ich",
+                                   diarization: dict | None = None) -> bool:
+        """Dominante Stimme im Pipeline-Lauf auf ein Label legen (rückgängig via set_single_speaker).
+
+        Wie set_single_speaker ohne Statusprüfung, aber ohne meta['diarization'] zu überschreiben –
+        das speichert die Pipeline selbst. Die Sicherung enthält die übergebene Diarisierung,
+        damit eine Wiederherstellung die ursprüngliche Aufteilung anzeigt.
+        """
+        keys = ("diarization", "manual_speakers", "automatic_speakers")
+        with self._lock, self._conn:
+            meeting = self.get_meeting(meeting_id)
+            if meeting is None or meeting["num_speakers"] == 1:
+                return False
+            meta = meeting["meta"]
+            if meta.get("speaker_correction"):
+                return False  # vorhandene Sicherung nicht überschreiben
+            rows = self._conn.execute("SELECT id, speaker FROM segments WHERE meeting_id = ? ORDER BY idx",
+                                      (meeting_id,)).fetchall()
+            if not rows:
+                return False
+            saved_meta = {key: meta[key] for key in keys if key in meta}
+            if diarization is not None:
+                saved_meta["diarization"] = diarization
+            meta["speaker_correction"] = {
+                "segments": {str(row["id"]): row["speaker"] for row in rows},
+                "speakers": meeting["speakers"], "num_speakers": meeting["num_speakers"],
+                "meta": saved_meta,
+            }
+            names = {"S1": name}
+            self._conn.execute("UPDATE segments SET speaker = ? WHERE meeting_id = ?", ("S1", meeting_id))
+            meta["manual_speakers"], meta["automatic_speakers"] = names, {}
+            meta["summary_speakers_changed"] = True
+            self._conn.execute("UPDATE meetings SET speakers = ?, num_speakers = ?, meta = ? WHERE id = ?",
+                               (json.dumps(names, ensure_ascii=False), 1, json.dumps(meta, ensure_ascii=False), meeting_id))
+            return True
 
     def delete_meeting(self, meeting_id: int) -> None:
         with self._lock, self._conn:

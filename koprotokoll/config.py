@@ -66,6 +66,9 @@ class Settings:
     # Sprechererkennung (sherpa-onnx: pyannote-Segmentierung + Sprecher-Embeddings).
     diarization: bool = field(default_factory=lambda: _env("KOPROTOKOLL_DIARIZATION", "1") != "0")
     diarization_threshold: float = field(default_factory=lambda: float(_env("KOPROTOKOLL_DIARIZATION_THRESHOLD", "0.8")))
+    # Ich-Klassifikation: eine Stimme mit diesem Redeanteil gilt als eigene Stimme („Ich“),
+    # nur im Modus „Automatisch“ (keine explizite Sprecherzahl vorgegeben).
+    dominant_speaker_share: float = field(default_factory=lambda: float(_env("KOPROTOKOLL_DOMINANT_SPEAKER_SHARE", "0.8")))
 
     # Lokales LLM über eine OpenAI-kompatible API (Ollama, llama.cpp-Server, LM Studio …).
     llm_base_url: str = field(default_factory=lambda: _env("KOPROTOKOLL_LLM_URL", "http://localhost:11434/v1"))

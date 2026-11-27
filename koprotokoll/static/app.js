@@ -209,11 +209,15 @@ async function openMeeting(id, { keepTab = false, seekTo = null } = {}) {
   } else if (diarization?.status === "disabled") {
     diarizationText = "Sprechererkennung deaktiviert.";
   }
+  const own = diarization?.own_voice;
+  const ownText = own?.status === "collapsed"
+    ? `Eigene Stimme erkannt (${Math.round((own.share || 0) * 100)} % Redeanteil) – als „Ich“ zusammengefasst`
+    : own?.status === "single" ? "Nur eine Stimme erkannt – als „Ich“ übernommen" : null;
   $("#m-meta").textContent = [created, m.duration ? fmt(m.duration) : null,
     Object.keys(m.speakers).length ? `${Object.keys(m.speakers).length} Sprecher` : null,
     m.meta?.asr_language ? `Transkriptionsmodus: ${LANGUAGE_LABELS[m.meta.asr_language] || m.meta.asr_language}` : null,
     m.meta?.stop_reason === "silence" ? "Automatisch nach 5 Minuten ohne Sprache gestoppt" : null,
-    diarizationText,
+    diarizationText, ownText,
     m.summary?.engine ? `Zusammenfassung: ${m.summary.engine}` : null, m.summary?.warning, m.summary?.external_service ? `Auswertung durch externen Dienst: ${m.summary.external_service}` : null].filter(Boolean).join(" · ");
 
   const done = m.status === "done";

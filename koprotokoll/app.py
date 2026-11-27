@@ -263,7 +263,7 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
     events = EventBus(db)
     pipeline = Pipeline(db, s.media_dir, transcriber, diarizer, llm, events,
                         select_transcriber=None if custom_transcriber else select_transcriber,
-                        default_language=default_mode)
+                        default_language=default_mode, dominant_share=s.dominant_speaker_share)
     capture = HardwareRecorder(s.data_dir / "captures")
     capture_lock = threading.RLock()
     speech_detector = SpeechDetector(Path(s.asr_vad_path).expanduser() if s.asr_vad_path
