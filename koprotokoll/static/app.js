@@ -102,7 +102,7 @@ function tsLink(sec, label) {
 async function loadMeetings() {
   state.meetings = await api("/api/meetings");
   const list = $("#meeting-list");
-  list.replaceChildren(...state.meetings.map((m) => {
+  const items = state.meetings.map((m) => {
     const sub = m.status === "done"
       ? `${new Date(m.created_at * 1000).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" })} · ${fmt(m.duration)}`
       : `${STATUS[m.status] || m.status}${m.status !== "error" ? ` · ${Math.round(m.progress * 100)} %` : ""}`;
@@ -123,7 +123,10 @@ async function loadMeetings() {
         h("div", { class: "t" }, m.title),
         m.preview ? h("div", { class: "p", title: m.preview }, `„${m.preview}“`) : null,
         h("div", { class: "s" }, sub)));
-  }));
+  });
+  if (!items.length) items.push(h("div", { class: "muted small", style: "padding:8px 10px" },
+    "Noch keine Meetings – oben „Aufnehmen“, „Hochladen“ oder einen Meet-Link für den Bot nutzen."));
+  list.replaceChildren(...items);
   renderBulkBar();
   const busy = state.meetings.some((m) => !["done", "error"].includes(m.status));
   await loadBots();
@@ -922,8 +925,16 @@ $("#dlg-record").addEventListener("cancel", (e) => { if (rec.hardware || rec.rec
 function showView(name) {
   for (const v of ["empty", "meeting", "integrations"]) $(`#${v}`).hidden = v !== name;
   $("#btn-integrations").classList.toggle("active", name === "integrations");
+  // Auf dem Handy ist die Liste die Startansicht; Meeting/Integrationen sind eigene Vollbild-Ansichten.
+  document.body.classList.toggle("detail", name !== "empty");
   if (name !== "meeting") document.querySelectorAll(".m-item").forEach((el) => el.classList.remove("active"));
 }
+
+// Zurück zur Liste (nur auf dem Handy sichtbar): Hash zurücksetzen, route() zeigt die Listenansicht.
+$("#m-back").addEventListener("click", () => {
+  if (location.hash && location.hash !== "#") location.hash = "#";
+  else showView("empty");
+});
 
 // ---------------------------------------------------------- Bots
 async function loadBots() {
@@ -1285,13 +1296,13 @@ $("#ics-form").addEventListener("submit", async (e) => {
 
 async function renderUpcoming() {
   const events = await api("/api/upcoming");
-  const list = $("#upcoming-list");
+  const lists = [$("#upcoming-list"), $("#upcoming-list-mobile")].filter(Boolean);
   if (!events.length) {
-    list.replaceChildren(h("li", { class: "muted small" },
+    for (const list of lists) list.replaceChildren(h("li", { class: "muted small" },
       "Keine Termine in den nächsten 7 Tagen. Verbundene Kalender werden automatisch angezeigt."));
     return;
   }
-  list.replaceChildren(...events.map((e) => {
+  for (const list of lists) list.replaceChildren(...events.map((e) => {
     const when = new Date(e.start * 1000).toLocaleString("de-DE",
       { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
     return h("li", {},

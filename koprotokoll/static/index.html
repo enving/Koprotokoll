@@ -24,6 +24,10 @@
     <input id="global-search" type="search" placeholder="Alle Meetings durchsuchen …" autocomplete="off">
     <div id="search-results" hidden></div>
     <div id="bot-live"></div>
+    <details id="upcoming-card" class="card">
+      <summary>Nächste Termine (7 Tage)</summary>
+      <ul id="upcoming-list-mobile" class="list"></ul>
+    </details>
     <div id="m-bulk" class="row small" hidden>
       <span id="m-bulk-count"></span>
       <button id="m-bulk-delete" class="danger" title="Alle ausgewählten Meetings löschen">Ausgewählte löschen</button>
@@ -149,6 +153,7 @@
 
     <section id="meeting" hidden>
       <header class="meeting-head">
+        <button id="m-back" class="back-btn" title="Zurück zur Meeting-Liste" aria-label="Zurück zur Meeting-Liste">← Zurück</button>
         <div>
           <h1 id="m-title" contenteditable="true" spellcheck="false"></h1>
           <div id="m-meta" class="meta"></div>

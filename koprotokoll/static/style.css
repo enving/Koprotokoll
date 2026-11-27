@@ -110,12 +110,30 @@ dialog menu { display: flex; justify-content: flex-end; gap: 8px; padding: 0; ma
 .dot.on { background: #e03131; animation: pulse 1s infinite; }
 @keyframes pulse { 50% { opacity: .3; } }
 .muted { color: var(--muted); }
+.back-btn { display: none; }
+#upcoming-card { display: none; }
+
 @media (max-width: 760px) {
-  body { grid-template-columns: 1fr; grid-template-rows: auto 1fr; height: auto; }
-  #sidebar { max-height: 45vh; }
-  #main { padding: 16px; }
+  /* Handy: Liste und Detail sind getrennte Vollbild-Ansichten (Master-Detail). */
+  body { display: block; height: 100vh; height: 100dvh; overflow: hidden; }
+  #sidebar { max-height: none; height: 100%; border-right: none; padding: 12px; gap: 10px; }
+  #main { display: none; height: 100%; padding: 16px; }
+  body.detail #sidebar { display: none; }
+  body.detail #main { display: block; }
+  .back-btn { display: inline-flex; align-items: center; min-height: 44px; padding: 6px 14px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
+  .back-btn:hover { background: var(--accent-soft); border-color: var(--accent); }
+  #upcoming-card { display: block; padding: 8px 12px; margin-bottom: 0; flex: none; }
+  #upcoming-card summary { font-size: 13px; color: var(--muted); }
+  #upcoming-card[open] summary { margin-bottom: 4px; }
+  #upcoming-card .list li { padding: 6px 0; }
   .meeting-head { flex-direction: column; }
   .meeting-head h1 { font-size: 20px; }
+  .meeting-head .head-actions { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+  .meeting-head .head-actions .download-link { grid-column: 1 / -1; justify-content: center; }
+  .meeting-head .head-actions select, .meeting-head .head-actions button { width: 100%; }
+  audio { top: -16px; }
+  .actions button, #bot-quick button, #global-search { min-height: 44px; }
 }
 
 .nav-link { border: none; background: none; text-align: left; color: var(--muted); padding: 8px 10px; }

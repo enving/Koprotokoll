@@ -78,6 +78,14 @@ def test_language_forms_and_retranscription(tmp_path, monkeypatch, width):
             page.get_by_role('tab', name='Transkript', exact=True).click()
             expect(page.locator('#t-retranscribe')).to_be_enabled()
 
+        def record_click():
+            # Auf dem Handy (390px) liegt „Aufnehmen" in der Listenansicht; ein geöffnetes
+            # Meeting wird dafür erst über „Zurück" verlassen.
+            if width == 390 and page.locator('#m-back').is_visible():
+                page.locator('#m-back').click()
+                expect(page.locator('#sidebar')).to_be_visible()
+            page.locator('#btn-record').click()
+
         page.route('**/*', serve)
         page.goto('http://127.0.0.1/')
         page.get_by_role('button', name='Hochladen', exact=False).first.click()
@@ -105,7 +113,7 @@ def test_language_forms_and_retranscription(tmp_path, monkeypatch, width):
             page.screenshot(path=str(folder / f'sprachwahl-{width}.png'))
 
         for method, language in [('hardware', 'de'), ('browser', 'en')]:
-            page.locator('#btn-record').click()
+            record_click()
             # Die beim Upload gewählte Sprache bleibt als Vorgabe erhalten.
             expect(page.locator('#rec-language')).to_have_value('auto' if method == 'hardware' else 'de')
             page.locator('#rec-language').select_option(language)
@@ -130,7 +138,7 @@ def test_language_forms_and_retranscription(tmp_path, monkeypatch, width):
 
         # Der Browser stoppt und lädt die Aufnahme ohne einen manuellen Stopp hoch.
         activity_timeout = True
-        page.locator('#btn-record').click()
+        record_click()
         page.locator('#rec-method').select_option('browser')
         with page.expect_response(lambda response: response.url.endswith('/api/meetings') and response.request.method == 'POST') as stopped:
             page.locator('#rec-start').click()
@@ -142,7 +150,7 @@ def test_language_forms_and_retranscription(tmp_path, monkeypatch, width):
         # Hardware-Stopp erreicht die Oberfläche über Statusabfragen, ohne Stopp-Klick.
         app.state.capture_clock = lambda: 0
         monkeypatch.setattr(app.state.speech_detector, 'has_speech', lambda audio: False)
-        page.locator('#btn-record').click()
+        record_click()
         page.locator('#rec-method').select_option('hardware')
         page.locator('#rec-device').select_option('test')
         page.locator('#rec-start').click()

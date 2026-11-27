@@ -80,8 +80,14 @@ def test_fremd_gestartete_aufnahme_wird_sichtbar(tmp_path, monkeypatch, width):
             expect(page.locator("#rec-start")).to_be_enabled()
             expect(page.locator("#rec-busy")).to_be_hidden()
             # Meeting-Liste aktualisiert und neues Meeting geöffnet wie nach einem Klick.
-            expect(page.locator("#meeting-list .m-item", has_text="fremd-start")).to_be_visible()
             expect(page.locator("#m-title")).to_have_text("fremd-start")
+            if width == 1280:
+                expect(page.locator("#meeting-list .m-item", has_text="fremd-start")).to_be_visible()
+            else:
+                # Handy: Detailansicht ist vollflächig, die Liste erst nach „Zurück" sichtbar.
+                expect(page.locator("#meeting-list .m-item", has_text="fremd-start")).to_be_hidden()
+                page.click("#m-back")
+                expect(page.locator("#meeting-list .m-item", has_text="fremd-start")).to_be_visible()
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
             assert errors == []
         finally:

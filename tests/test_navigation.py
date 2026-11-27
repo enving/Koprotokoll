@@ -40,29 +40,47 @@ def test_integrations_navigation(tmp_path, width):
         empty = page.locator("#empty")
         nav = page.locator("#btn-integrations")
         close = page.get_by_role("button", name="Integrationen & API schließen", exact=True)
+        # Startansicht: breit die Willkommensseite in #main, auf dem Handy die Liste in der Sidebar.
+        home = empty if width == 1280 else page.locator("#sidebar")
 
         page.goto(root + "#integrations")
         expect(integrations).to_be_visible()
         page.reload()
         expect(integrations).to_be_visible()
         close.click()
-        expect(empty).to_be_visible()
+        expect(home).to_be_visible()
         nav.click()
         expect(integrations).to_be_visible()
-        nav.click()
-        expect(empty).to_be_visible()
+        # Umschalten per Nav-Knopf nur breit; auf dem Handy schließt die ✕-Schaltfläche.
+        (nav if width == 1280 else close).click()
+        expect(home).to_be_visible()
 
         nav.focus()
         page.keyboard.press("Enter")
         expect(integrations).to_be_visible()
         page.go_back()
-        expect(empty).to_be_visible()
+        expect(home).to_be_visible()
         page.go_forward()
         expect(integrations).to_be_visible()
 
         page.goto(root + f"#meeting={mid}")
         expect(page.locator("#meeting")).to_be_visible()
-        for button in (close, nav):
+        # Master-Detail auf dem Handy: Liste ausgeblendet, Zurück-Button führt zur Liste.
+        if width == 390:
+            expect(page.locator("#m-back")).to_be_visible()
+            expect(page.locator("#sidebar")).to_be_hidden()
+            page.locator("#m-back").click()
+            expect(home).to_be_visible()
+            expect(page.locator("#meeting")).to_be_hidden()
+            page.goto(root + f"#meeting={mid}")
+            expect(page.locator("#meeting")).to_be_visible()
+        else:
+            expect(page.locator("#m-back")).to_be_hidden()
+        # Auf dem Handy erreicht man Integrationen über „Zurück" → Liste → Nav-Knopf.
+        for button in ((close, nav) if width == 1280 else (close,)):
+            if width == 390:
+                page.locator("#m-back").click()
+                expect(page.locator("#sidebar")).to_be_visible()
             nav.click()
             expect(integrations).to_be_visible()
             button.click()
