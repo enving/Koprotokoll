@@ -75,6 +75,8 @@ def test_language_forms_and_retranscription(tmp_path, monkeypatch, width):
         def wait_for_transcript():
             app.state.pipeline.join()
             page.reload()
+            # Nach dem Reload muss die Meeting-Ansicht stehen (sonst landet man mobil in der Liste).
+            expect(page.locator('#meeting')).to_be_visible()
             page.get_by_role('tab', name='Transkript', exact=True).click()
             expect(page.locator('#t-retranscribe')).to_be_enabled()
 

@@ -1026,8 +1026,10 @@ async function endCaptureView(status) {
   cleanupRecording();
   await loadMeetings();
   if (meetingId) {
-    $("#dlg-record").close();
+    // Erst das Meeting öffnen (setzt den Hash), dann den Dialog schließen –
+    // so kann ein reload dazwischen nicht auf der Listenansicht landen.
     await openMeeting(meetingId);
+    $("#dlg-record").close();
   } else if (status.error) {
     $("#rec-silence-status").textContent = status.error;
   }
