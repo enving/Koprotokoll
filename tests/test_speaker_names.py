@@ -100,8 +100,12 @@ def test_pipeline_uses_activity_and_keeps_edit_made_during_diarization(tmp_path)
         assert result["meta"]["diarization"]["status"] == "completed"
 
 
-@pytest.mark.parametrize("case", ["overlap", "pauses"])
-def test_pipeline_retains_raw_diarization_intervals(tmp_path, case):
+@pytest.mark.parametrize("case,expected_speakers", [
+    ("overlap", {"S1": "Sprecher 1"}),
+    # Pausen-Fall: nur eine Stimme erkannt → automatische Ich-Klassifikation greift.
+    ("pauses", {"S1": "Ich"}),
+])
+def test_pipeline_retains_raw_diarization_intervals(tmp_path, case, expected_speakers):
     from test_integrations import make_client
     from test_koprotokoll import wav_bytes, wait_done
     from koprotokoll.speech import Turn, Word
@@ -120,7 +124,7 @@ def test_pipeline_retains_raw_diarization_intervals(tmp_path, case):
         pipeline.diarizer = SimpleNamespace(diarize=lambda *args: turns)
         pipeline.submit(mid)
         result = wait_done(client, mid)
-        assert result["speakers"] == {"S1": "Sprecher 1"}
+        assert result["speakers"] == expected_speakers
 
 
 def test_google_observations_follow_recorder_clock_and_stop():

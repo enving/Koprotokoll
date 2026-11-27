@@ -23,9 +23,35 @@
     </form>
     <input id="global-search" type="search" placeholder="Alle Meetings durchsuchen …" autocomplete="off">
     <div id="search-results" hidden></div>
+    <details id="list-options">
+      <summary title="Sortierung und Filter für die Meeting-Liste">⚙ Sortieren &amp; Filtern</summary>
+      <div class="list-options">
+        <label for="sort-order">Sortieren
+          <select id="sort-order">
+            <option value="new">Neueste zuerst</option>
+            <option value="old">Älteste zuerst</option>
+            <option value="title">Titel A–Z</option>
+            <option value="duration">Längste zuerst</option>
+          </select>
+        </label>
+        <label for="filter-status">Anzeigen
+          <select id="filter-status">
+            <option value="all">Alle Meetings</option>
+            <option value="processing">In Verarbeitung</option>
+            <option value="done">Fertig</option>
+            <option value="error">Nur Fehler</option>
+          </select>
+        </label>
+      </div>
+    </details>
     <div id="bot-live"></div>
+    <details id="upcoming-card" class="card">
+      <summary>Nächste Termine (7 Tage)</summary>
+      <ul id="upcoming-list-mobile" class="list"></ul>
+    </details>
     <div id="m-bulk" class="row small" hidden>
       <span id="m-bulk-count"></span>
+      <button id="m-bulk-done" title="Auswahl beenden">Fertig</button>
       <button id="m-bulk-delete" class="danger" title="Alle ausgewählten Meetings löschen">Ausgewählte löschen</button>
     </div>
     <nav id="meeting-list" aria-label="Meetings"></nav>
@@ -149,6 +175,7 @@
 
     <section id="meeting" hidden>
       <header class="meeting-head">
+        <button id="m-back" class="back-btn" title="Zurück zur Meeting-Liste" aria-label="Zurück zur Meeting-Liste">← Zurück</button>
         <div>
           <h1 id="m-title" contenteditable="true" spellcheck="false"></h1>
           <div id="m-meta" class="meta"></div>
@@ -292,6 +319,14 @@
         <button type="button" id="rec-start" class="primary">Start</button>
         <button type="button" id="rec-stop" class="primary" hidden>Stopp &amp; auswerten</button>
       </menu>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-llm-setup">
+    <form method="dialog">
+      <h2>Sprachmodell einrichten</h2>
+      <div id="llm-setup-body" class="stack"></div>
+      <menu><button value="cancel" formnovalidate>Schließen</button></menu>
     </form>
   </dialog>
 
