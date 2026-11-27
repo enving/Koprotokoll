@@ -8,16 +8,46 @@
 
 ## Lokales LLM für Zusammenfassungen (empfohlen)
 
-Ohne LLM erkennt die lokale Heuristik auch deutsche Aufgaben, ausdrücklich genannte
-Verantwortliche und Fristen wie „bis Freitag“, „nächste Woche“ oder „bis zum 3.11.“.
-Fristen bleiben zunächst im gesprochenen Wortlaut. Bei „wir“ oder einer Frage an
-„du“ ohne Namen bleibt die Zuständigkeit offen. Vage Vorschläge, verneinte und
-bereits erledigte Aufgaben werden gefiltert. Die Regeln ersetzen keine inhaltliche
-Prüfung; insbesondere verschachtelte Aussagen und indirekte Zusagen können fehlen.
+### Warum ein Sprachmodell?
 
-Ohne LLM erstellt die App eine einfache extraktive Zusammenfassung. Für echte
-KI-Zusammenfassungen ein lokales Modell über eine OpenAI-kompatible API bereitstellen,
-z. B. mit [Ollama](https://ollama.com):
+Ohne Sprachmodell erstellt die App eine einfache extraktive Zusammenfassung aus Regeln.
+Am selben Meeting liest sich der Unterschied so:
+
+| | Ohne Sprachmodell (Heuristik) | Mit lokalem Sprachmodell |
+|---|---|---|
+| Titel | Dateiname der Aufnahme | eigener, aussagekräftiger Meeting-Titel |
+| Übersicht | abgeschriebene Sätze aus dem Transkript | 2–4 Sätze, die den Inhalt zusammenfassen |
+| Gliederung | häufigste Wörter als Thema (z. B. „Test, Teste, Hiermit“) | echte Themenüberschriften mit Zeitmarken |
+| Entscheidungen & offene Fragen | nicht erkannt | eigene Abschnitte |
+| Action Items | nur wörtlich erkannte Aufgaben | erkannte Aufgaben samt Zuständigkeit und Frist |
+
+In der App kennzeichnet ein Hinweis am Meeting-Ergebnis, wenn die Heuristik lief, und nennt
+den konkreten Grund: Sprachmodell ausgeschaltet, Server nicht erreichbar unter … oder
+Modell … fehlt. Dieselbe Auskunft plus Knopf „Sprachmodell einrichten“ steht unter
+**Integrationen & API → Sprachmodell**.
+
+Kosten: einmaliger Download ca. 5 GB (z. B. `qwen2.5:7b-instruct`), ca. 8 GB RAM während
+der Auswertung und auf der CPU je nach Rechner einige Minuten pro Meeting. Alles bleibt
+auf diesem Rechner – es wird keine Cloud vorausgesetzt, und ohne Modell bleibt die App
+voll nutzbar.
+
+### Aus der App einrichten (Ollama)
+
+Über **„Sprachmodell einrichten“** (am Meeting-Ergebnis oder in den Einstellungen) prüft
+Koprotokoll, ob unter der eingestellten URL ein lokaler Server läuft:
+
+- **Läuft keiner** (Standard: `http://localhost:11434/v1`): deutsche Anleitung mit
+  Installationsschritten und „Erneut prüfen“ – kein toter Verweis, kein Absturz.
+- **Läuft einer** (Ollama): das fehlende Modell direkt aus der App laden – mit
+  Größenhinweis (ca. 5 GB), Fortschrittsanzeige in Bytes und Abbrechen-Knopf. Der
+  Download bleibt lokal; externe Anbieter werden nicht angefragt.
+- **Modell vorhanden**: in der Modellliste auswählen und speichern. Das nächste Meeting
+  nennt dann `llm:<Modell>` als Engine.
+
+### Manuell einrichten
+
+Für echte KI-Zusammenfassungen ein lokales Modell über eine OpenAI-kompatible API
+bereitstellen, z. B. mit [Ollama](https://ollama.com):
 
 ```bash
 ollama pull qwen2.5:7b-instruct
@@ -25,6 +55,15 @@ python -m koprotokoll   # nutzt standardmäßig http://localhost:11434/v1
 ```
 
 Genauso funktionieren llama.cpp (`llama-server`), LM Studio oder vLLM über `KOPROTOKOLL_LLM_URL`.
+
+### Was die Heuristik ohne LLM leistet
+
+Ohne LLM erkennt die lokale Heuristik auch deutsche Aufgaben, ausdrücklich genannte
+Verantwortliche und Fristen wie „bis Freitag“, „nächste Woche“ oder „bis zum 3.11.“.
+Fristen bleiben zunächst im gesprochenen Wortlaut. Bei „wir“ oder einer Frage an
+„du“ ohne Namen bleibt die Zuständigkeit offen. Vage Vorschläge, verneinte und
+bereits erledigte Aufgaben werden gefiltert. Die Regeln ersetzen keine inhaltliche
+Prüfung; insbesondere verschachtelte Aussagen und indirekte Zusagen können fehlen.
 
 ## Meeting-Bot (Teilnehmer wie bei Fireflies)
 
@@ -68,6 +107,16 @@ Beitritt samt Tonaufnahme steht noch aus ([Nachweis](nachweise/issue-13-bbb.md))
 
 > Hinweis: Aufzeichnungen nur mit Einverständnis der Teilnehmenden. Der Bot tritt sichtbar
 > unter seinem Namen bei.
+
+### Ich-Klassifikation bei dominanter Stimme
+
+Im Modus „Automatisch“ (keine Sprecherzahl vorgegeben) vergleicht die Pipeline nach der
+Sprechererkennung die Redeanteile: Hält eine Stimme mindestens `KOPROTOKOLL_DOMINANT_SPEAKER_SHARE`
+(default 0.8) der Redezeit, wird sie als eigene Stimme zusammengefasst und heißt **„Ich“**
+(statt einer Fehlaufteilung in mehrere Labels – typisch für Sprachmemos). Das ist rückgängig:
+Über „Frühere Sprecheraufteilung wiederherstellen“ im Meeting kommt die ursprüngliche
+Aufteilung zurück. Wird nur eine Stimme erkannt, heißt sie direkt „Ich“. Bei explizit
+vorgegebener Sprecherzahl (> 1) greift die Klassifikation nicht.
 
 ### Sprechernamen aus Google Meet
 
@@ -501,6 +550,7 @@ Qualitätstest mit echten Meetings, Akzenten und überlappender Sprache.
 | `KOPROTOKOLL_ASR_VAD_PATH` | `models/silero-vad-onnx` im Datenordner | lokales Silero-VAD für v3 |
 | `KOPROTOKOLL_DIARIZATION` | `1` | `0` schaltet Sprechererkennung ab |
 | `KOPROTOKOLL_DIARIZATION_THRESHOLD` | `0.8` | kleiner = mehr Sprecher |
+| `KOPROTOKOLL_DOMINANT_SPEAKER_SHARE` | `0.8` | Redeanteil, ab dem eine Stimme im Modus „Automatisch“ als eigene Stimme („Ich“) zusammengefasst wird |
 | `KOPROTOKOLL_LLM` | `1` | `0` = nur Offline-Heuristik |
 | `KOPROTOKOLL_LLM_URL` | `http://localhost:11434/v1` | OpenAI-kompatibler Endpunkt |
 | `KOPROTOKOLL_LLM_MODEL` | `qwen2.5:7b-instruct` | Modellname |
@@ -522,10 +572,13 @@ Qualitätstest mit echten Meetings, Akzenten und überlappender Sprache.
 
 Unter „Integrationen & API → Lokales Textmodell“ die Modellliste aktualisieren und
 bewusst ein installiertes Modell auswählen. Koprotokoll ruft dazu `/v1/models`
-über die bestehende LLM-Verbindung ab. Es lädt keine Modelle herunter und wechselt
-nicht automatisch. „Modell vorhanden“ bestätigt die Liste, keinen erfolgreichen
-Inferenzaufruf. Erst die Zusammenfassung nennt `llm:<Modell>`; bei einem Fehler
-oder Timeout zeigt sie eine Warnung und verwendet die Heuristik.
+über die bestehende LLM-Verbindung ab. Die Auswahl lädt nichts herunter und wechselt
+nicht automatisch; Modelle lädt nur der Knopf „Sprachmodell einrichten“ (nur lokaler
+Ollama-Server) oder manuell per `ollama pull`. „Modell vorhanden“ bestätigt die Liste,
+keinen erfolgreichen Inferenzaufruf. Erst die Zusammenfassung nennt `llm:<Modell>`;
+läuft die Heuristik, nennt `summary.warning` den konkreten Grund (ausgeschaltet,
+Server nicht erreichbar unter …, Modell … fehlt) und das Ergebnis ist als
+Regel-Ergebnis gekennzeichnet.
 
 Die Auswahl liegt in `KOPROTOKOLL_DATA/llm-settings.json` und gilt auch für die
 Auswertung nach dem ausdrücklichen Hardwareaufnahme-Stopp. Während der Aufnahme
@@ -553,8 +606,18 @@ Originalquellen: [Ollama OpenAI-Kompatibilität](https://docs.ollama.com/api/ope
 ### Eigenen Sprachmodell-Anbieter einrichten
 
 Unter **Sprachmodell** eine Vorlage wählen, Basis-URL (einschließlich `/v1`),
-Modellname, optional API-Schlüssel und Timeout eintragen. Die Modellliste kann einen
-Namen übernehmen. Zuerst speichern, dann den gespeicherten Anbieter testen.
+Modellname, optional API-Schlüssel und Timeout eintragen. Als Preset genügt bei
+**„Mistral API“** der Schlüssel von [console.mistral.ai](https://console.mistral.ai) –
+die URL `https://api.mistral.ai/v1` ist vorausgefüllt. Komfortabler geht es über
+**„Sprachmodell einrichten“ → „Konfiguration übernehmen“**: Koprotokoll liest aktives
+Modell und Endpunkt aus `~/.vibe/config.toml` (Coding CLI „Vibe“) und den Schlüssel aus
+der Umgebung `MISTRAL_API_KEY` oder – nur macOS – aus dem Login-Schlüsselbund der CLI
+(`ai.mistral.vibe`; evtl. einmalige System-Freigabe nötig). Fehlt beides, kann der
+Schlüssel einmal manuell eingetragen werden. Der Schlüssel wird nur lokal in
+`llm-settings.json` (Dateirechte 0600) gespeichert und weder angezeigt noch über die
+API zurückgegeben. Bei Mistral-Modellen liest die App nur die Text-Antwort; die
+Denkausgabe (Thinking) wird ignoriert. Die Modellliste kann einen Namen übernehmen. Zuerst speichern, dann
+den gespeicherten Anbieter testen.
 Für externe Adressen die Übertragung von Transkripttext ausdrücklich bestätigen;
 ohne Bestätigung bleibt die Auswertung gesperrt. Externe Auswertungen tragen am
 Meeting-Ergebnis die verwendete Dienstadresse. Lokale Defaults bleiben erhalten.
