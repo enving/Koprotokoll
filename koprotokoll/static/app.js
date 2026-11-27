@@ -168,11 +168,21 @@ function renderList() {
       class: "m-item" + (state.current?.id === m.id ? " active" : "") + (state.selected.has(m.id) ? " selected" : ""),
       "data-id": String(m.id),
       onclick: (e) => {
+        // Nach einem Long-press-Menü darf der folgende Klick das Meeting nicht öffnen.
+        if (suppressClickOnce) { suppressClickOnce = false; return; }
         // Auswahlmodus (ab der ersten Markierung): Tippen irgendwo auf die Zeile
         // schaltet die Markierung um, statt das Meeting zu öffnen.
         if (state.selected.size > 0) toggleSelect(m.id, e.currentTarget);
         else openMeeting(m.id);
       },
+      oncontextmenu: (e) => {
+        e.preventDefault();
+        openItemMenu(m, e.clientX, e.clientY, e.currentTarget);
+      },
+      onpointerdown: (e) => startLongPress(e, m),
+      onpointermove: cancelLongPressMove,
+      onpointerup: cancelLongPress,
+      onpointercancel: cancelLongPress,
     },
       h("input", {
         type: "checkbox", class: "m-check", title: "Zum Sammellöschen markieren",
@@ -249,6 +259,145 @@ $("#m-bulk-delete").addEventListener("click", async () => {
   state.selected.clear();
   await loadMeetings();
 });
+
+// ------------------------------------------------- Schnellmenü (Long-press / Rechtsklick)
+// Länger auf einen Listeneintrag halten (Touch) oder Rechtsklick (Maus) öffnet
+// Schnellaktionen wie „Transkript kopieren“, ohne das Meeting zu öffnen.
+const LONG_PRESS_MS = 550;
+let lpTimer = null, lpOrigin = null, suppressClickOnce = false;
+let ctxMenu = null, ctxItem = null, toastEl = null, toastTimer = null;
+
+function startLongPress(e, m) {
+  if (e.pointerType === "mouse" && e.button !== 0) return;
+  const item = e.currentTarget;
+  lpOrigin = { x: e.clientX, y: e.clientY };
+  clearTimeout(lpTimer);
+  lpTimer = setTimeout(() => {
+    lpTimer = null;
+    // Der Browser feuert nach dem Loslassen noch einen Klick auf die Zeile –
+    // der darf das Meeting nicht öffnen, wenn gerade das Menü aufging.
+    suppressClickOnce = true;
+    setTimeout(() => { suppressClickOnce = false; }, 800);
+    openItemMenu(m, lpOrigin.x, lpOrigin.y, item);
+  }, LONG_PRESS_MS);
+}
+
+function cancelLongPress() { clearTimeout(lpTimer); lpTimer = null; }
+
+function cancelLongPressMove(e) {
+  if (lpTimer && lpOrigin && Math.hypot(e.clientX - lpOrigin.x, e.clientY - lpOrigin.y) > 10) cancelLongPress();
+}
+
+function closeItemMenu() {
+  if (ctxMenu) { ctxMenu.remove(); ctxMenu = null; }
+  if (ctxItem) { ctxItem.classList.remove("ctx-open"); ctxItem = null; }
+}
+
+function openItemMenu(m, x, y, itemEl) {
+  closeItemMenu();
+  ctxItem = itemEl || null;
+  if (ctxItem) ctxItem.classList.add("ctx-open");
+  const entry = (label, fn, opts = {}) => h("button", {
+    type: "button", role: "menuitem", ...opts,
+    onclick: async () => { closeItemMenu(); try { await fn(); } catch (err) { toast(err.message, true); } },
+  }, label);
+  ctxMenu = h("div", { class: "ctx-menu", role: "menu", "aria-label": `Aktionen für „${m.title}“` },
+    h("div", { class: "ctx-title" }, m.title),
+    entry("Öffnen", () => openMeeting(m.id)),
+    entry("Transkript kopieren", async () => {
+      const text = await apiText(`/api/meetings/${m.id}/export?format=txt`);
+      if (!text.trim()) return toast("Noch kein Transkript vorhanden.");
+      if (await copyText(text)) toast("Transkript in die Zwischenablage kopiert.");
+      else toast("Kopieren nicht möglich – bitte im Meeting manuell markieren.", true);
+    }),
+    entry("Zusammenfassung kopieren", async () => {
+      const full = await api(`/api/meetings/${m.id}`);
+      if (!full.summary) return toast("Noch keine Zusammenfassung vorhanden.");
+      if (await copyText(summaryText(full))) toast("Zusammenfassung in die Zwischenablage kopiert.");
+      else toast("Kopieren nicht möglich – bitte im Meeting manuell markieren.", true);
+    }, { disabled: m.status !== "done" || null }),
+    entry("Transkript als Textdatei speichern",
+      () => { window.location = withKey(`/api/meetings/${m.id}/export?format=txt`); }),
+    h("div", { class: "ctx-sep" }),
+    entry(state.selected.has(m.id) ? "Markierung aufheben" : "Zum Sammellöschen markieren",
+      () => toggleSelect(m.id, itemEl)),
+    entry("Löschen", () => deleteMeeting(m.id, m.title), { class: "danger" }));
+  document.body.append(ctxMenu);
+  // Menü im Viewport halten (bei Long-press am unteren Rand über dem Finger öffnen).
+  const rect = ctxMenu.getBoundingClientRect();
+  ctxMenu.style.left = `${Math.max(8, Math.min(x, window.innerWidth - rect.width - 8))}px`;
+  ctxMenu.style.top = `${Math.max(8, Math.min(y, window.innerHeight - rect.height - 8))}px`;
+  ctxMenu.querySelector("button:not([disabled])")?.focus();
+}
+
+document.addEventListener("pointerdown", (e) => {
+  if (ctxMenu && !ctxMenu.contains(e.target)) closeItemMenu();
+}, true);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeItemMenu(); });
+window.addEventListener("scroll", () => closeItemMenu(), true);
+window.addEventListener("resize", () => closeItemMenu());
+
+// Text-Antwort der API (z. B. Export als txt) – Schlüssel wie bei api().
+async function apiText(path) {
+  const headers = {};
+  if (apiKey()) headers.Authorization = `Bearer ${apiKey()}`;
+  const res = await fetch(withKey(path), { headers });
+  if (!res.ok) {
+    let msg = res.statusText;
+    try { msg = (await res.json()).detail || msg; } catch { /* ignore */ }
+    throw new Error(msg);
+  }
+  return res.text();
+}
+
+// Zwischenablage – navigator.clipboard braucht einen sicheren Kontext (localhost
+// zählt dazu); als Fallback dient execCommand.
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; }
+  catch { /* Fallback unten */ }
+  const ta = h("textarea", { style: "position:fixed;top:0;left:0;opacity:0" }, text);
+  document.body.append(ta);
+  ta.focus();
+  ta.select();
+  let ok = false;
+  try { ok = document.execCommand("copy"); } catch { ok = false; }
+  ta.remove();
+  return ok;
+}
+
+// Zusammenfassung als Klartext – dieselben Inhalte wie im Markdown-Export.
+function summaryText(m) {
+  const s = m.summary || {};
+  const out = [m.title, ""];
+  if (s.overview) out.push(s.overview, "");
+  if (s.keywords?.length) out.push(`Stichwörter: ${s.keywords.join(", ")}`, "");
+  if (s.outline?.length) {
+    out.push("Gliederung:");
+    for (const o of s.outline) {
+      out.push(`- ${o.time ? `${o.time} ` : ""}${o.topic}`);
+      for (const n of o.notes || []) out.push(`  - ${n}`);
+    }
+    out.push("");
+  }
+  for (const [key, label] of [["decisions", "Entscheidungen"], ["questions", "Offene Fragen"]]) {
+    if (s[key]?.length) { out.push(`${label}:`); for (const x of s[key]) out.push(`- ${x}`); out.push(""); }
+  }
+  if (s.action_items?.length) {
+    out.push("Action Items:");
+    for (const a of s.action_items) out.push(`- [ ] ${a.owner ? `${a.owner}: ` : ""}${a.task}${a.due ? ` (Frist: ${a.due})` : ""}`);
+  }
+  return out.join("\n").trim() + "\n";
+}
+
+// Kleine Rückmeldung unten am Bildschirm (z. B. „Transkript kopiert“).
+function toast(msg, isError = false) {
+  if (!toastEl) { toastEl = h("div", { id: "toast", role: "status" }); document.body.append(toastEl); }
+  toastEl.textContent = msg;
+  toastEl.classList.toggle("error", isError);
+  toastEl.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove("show"), 2600);
+}
 
 async function refresh() {
   await loadMeetings();
@@ -598,16 +747,22 @@ $("#m-export").addEventListener("change", (e) => {
   e.target.value = "";
 });
 
-$("#m-delete").addEventListener("click", async () => {
-  if (!state.current || !confirm(`„${state.current.title}“ wirklich löschen?`)) return;
-  const id = state.current.id;
+// Löschen – aus der Detailansicht und aus dem Schnellmenü der Liste.
+async function deleteMeeting(id, title) {
+  if (!confirm(`„${title}“ wirklich löschen?`)) return;
   await api(`/api/meetings/${id}`, { method: "DELETE" });
   state.selected.delete(id);
-  state.current = null;
-  $("#player").removeAttribute("src");
-  showView("empty");
-  history.replaceState(null, "", "#");
+  if (state.current?.id === id) {
+    state.current = null;
+    $("#player").removeAttribute("src");
+    showView("empty");
+    history.replaceState(null, "", "#");
+  }
   await loadMeetings();
+}
+
+$("#m-delete").addEventListener("click", () => {
+  if (state.current) return deleteMeeting(state.current.id, state.current.title);
 });
 
 $("#bm-form").addEventListener("submit", async (e) => {

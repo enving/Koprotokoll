@@ -27,12 +27,31 @@ input { background: var(--panel); border: 1px solid var(--line); border-radius: 
 #m-bulk { align-items: center; gap: 8px; padding: 4px 10px; }
 #m-bulk button { padding: 4px 10px; }
 #m-bulk-delete { margin-left: auto; }
-.m-item { padding: 8px 10px; border-radius: 8px; cursor: pointer; display: flex; gap: 8px; align-items: flex-start; }
+.m-item { padding: 8px 10px; border-radius: 8px; cursor: pointer; display: flex; gap: 8px; align-items: flex-start;
+  user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: manipulation; }
 .m-item .m-check { flex: none; margin-top: 4px; width: 20px; height: 20px; accent-color: var(--accent); cursor: pointer; }
 .m-item .m-body { flex: 1; min-width: 0; }
 .m-item:hover { background: var(--bg); }
 .m-item.active { background: var(--accent-soft); }
 .m-item.selected { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+.m-item.ctx-open { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+/* Schnellmenü der Meeting-Liste (Long-press / Rechtsklick) */
+.ctx-menu { position: fixed; z-index: 1000; min-width: 230px; max-width: calc(100vw - 16px);
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.22); padding: 6px; display: flex; flex-direction: column; }
+.ctx-title { font-size: 12px; color: var(--muted); padding: 4px 10px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ctx-menu button { display: block; width: 100%; text-align: left; border: none; background: none;
+  border-radius: 6px; padding: 9px 12px; font-size: 14px; color: var(--text); min-height: 40px; }
+.ctx-menu button:hover:not([disabled]), .ctx-menu button:focus-visible { background: var(--accent-soft); color: var(--accent); }
+.ctx-menu button[disabled] { color: var(--muted); cursor: not-allowed; }
+.ctx-menu button.danger { color: var(--danger-text); }
+.ctx-sep { height: 1px; background: var(--line); margin: 4px 6px; }
+#toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%) translateY(8px);
+  background: var(--text); color: var(--bg); padding: 8px 16px; border-radius: 999px; font-size: 13px;
+  opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 1100;
+  max-width: calc(100vw - 32px); text-align: center; }
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+#toast.error { background: var(--danger); color: #fff; }
 .m-item .t { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .m-item .p { font-size: 12px; font-style: italic; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .m-item .s { font-size: 12px; color: var(--muted); }
