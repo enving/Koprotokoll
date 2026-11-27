@@ -118,6 +118,35 @@ Sprechererkennung die Redeanteile: Hält eine Stimme mindestens `KOPROTOKOLL_DOM
 Aufteilung zurück. Wird nur eine Stimme erkannt, heißt sie direkt „Ich“. Bei explizit
 vorgegebener Sprecherzahl (> 1) greift die Klassifikation nicht.
 
+### Eigene Klassifikation: Label-Sets als JSON
+
+Damit die Klassifikation (lokales Modell aus #61, Backfill bestehender Meetings aus #62)
+für alle nutzbar ist, ohne den Code anzufassen: **Label-Sets liegen als JSON-Datei vor**.
+
+1. Standard: eingebautes Set (`privat`, `notiz`, `diktat`, `aufgabe`, `meeting`).
+2. Eigenes Set: `labels.json` im Datenordner ablegen **oder** Pfad in
+   `KOPROTOKOLL_LABELS_FILE` setzen. Beispiel zum Kopieren: `koprotokoll/labels.example.json`.
+3. In der Oberfläche unter „Integrationen & API → Klassifikation (Labels)" prüfen, welches
+   Set aktiv ist (Quelle, Schwelle, Labels mit Beispielen).
+
+Schema:
+
+```json
+{
+  "threshold": 0.6,
+  "labels": [
+    {"name": "privat", "description": "Privater Kram; verlässt das Gerät nicht",
+     "examples": ["Arzttermin besprechen"]}
+  ]
+}
+```
+
+- `labels` (Pflicht, nicht leer): Liste von Objekten mit `name` (Pflicht, eindeutig),
+  optional `description` und `examples` (Liste von Texten).
+- `threshold` (optional, default 0.6): Confidence-Schwelle ab 0 (exklusiv) bis 1.
+- Ungültige Dateien liefern eine deutsche Fehlermeldung (API: HTTP 400) und ändern nichts
+  am bisher aktiven Set.
+
 ### Sprechernamen aus Google Meet
 
 Der Meet-Adapter liest alle 500 ms sichtbare Sprechindikatoren und Namen aus der
@@ -551,6 +580,7 @@ Qualitätstest mit echten Meetings, Akzenten und überlappender Sprache.
 | `KOPROTOKOLL_DIARIZATION` | `1` | `0` schaltet Sprechererkennung ab |
 | `KOPROTOKOLL_DIARIZATION_THRESHOLD` | `0.8` | kleiner = mehr Sprecher |
 | `KOPROTOKOLL_DOMINANT_SPEAKER_SHARE` | `0.8` | Redeanteil, ab dem eine Stimme im Modus „Automatisch“ als eigene Stimme („Ich“) zusammengefasst wird |
+| `KOPROTOKOLL_LABELS_FILE` | – (sonst `<Datenordner>/labels.json`, sonst Standard) | eigenes Klassifikations-Label-Set als JSON |
 | `KOPROTOKOLL_LLM` | `1` | `0` = nur Offline-Heuristik |
 | `KOPROTOKOLL_LLM_URL` | `http://localhost:11434/v1` | OpenAI-kompatibler Endpunkt |
 | `KOPROTOKOLL_LLM_MODEL` | `qwen2.5:7b-instruct` | Modellname |

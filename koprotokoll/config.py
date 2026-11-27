@@ -70,6 +70,9 @@ class Settings:
     # nur im Modus „Automatisch“ (keine explizite Sprecherzahl vorgegeben).
     dominant_speaker_share: float = field(default_factory=lambda: float(_env("KOPROTOKOLL_DOMINANT_SPEAKER_SHARE", "0.8")))
 
+    # Klassifikation: eigenes Label-Set als JSON (sonst <Datenordner>/labels.json, sonst Standard).
+    labels_file: str | None = field(default_factory=lambda: os.environ.get("KOPROTOKOLL_LABELS_FILE") or None)
+
     # Lokales LLM über eine OpenAI-kompatible API (Ollama, llama.cpp-Server, LM Studio …).
     llm_base_url: str = field(default_factory=lambda: _env("KOPROTOKOLL_LLM_URL", "http://localhost:11434/v1"))
     llm_model: str = field(default_factory=lambda: _env("KOPROTOKOLL_LLM_MODEL", "qwen2.5:7b-instruct"))

@@ -1,0 +1,30 @@
+{
+  "threshold": 0.6,
+  "labels": [
+    {
+      "name": "privat",
+      "description": "Privater Kram; verlässt das Gerät nicht",
+      "examples": ["Arzttermin am Dienstag besprechen", "Passwort für den Router notieren"]
+    },
+    {
+      "name": "notiz",
+      "description": "Reine Notiz / Gedankenmitschrift",
+      "examples": ["Idee: Die App könnte Speech-to-Text auch offline im Hintergrund"]
+    },
+    {
+      "name": "diktat",
+      "description": "Reines Diktat / Copy-Paste (Diktiergerät-Modus, z. B. aus Kodiktat)",
+      "examples": ["Text für die E-Mail an den Kunden formulieren"]
+    },
+    {
+      "name": "aufgabe",
+      "description": "Konkreter Auftrag an ein Repo oder einen Agenten",
+      "examples": ["Leg ein Issue in enving/Koprotokoll an: fehlende Doku zur API"]
+    },
+    {
+      "name": "meeting",
+      "description": "Echtes Meeting mit mehreren Personen",
+      "examples": ["Team-Weekly mit Product und Entwicklung", "Kundengespräch zur Angebotspreise"]
+    }
+  ]
+}

@@ -107,6 +107,10 @@
             <div id="email-box" aria-live="polite"></div>
           </div>
           <div class="card">
+            <h2>Klassifikation (Labels)</h2>
+            <div id="labels-box"></div>
+          </div>
+          <div class="card">
             <h2>Kalender-Quellen</h2>
             <p class="muted small">Weitere Kalender als Quelle für die Bot-Einplanung: CalDAV-Konten
               (Posteo, mailbox.org, iCloud, Fastmail, Nextcloud …) – mehrere Quellen sind möglich.</p>
@@ -271,6 +275,8 @@
         </select>
       </label>
       <p class="small muted">Für deutsche Aufnahmen „Deutsch“ wählen, bei mehreren Sprachen „Automatisch“.</p>
+      <label>Ziel (optional) <input id="up-target" placeholder="z. B. Kompass" autocomplete="off"></label>
+      <p class="small muted">Wohin die Aufnahme gehört – wird als Ziel markiert und kann auch am Anfang angesagt werden („Kompass …“).</p>
       <menu><button value="cancel" formnovalidate>Abbrechen</button><button class="primary" value="ok">Hochladen</button></menu>
     </form>
   </dialog>
@@ -279,6 +285,9 @@
     <form method="dialog" id="record-form">
       <h2>Aufnahme</h2>
       <label>Titel <input id="rec-title" placeholder="z. B. Team-Weekly"></label>
+      <label>Ziel (optional) <input id="rec-target" placeholder="z. B. Kompass" autocomplete="off"></label>
+      <p class="small muted">Wohin die Aufnahme gehört. Alternativ am Anfang der Aufnahme ansagen, z. B. „Kompass, …“ – wird automatisch erkannt.</p>
+      <p id="rec-duck-note" class="small muted" hidden>Nur auf dem iPhone: Laufende Wiedergabe (z. B. Musik) wird während der Aufnahme pausiert und danach fortgesetzt.</p>
       <label>Anzahl Sprecher
         <select id="rec-speakers" aria-describedby="rec-speakers-help">
           <option value="1">Nur ich (1 Person)</option>

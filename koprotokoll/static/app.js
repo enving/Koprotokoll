@@ -1081,6 +1081,26 @@ $("#bot-form").addEventListener("submit", async (e) => {
 });
 
 // ---------------------------------------------------------- Integrationen
+// Aktives Klassifikations-Label-Set (JSON) – die Klassifikation selbst läuft lokal (#61).
+async function renderLabels() {
+  const box = $("#labels-box");
+  try {
+    const ls = await api("/api/labels");
+    box.replaceChildren(
+      h("p", { class: "muted small" },
+        `Aktives Label-Set: ${ls.source === "standard" ? "Standard (eingebaut)" : ls.source} · Schwelle ${Math.round(ls.threshold * 100)} %`),
+      h("div", { class: "chips" }, ls.labels.map((l) => h("span", {
+        class: "chip",
+        title: [l.description, l.examples?.length ? `Beispiele: ${l.examples.join("; ")}` : null].filter(Boolean).join(" – "),
+      }, l.name))),
+      h("p", { class: "muted small" },
+        "Eigenes Set: labels.json im Datenordner oder Pfad in KOPROTOKOLL_LABELS_FILE. Schema und Anleitung: docs/einrichtung.md („Eigene Klassifikation“); Beispiel: labels.example.json im Repo."));
+  } catch (err) {
+    box.replaceChildren(h("p", { role: "alert" }, err.message),
+      h("button", { onclick: renderLabels }, "Erneut laden"));
+  }
+}
+
 async function openIntegrations() {
   showView("integrations");
   // pushState statt replaceState: Die Zurück-Taste des Browsers führt zurück (route() bei hashchange).
@@ -1089,7 +1109,7 @@ async function openIntegrations() {
   const err = params.get("google_error") || params.get("microsoft_error");
   if (err) alert(`Anmeldung abgebrochen: ${err}`);
   renderBots();
-  await Promise.all([renderGoogle(), renderMicrosoft(), renderEmail(), renderSources(), renderKeys(), renderHooks()]);
+  await Promise.all([renderGoogle(), renderMicrosoft(), renderEmail(), renderLabels(), renderSources(), renderKeys(), renderHooks()]);
 }
 
 async function renderEmail() {

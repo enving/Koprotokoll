@@ -41,6 +41,11 @@ curl -H "Authorization: Bearer $KEY" -o aufnahme.wav "http://localhost:8000/api/
 (max. 10 Wörter, leer solange die Aufnahme noch verarbeitet wird), die die Oberfläche in der
 Meeting-Liste anzeigt.
 
+`GET /api/labels` liefert das aktive Klassifikations-Label-Set: `source` (Dateipfad oder
+`standard`), `threshold` und `labels` (je `name`, `description`, `examples`). Ein
+ungültiges Label-Set liefert `400` mit deutscher Fehlermeldung. Schema und Anleitung:
+docs/einrichtung.md („Eigene Klassifikation“).
+
 ## Diktieren: `/v1/audio/transcriptions` (OpenAI-kompatibel)
 
 Für kurze Aufnahmen – etwa aus **Kodiktat** oder jedem Programm, das die OpenAI-Transkriptions-API

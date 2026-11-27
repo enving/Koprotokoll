@@ -33,6 +33,7 @@ from .calendar_source import CalendarEvent
 from .capture import HardwareRecorder
 from .config import CALDAV_PRESETS, Settings
 from .db import Database
+from .labels import LabelSetError, resolve_label_set
 from .drafts import draft_targets, open_draft, recap_eml
 from .events import EVENTS, EventBus
 from .export import export
@@ -684,6 +685,20 @@ def create_app(settings: Settings | None = None, transcriber: Transcriber | None
             "asr": transcription_info(transcriber, default_mode),
             "diarization": diarizer is not None,
             "llm": llm.status() if isinstance(llm, LLM) else {"available": llm.available(), "model": s.llm_model, "url": s.llm_base_url},
+        }
+
+    @api.get("/api/labels", tags=["classification"])
+    def get_labels():
+        """Aktives Klassifikations-Label-Set (JSON-Quelle, Schwelle, Labels)."""
+        try:
+            ls = resolve_label_set(s.data_dir, s.labels_file)
+        except LabelSetError as e:
+            raise HTTPException(400, str(e))
+        return {
+            "source": ls.source,
+            "threshold": ls.threshold,
+            "labels": [{"name": l.name, "description": l.description, "examples": l.examples}
+                       for l in ls.labels],
         }
 
     @api.get("/api/meetings")
